@@ -1,0 +1,378 @@
+You are an elite AI systems architect, publishing automation engineer, market intelligence strategist, and SaaS product designer.
+
+Build a production-grade SaaS platform called:
+
+BOOKFORGE STUDIO SUPREME
+
+This system is a fully autonomous publishing engine capable of:
+- Generating original books to completion
+- Designing professional covers
+- Producing full marketing campaigns
+- Predicting high-demand topics
+- Publishing in multiple languages
+- Optimizing profitability by niche
+- Running in autopilot mode with cost controls
+- Maintaining high editorial standards
+
+This is not a toy generator. It is a scalable AI publishing operating system.
+
+---------------------------------------------------
+0. NON-NEGOTIABLE RULES
+---------------------------------------------------
+
+- No plagiarism.
+- No copying existing books or living authors.
+- No fabricated citations.
+- No medical/financial/legal advice without disclaimers.
+- If factual uncertainty exists, mark “Verify”.
+- System must be resumable and fault-tolerant.
+- High-quality structured output only.
+
+---------------------------------------------------
+1. STACK
+---------------------------------------------------
+
+Frontend:
+- React + TypeScript
+- TailwindCSS (premium SaaS aesthetic)
+- React Query
+- Zustand
+
+Backend:
+- Node.js + Express
+- Prisma ORM
+- PostgreSQL
+- pgvector extension
+- BullMQ + Redis
+- S3-compatible storage (fallback local)
+- i18n support system
+
+AI Providers (abstracted):
+- High quality text model
+- Fast drafting model
+- Embedding model
+- Image model
+- Translation model (if separate)
+
+Environment Variables:
+AI_MODEL_HIGH
+AI_MODEL_FAST
+AI_MODEL_EMBED
+AI_MODEL_TRANSLATION
+IMG_MODEL
+AI_API_KEY
+AI_BASE_URL
+
+---------------------------------------------------
+2. CORE ARCHITECTURE
+---------------------------------------------------
+
+Each Book Project contains:
+
+- Vertical Focus (money, fitness, spirituality, career, education, relationships, etc.)
+- Book DNA
+- Market Intelligence Brief
+- Series Bible (optional)
+- Manuscript
+- Cover System
+- Metadata Pack
+- Marketing Suite
+- Localization Packs
+
+Each Run logs:
+- Step
+- Model used
+- Tokens used
+- Cost estimate
+- Quality score
+- Errors
+- Retry count
+
+---------------------------------------------------
+3. TREND & MARKET INTELLIGENCE ENGINE
+---------------------------------------------------
+
+Add a Trend Intelligence Module:
+
+Capabilities:
+- Generate trending topic predictions by vertical
+- Analyze internal sales performance (future expansion)
+- Produce “Demand Score” per book idea
+- Generate:
+   - Pain-point clusters
+   - High-conversion title angles
+   - Emerging niche micro-topics
+   - Low-competition opportunity suggestions
+
+Allow:
+- Manual input of external trend keywords
+- Topic scoring system (Demand vs Competition heuristic)
+- “Greenlight Score” before book generation
+
+---------------------------------------------------
+4. VERTICAL SPECIALIZATION ENGINE
+---------------------------------------------------
+
+Each vertical has optimization rules:
+
+Example:
+
+MONEY / CAREER:
+- ROI framing
+- Frameworks
+- Case examples
+- Tactical worksheets
+- Authority positioning tone
+
+SPIRITUALITY:
+- Inclusive language
+- Reflective exercises
+- Ritual guidance disclaimers
+- Non-dogmatic structure
+
+FITNESS:
+- Habit stacking
+- Progressive frameworks
+- Safety notes
+- Action plans
+
+System must adapt tone, structure, examples, and marketing strategy based on vertical.
+
+---------------------------------------------------
+5. MULTI-LANGUAGE ENGINE
+---------------------------------------------------
+
+System must support:
+
+- Primary book language selection
+- Automatic localization packs
+- Cultural adaptation (not literal translation)
+- Region-specific marketing tone
+
+Workflow:
+1. Generate master book
+2. Create localization brief
+3. Translate + adapt chapters
+4. Adjust marketing copy
+5. Export language-specific editions
+
+Languages:
+- English default
+- Spanish
+- Portuguese
+- French
+- German (expandable)
+
+---------------------------------------------------
+6. BOOK DNA SYSTEM
+---------------------------------------------------
+
+Structured object stored in DB:
+
+- Core Promise
+- Reader Avatar
+- Tone Rules
+- Writing Constraints
+- Vocabulary
+- Banned phrases
+- Framework summary
+- Examples
+- Transformation arc
+
+Injected into every AI step.
+
+---------------------------------------------------
+7. VECTOR MEMORY (pgvector)
+---------------------------------------------------
+
+- Store embeddings for sections
+- Retrieve relevant past sections
+- Continuity enforcement
+- Prevent internal repetition
+- Improve long-book consistency
+
+---------------------------------------------------
+8. MULTI-MODEL ROUTING
+---------------------------------------------------
+
+Auto-select:
+
+- Fast model → outlines, marketing, trend analysis
+- High model → drafting + revision
+- Embedding model → memory
+- Translation model → localization
+- Image model → covers
+
+Allow per-step override.
+
+---------------------------------------------------
+9. PUBLISHING PIPELINE
+---------------------------------------------------
+
+1) Market Intelligence Brief
+2) Greenlight Score Calculation
+3) Title Engine (25+ optimized options)
+4) TOC Generator
+5) Chapter Blueprints
+6) Draft Generator
+7) A/B Chapter Option
+8) Editorial Personas:
+   - Developmental
+   - Line
+   - Copy
+   - Sensitivity
+   - Marketing
+9) Repetition Detection
+10) Promise Alignment Check
+11) Formatting Engine
+12) Print Layout Engine
+13) Audiobook Script Mode
+
+---------------------------------------------------
+10. COVER INTELLIGENCE SYSTEM
+---------------------------------------------------
+
+- Category-specific design rules
+- Thumbnail readability test
+- Text overlay fallback
+- Typography presets by niche
+- Variant comparison scoring
+
+---------------------------------------------------
+11. SERIES ENGINE
+---------------------------------------------------
+
+- Series Bible
+- Cross-book positioning
+- Funnel design
+- Lead magnet chaining
+- Brand continuity enforcement
+
+---------------------------------------------------
+12. MARKETING INTELLIGENCE SUITE
+---------------------------------------------------
+
+Generate:
+
+- Short / medium / long blurb
+- Amazon description
+- 30 hooks
+- 10 ad angles
+- Email launch sequence
+- 30-day social calendar
+- Lead magnet
+- Webinar outline
+- Pricing matrix
+- Upsell ladder
+- Author positioning strategy
+
+---------------------------------------------------
+13. AUTOPILOT MODE
+---------------------------------------------------
+
+User sets:
+- Vertical
+- Monthly book target
+- Budget cap
+- Minimum quality threshold
+- Language targets
+
+Autopilot:
+- Runs Trend Analysis
+- Greenlights topics
+- Generates books
+- Stops if below quality or over budget
+
+---------------------------------------------------
+14. COST OPTIMIZER
+---------------------------------------------------
+
+- Token budgeting per step
+- Per-book max spend
+- Daily spend cap
+- Context compression
+- Auto summarization between steps
+
+---------------------------------------------------
+15. QUALITY SCORING ENGINE
+---------------------------------------------------
+
+Score:
+- Clarity
+- Usefulness
+- Structural integrity
+- Originality heuristic
+- Repetition rate
+- Vertical alignment
+- Market viability
+
+Display score dashboard.
+
+---------------------------------------------------
+16. OBSERVABILITY
+---------------------------------------------------
+
+- Structured logs
+- Run replay mode
+- Retry step
+- Idempotent jobs
+- Failure recovery
+- Cost analytics dashboard
+
+---------------------------------------------------
+17. EXPORTS
+---------------------------------------------------
+
+Export:
+- EPUB
+- DOCX
+- Print-ready PDF
+- Audiobook script
+- Full marketing ZIP
+- Localization bundles
+
+---------------------------------------------------
+18. DATA MODELS (PRISMA)
+---------------------------------------------------
+
+User
+Project
+BookDNA
+TrendReport
+Run
+RunStep
+Chapter
+Manuscript
+CoverAsset
+MarketingAsset
+MetadataPack
+Series
+Localization
+EmbeddingChunk
+UsageLedger
+AutopilotConfig
+
+---------------------------------------------------
+19. FAILSAFE MODE
+---------------------------------------------------
+
+If Redis fails → sequential queue
+If storage fails → local
+If AI fails → exponential retry
+If cost cap exceeded → stop run
+
+---------------------------------------------------
+20. DELIVERABLES
+---------------------------------------------------
+
+Generate full project:
+
+/server
+/web
+/prisma
+.env.example
+README.md
+
+App must run immediately after setup.
+
+Build clean, modular, documented, scalable code.
