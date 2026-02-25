@@ -407,8 +407,15 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   }, []);
 
   const playPage = useCallback(async (pageIdx: number) => {
-    const pg = pages[pageIdx];
-    if (pg.type !== "text") return;
+    let pg = pages[pageIdx];
+    if (pg.type !== "text") {
+      let nextIdx = pageIdx + 1;
+      while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
+      if (nextIdx >= pages.length) return;
+      goToImmediate(nextIdx);
+      pageIdx = nextIdx;
+      pg = pages[pageIdx];
+    }
     try {
       setNarrationLoading(true);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
