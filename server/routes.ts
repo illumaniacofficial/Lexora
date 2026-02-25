@@ -313,6 +313,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/store/:token/request", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) {
+        return res.status(404).json({ error: "Invalid invite" });
+      }
+      const { readerName, genre, description } = req.body;
+      if (!genre || !description) {
+        return res.status(400).json({ error: "Genre and description are required" });
+      }
+      if (typeof description !== "string" || description.length > 1000) {
+        return res.status(400).json({ error: "Description must be under 1000 characters" });
+      }
+      const request = await storage.createBookRequest({
+        inviteToken: req.params.token,
+        readerName: (readerName && typeof readerName === "string" ? readerName.trim() : "") || "Anonymous",
+        genre: genre.trim(),
+        description: description.trim(),
+      });
+      res.status(201).json(request);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/book-requests", async (_req, res) => {
+    try {
+      const requests = await storage.getBookRequests();
+      res.json(requests);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/book-requests/:id/read", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid request ID" });
+      await storage.markBookRequestRead(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/book-requests/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid request ID" });
+      await storage.deleteBookRequest(id);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/projects", async (_req, res) => {
     try {
       const allList = await storage.getProjects();

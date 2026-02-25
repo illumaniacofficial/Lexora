@@ -1,13 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useParams } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, Star, ShoppingBag, ArrowLeft, Volume2, AlertCircle, Sparkles } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BookOpen, Star, ShoppingBag, ArrowLeft, Volume2, AlertCircle, Sparkles, Send, CheckCircle2, Lightbulb } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
+import { VERTICALS } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import type { NarrationState } from "@/components/audio-mini-player";
 import AudioMiniPlayer from "@/components/audio-mini-player";
@@ -35,6 +40,40 @@ export default function Storefront() {
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [showReader, setShowReader] = useState(false);
   const [narrationState, setNarrationState] = useState<NarrationState | null>(null);
+  const [requestName, setRequestName] = useState("");
+  const [requestGenre, setRequestGenre] = useState("");
+  const [requestDescription, setRequestDescription] = useState("");
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const { toast } = useToast();
+
+  const submitRequest = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/store/${token}/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          readerName: requestName.trim() || "Anonymous",
+          genre: requestGenre,
+          description: requestDescription.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(err.error);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setRequestSubmitted(true);
+      setRequestName("");
+      setRequestGenre("");
+      setRequestDescription("");
+      toast({ title: "Request sent!", description: "The author will review your book suggestion." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to send request", description: err.message, variant: "destructive" });
+    },
+  });
 
   const { data: storeData, isLoading, error } = useQuery<{ books: StoreBook[]; inviteLabel: string }>({
     queryKey: ["/api/store", token],
@@ -273,6 +312,101 @@ export default function Storefront() {
             ))}
           </div>
         )}
+
+        <div className="mt-20 relative">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-900/5 to-transparent pointer-events-none" />
+          <div className="relative max-w-xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 mb-4">
+                <Lightbulb className="h-5 w-5 text-purple-400" />
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-white mb-2">Request a Book</h2>
+              <p className="text-sm text-stone-400 max-w-sm mx-auto">
+                Have an idea for a book you'd love to read? Let the author know what you're looking for.
+              </p>
+            </div>
+
+            {requestSubmitted ? (
+              <Card className="bg-stone-900/50 border-emerald-500/20" data-testid="request-success">
+                <CardContent className="py-10 text-center">
+                  <CheckCircle2 className="h-12 w-12 text-emerald-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-white mb-1">Request Sent!</h3>
+                  <p className="text-sm text-stone-400 mb-6">Thank you for your suggestion. The author will review it soon.</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => setRequestSubmitted(false)}
+                    className="border-stone-700 text-stone-300 hover:bg-stone-800 text-sm"
+                    data-testid="button-request-another"
+                  >
+                    Submit Another Request
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="bg-stone-900/50 border-stone-800/50" data-testid="request-form-card">
+                <CardContent className="pt-6 pb-6 space-y-4">
+                  <div>
+                    <label className="text-[11px] font-mono text-stone-400 uppercase tracking-wider mb-1.5 block">Your Name (optional)</label>
+                    <Input
+                      value={requestName}
+                      onChange={(e) => setRequestName(e.target.value)}
+                      placeholder="Anonymous"
+                      className="bg-stone-800/50 border-stone-700/50 text-white placeholder:text-stone-600 focus-visible:ring-purple-500/30"
+                      data-testid="input-request-name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-mono text-stone-400 uppercase tracking-wider mb-1.5 block">Genre / Category *</label>
+                    <Select value={requestGenre} onValueChange={setRequestGenre}>
+                      <SelectTrigger
+                        className="bg-stone-800/50 border-stone-700/50 text-white focus:ring-purple-500/30"
+                        data-testid="select-request-genre"
+                      >
+                        <SelectValue placeholder="Select a genre..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {VERTICALS.map(v => (
+                          <SelectItem key={v} value={v}>
+                            {VERTICAL_ICONS[v] || "📖"} {VERTICAL_LABELS[v] || v}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-mono text-stone-400 uppercase tracking-wider mb-1.5 block">What kind of book would you like? *</label>
+                    <Textarea
+                      value={requestDescription}
+                      onChange={(e) => setRequestDescription(e.target.value.slice(0, 1000))}
+                      placeholder="Describe the type of book you're looking for — topic, style, what problems it should solve, or any specific ideas..."
+                      rows={4}
+                      className="bg-stone-800/50 border-stone-700/50 text-white placeholder:text-stone-600 focus-visible:ring-purple-500/30 resize-none"
+                      data-testid="textarea-request-description"
+                    />
+                    <p className="text-[10px] font-mono text-stone-600 mt-1 text-right">{requestDescription.length}/1000</p>
+                  </div>
+                  <Button
+                    onClick={() => submitRequest.mutate()}
+                    disabled={!requestGenre || !requestDescription.trim() || submitRequest.isPending}
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-mono text-sm shadow-[0_0_20px_rgba(147,51,234,0.2)] disabled:opacity-40"
+                    data-testid="button-submit-request"
+                  >
+                    {submitRequest.isPending ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Sending...
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-2">
+                        <Send className="h-3.5 w-3.5" /> Send Request
+                      </span>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
 
         <div className="mt-16 text-center border-t border-stone-800/50 pt-8">
           <p className="text-[10px] font-mono text-stone-700">Powered by Lexora</p>

@@ -1,6 +1,6 @@
 import { db } from "./db";
 import {
-  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings, chatConversations, chatMessages,
+  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings, chatConversations, chatMessages, bookRequests,
   type User, type InsertUser, type Project, type InsertProject, type BookDna, type InsertBookDna,
   type TrendReport, type InsertTrendReport, type Chapter, type InsertChapter,
   type RunStep, type InsertRunStep, type MarketingAsset, type InsertMarketingAsset,
@@ -10,6 +10,7 @@ import {
   type AppSettings, type InsertAppSettings,
   type ChatConversation, type InsertChatConversation,
   type ChatMessage, type InsertChatMessage,
+  type BookRequest, type InsertBookRequest,
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
@@ -67,6 +68,11 @@ export interface IStorage {
   deleteChatConversation(id: number): Promise<void>;
   getChatMessages(conversationId: number): Promise<ChatMessage[]>;
   createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
+
+  getBookRequests(): Promise<BookRequest[]>;
+  createBookRequest(data: InsertBookRequest): Promise<BookRequest>;
+  markBookRequestRead(id: number): Promise<void>;
+  deleteBookRequest(id: number): Promise<void>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -299,6 +305,23 @@ export class DatabaseStorage implements IStorage {
   async createChatMessage(data: InsertChatMessage) {
     const [created] = await db.insert(chatMessages).values(data).returning();
     return created;
+  }
+
+  async getBookRequests() {
+    return db.select().from(bookRequests).orderBy(desc(bookRequests.createdAt));
+  }
+
+  async createBookRequest(data: InsertBookRequest) {
+    const [request] = await db.insert(bookRequests).values(data).returning();
+    return request;
+  }
+
+  async markBookRequestRead(id: number) {
+    await db.update(bookRequests).set({ isRead: true }).where(eq(bookRequests.id, id));
+  }
+
+  async deleteBookRequest(id: number) {
+    await db.delete(bookRequests).where(eq(bookRequests.id, id));
   }
 
   async getDashboardStats() {

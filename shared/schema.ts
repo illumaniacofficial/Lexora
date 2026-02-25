@@ -167,6 +167,18 @@ export const inviteTokens = pgTable("invite_tokens", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+export const bookRequests = pgTable("book_requests", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  inviteToken: varchar("invite_token", { length: 64 }).notNull(),
+  readerName: text("reader_name").notNull().default("Anonymous"),
+  genre: text("genre").notNull(),
+  description: text("description").notNull(),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("book_requests_token_idx").on(table.inviteToken),
+]);
+
 export const appSettings = pgTable("app_settings", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   defaultAuthorName: text("default_author_name").notNull().default("Sergio A. Delgado"),
@@ -215,6 +227,7 @@ export type InsertAppSettings = z.infer<typeof insertAppSettingsSchema>;
 
 export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({ id: true, startedAt: true, completedAt: true });
 export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ id: true, createdAt: true, viewCount: true });
+export const insertBookRequestSchema = createInsertSchema(bookRequests).omit({ id: true, createdAt: true, isRead: true });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true, createdAt: true, updatedAt: true });
@@ -241,4 +254,6 @@ export type InsertAutopilotConfig = z.infer<typeof insertAutopilotConfigSchema>;
 export type AutopilotRun = typeof autopilotRuns.$inferSelect;
 export type InsertAutopilotRun = z.infer<typeof insertAutopilotRunSchema>;
 export type InviteToken = typeof inviteTokens.$inferSelect;
+export type BookRequest = typeof bookRequests.$inferSelect;
+export type InsertBookRequest = z.infer<typeof insertBookRequestSchema>;
 export type InsertInviteToken = z.infer<typeof insertInviteTokenSchema>;

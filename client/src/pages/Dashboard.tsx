@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import {
-  BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity, AlertCircle,
+  BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity, AlertCircle, Lightbulb, Eye, Trash2,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, scoreColor, STATUS_GLOW } from "@/lib/utils";
-import type { Project, TrendReport } from "@shared/schema";
+import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, VERTICAL_ICONS, scoreColor, STATUS_GLOW } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { Project, TrendReport, BookRequest } from "@shared/schema";
 
 interface DashboardProject extends Project {
   totalChapters: number;
@@ -108,6 +109,22 @@ export default function Dashboard() {
   }
 
   const { stats, recentProjects, recentTrends } = data || { stats: { totalProjects: 0, completedProjects: 0, totalWords: 0, totalCost: 0, avgQuality: 0 }, recentProjects: [], recentTrends: [] };
+
+  const { data: bookRequests = [] } = useQuery<BookRequest[]>({
+    queryKey: ["/api/book-requests"],
+  });
+
+  const markRead = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/book-requests/${id}/read`); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
+  });
+
+  const deleteRequest = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/book-requests/${id}`); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
+  });
+
+  const unreadCount = bookRequests.filter(r => !r.isRead).length;
 
   return (
     <div className="p-8 space-y-8 overflow-y-auto h-full">
@@ -234,6 +251,74 @@ export default function Dashboard() {
               )}
             </CardContent>
           </Card>
+
+          {bookRequests.length > 0 && (
+            <Card className="border-border/30 bg-card/40">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-400/70" />
+                  <CardTitle className="text-sm font-bold tracking-tight">Reader Requests</CardTitle>
+                  {unreadCount > 0 && (
+                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] font-mono px-1.5 py-0">
+                      {unreadCount} new
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {bookRequests.slice(0, 5).map((req) => (
+                  <div
+                    key={req.id}
+                    className={`p-3 rounded-lg border text-xs transition-colors ${
+                      req.isRead ? "border-border/20 bg-card/30" : "border-amber-500/20 bg-amber-500/5"
+                    }`}
+                    data-testid={`book-request-${req.id}`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm">{VERTICAL_ICONS[req.genre] || "📖"}</span>
+                        <span className="font-bold text-[11px] tracking-tight truncate">{VERTICAL_LABELS[req.genre] || req.genre}</span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {!req.isRead && (
+                          <Button
+                            size="icon" variant="ghost"
+                            onClick={() => markRead.mutate(req.id)}
+                            className="h-5 w-5 text-amber-400/50 hover:text-amber-300"
+                            data-testid={`button-mark-read-${req.id}`}
+                            aria-label="Mark as read"
+                          >
+                            <Eye className="h-3 w-3" />
+                          </Button>
+                        )}
+                        <Button
+                          size="icon" variant="ghost"
+                          onClick={() => deleteRequest.mutate(req.id)}
+                          className="h-5 w-5 text-muted-foreground/30 hover:text-red-400"
+                          data-testid={`button-delete-request-${req.id}`}
+                          aria-label="Delete request"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground/60 leading-relaxed line-clamp-2 text-[10px]">{req.description}</p>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[9px] font-mono text-muted-foreground/30">by {req.readerName}</span>
+                      <span className="text-[9px] font-mono text-muted-foreground/30">
+                        {new Date(req.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {bookRequests.length > 5 && (
+                  <p className="text-[10px] font-mono text-muted-foreground/40 text-center pt-1">
+                    +{bookRequests.length - 5} more requests
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-purple-500/15 glow-border bg-card/30 overflow-hidden relative">
             <div className="absolute inset-0 mesh-bg opacity-50 pointer-events-none" />
