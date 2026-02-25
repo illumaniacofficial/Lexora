@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,9 @@ import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, InviteToken } from "@shared/schema";
+import BookReader from "@/components/book-reader";
+import { useNarration } from "@/App";
+import type { Project, InviteToken, Chapter } from "@shared/schema";
 
 type LibraryBook = Project & { shortBlurb: string | null; completedChapters: number };
 
@@ -41,13 +43,36 @@ export default function Library() {
   const [sortBy, setSortBy] = useState<SortKey>("rank");
   const [showInvites, setShowInvites] = useState(() => window.location.hash === "#invites");
   const [inviteLabel, setInviteLabel] = useState("");
+  const [readerBook, setReaderBook] = useState<{ id: number; title: string; authorName: string; coverImageUrl?: string | null } | null>(null);
+  const [readerChapters, setReaderChapters] = useState<Chapter[]>([]);
+  const [loadingReaderId, setLoadingReaderId] = useState<number | null>(null);
   const { toast } = useToast();
+  const { startNarration } = useNarration();
 
   useEffect(() => {
     if (window.location.hash === "#invites") {
       setShowInvites(true);
     }
   }, []);
+
+  const openReader = useCallback(async (book: LibraryBook) => {
+    setLoadingReaderId(book.id);
+    try {
+      const res = await apiRequest("GET", `/api/projects/${book.id}`);
+      const data = await res.json();
+      const chapters: Chapter[] = (data.chapters || []).filter((c: Chapter) => c.status === "complete" && c.content);
+      if (chapters.length === 0) {
+        toast({ title: "No chapters available", description: "This book has no completed chapters to read." });
+        return;
+      }
+      setReaderChapters(chapters);
+      setReaderBook({ id: book.id, title: book.title, authorName: book.authorName, coverImageUrl: book.coverImageUrl });
+    } catch {
+      toast({ title: "Failed to load book", description: "Could not load chapters for reading." });
+    } finally {
+      setLoadingReaderId(null);
+    }
+  }, [toast]);
 
   const { data: books = [], isLoading, error } = useQuery<LibraryBook[]>({ queryKey: ["/api/library"] });
   const { data: invites = [] } = useQuery<InviteToken[]>({ queryKey: ["/api/invites"] });
@@ -355,6 +380,16 @@ export default function Library() {
                           </span>
                         )}
                       </div>
+                      <Button
+                        size="sm"
+                        className="w-full mt-3 neon-glow-nature text-white border-0 font-mono text-[10px] h-8"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
+                        disabled={loadingReaderId === book.id}
+                        data-testid={`button-read-library-${book.id}`}
+                      >
+                        {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Eye className="h-3 w-3 mr-1.5" />}
+                        READ BOOK
+                      </Button>
                     </CardContent>
                   </Card>
                 </Link>
@@ -393,6 +428,15 @@ export default function Library() {
                             ★ {formatScore(book.qualityScore)}
                           </span>
                         )}
+                        <Button
+                          size="sm" variant="ghost"
+                          className="h-7 px-2.5 text-[10px] font-mono text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-500/10 shrink-0"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
+                          disabled={loadingReaderId === book.id}
+                          data-testid={`button-read-list-${book.id}`}
+                        >
+                          {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Eye className="h-3 w-3 mr-1" /> Read</>}
+                        </Button>
                         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/15 group-hover:text-purple-400/50 transition-colors shrink-0" />
                       </div>
                     </Link>
@@ -402,6 +446,17 @@ export default function Library() {
             </div>
           )}
         </>
+      )}
+
+      {readerBook && (
+        <BookReader
+          title={readerBook.title}
+          authorName={readerBook.authorName || "Unknown Author"}
+          chapters={readerChapters}
+          coverImageUrl={readerBook.coverImageUrl}
+          onClose={() => { setReaderBook(null); setReaderChapters([]); }}
+          onStartNarration={startNarration}
+        />
       )}
     </div>
   );
