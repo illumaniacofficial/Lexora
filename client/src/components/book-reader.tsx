@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { MarkdownRenderer } from "@/components/markdown-renderer";
+import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
+import { VOICE_OPTIONS, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
+import { apiRequest } from "@/lib/queryClient";
 import type { Chapter } from "@shared/schema";
 
 interface BookReaderProps {
@@ -11,6 +13,7 @@ interface BookReaderProps {
   chapters: Chapter[];
   coverImageUrl?: string | null;
   onClose: () => void;
+  onStartNarration?: (narration: NarrationState) => void;
 }
 
 type PageContent =
@@ -222,20 +225,34 @@ function DarkMarkdownRenderer({ content, theme }: { content: string; theme: Page
   );
 }
 
-export default function BookReader({ title, authorName, chapters, coverImageUrl, onClose }: BookReaderProps) {
+export default function BookReader({ title, authorName, chapters, coverImageUrl, onClose, onStartNarration }: BookReaderProps) {
   const completedChapters = chapters.filter(c => c.status === "complete" && c.content);
   const [currentPage, setCurrentPage] = useState(0);
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipDirection, setFlipDirection] = useState<"left" | "right">("right");
   const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showNarrator, setShowNarrator] = useState(false);
   const [fontSize, setFontSize] = useState(16);
   const [theme, setTheme] = useState<PageTheme>("parchment");
+  const [selectedVoice, setSelectedVoice] = useState<NarratorVoice>("alloy");
+  const [isNarrating, setIsNarrating] = useState(false);
+  const [narrationLoading, setNarrationLoading] = useState(false);
+  const [narrationProgress, setNarrationProgress] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const narrationAnimRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const pages = useMemo(
     () => buildPages(title, authorName, completedChapters, coverImageUrl, fontSize),
     [title, authorName, completedChapters, coverImageUrl, fontSize]
+  );
+
+  const textPages = useMemo(() =>
+    pages
+      .filter((p): p is Extract<PageContent, { type: "text" }> => p.type === "text")
+      .map(p => ({ chapterNumber: p.chapterNumber, chapterTitle: p.chapterTitle, pageInChapter: p.pageInChapter, totalPagesInChapter: p.totalPagesInChapter, text: p.text })),
+    [pages]
   );
 
   useEffect(() => {
@@ -264,23 +281,125 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     });
   }, []);
 
+  const stopNarration = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
+    setIsNarrating(false);
+    setNarrationProgress(0);
+  }, []);
+
+  const playCurrentPage = useCallback(async () => {
+    const page = pages[currentPage];
+    if (page.type !== "text") return;
+
+    try {
+      setNarrationLoading(true);
+      stopNarration();
+
+      const cleanText = stripMarkdown(page.text).slice(0, 4000);
+      const response = await apiRequest("POST", "/api/tts", { text: cleanText, voice: selectedVoice });
+      const data = await response.json();
+
+      const audioData = `data:audio/mp3;base64,${data.audio}`;
+      const audio = new Audio(audioData);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setIsNarrating(false);
+        setNarrationProgress(100);
+        if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
+      };
+
+      const updateProgress = () => {
+        if (audio && audio.duration > 0) {
+          setNarrationProgress((audio.currentTime / audio.duration) * 100);
+        }
+        if (!audio.paused) {
+          narrationAnimRef.current = requestAnimationFrame(updateProgress);
+        }
+      };
+
+      await audio.play();
+      setIsNarrating(true);
+      setNarrationLoading(false);
+      narrationAnimRef.current = requestAnimationFrame(updateProgress);
+    } catch (err) {
+      console.error("TTS error:", err);
+      setNarrationLoading(false);
+    }
+  }, [currentPage, pages, selectedVoice, stopNarration]);
+
+  const toggleNarration = useCallback(() => {
+    if (isNarrating && audioRef.current) {
+      audioRef.current.pause();
+      setIsNarrating(false);
+    } else if (audioRef.current && audioRef.current.paused && audioRef.current.currentTime > 0) {
+      audioRef.current.play();
+      setIsNarrating(true);
+      const updateProgress = () => {
+        if (audioRef.current && audioRef.current.duration > 0) {
+          setNarrationProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+        }
+        if (audioRef.current && !audioRef.current.paused) {
+          narrationAnimRef.current = requestAnimationFrame(updateProgress);
+        }
+      };
+      narrationAnimRef.current = requestAnimationFrame(updateProgress);
+    } else {
+      playCurrentPage();
+    }
+  }, [isNarrating, playCurrentPage]);
+
+  const handleClose = useCallback(() => {
+    const page = pages[currentPage];
+    if ((isNarrating || narrationProgress > 0) && page.type === "text" && onStartNarration) {
+      const currentTextPageIdx = textPages.findIndex(
+        tp => tp.chapterNumber === page.chapterNumber && tp.pageInChapter === page.pageInChapter
+      );
+      onStartNarration({
+        bookTitle: title,
+        chapterTitle: page.chapterTitle,
+        chapterNumber: page.chapterNumber,
+        pageInChapter: page.pageInChapter,
+        totalPagesInChapter: page.totalPagesInChapter,
+        text: page.text,
+        voice: selectedVoice,
+        allPages: textPages,
+        currentPageIndex: currentTextPageIdx >= 0 ? currentTextPageIdx : 0,
+      });
+    }
+    stopNarration();
+    onClose();
+  }, [currentPage, pages, isNarrating, narrationProgress, onStartNarration, title, selectedVoice, textPages, stopNarration, onClose]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); next(); }
       if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
       if ((e.key === "=" || e.key === "+") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); adjustFontSize(1); }
       if (e.key === "-" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); adjustFontSize(-1); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [next, prev, onClose, adjustFontSize]);
+  }, [next, prev, handleClose, adjustFontSize]);
 
   const page = pages[currentPage];
   const t = THEMES[theme];
   const isDark = theme === "dark" || theme === "midnight";
   const currentSizeIdx = FONT_SIZES.findIndex(s => s.value === fontSize);
   const sizeLabel = FONT_SIZES[currentSizeIdx]?.label || "M";
+  const isTextPage = page.type === "text";
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" ref={containerRef}>
@@ -320,21 +439,48 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
             <Button
               size="sm" variant="ghost"
-              onClick={() => { setShowSettings(!showSettings); setShowToc(false); }}
+              onClick={() => { setShowSettings(!showSettings); setShowToc(false); setShowNarrator(false); }}
               className={cn("h-8 text-xs font-mono", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
               data-testid="button-reader-theme" aria-label="Change page theme"
             >
               <Palette className="h-3.5 w-3.5 mr-1.5" /> Theme
             </Button>
+
+            <Button
+              size="sm" variant="ghost"
+              onClick={() => { setShowNarrator(!showNarrator); setShowSettings(false); setShowToc(false); }}
+              className={cn(
+                "h-8 text-xs font-mono",
+                isNarrating ? "text-purple-300" : isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white"
+              )}
+              data-testid="button-reader-narrator" aria-label="AI Narrator"
+            >
+              <Volume2 className={cn("h-3.5 w-3.5 mr-1.5", isNarrating && "animate-pulse")} /> Narrator
+            </Button>
           </div>
 
           <div className="flex items-center gap-3">
+            {isTextPage && (isNarrating || narrationLoading) && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={toggleNarration}
+                  disabled={narrationLoading}
+                  className="h-7 w-7 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 hover:bg-purple-500/30 transition-all disabled:opacity-50"
+                  data-testid="button-narrator-toggle" aria-label={isNarrating ? "Pause" : "Play"}
+                >
+                  {narrationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : isNarrating ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                </button>
+                <div className="w-16 h-1 bg-stone-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-purple-400 rounded-full transition-all duration-200" style={{ width: `${narrationProgress}%` }} />
+                </div>
+              </div>
+            )}
             <span className={cn("font-mono text-[10px]", isDark ? "text-stone-500" : "text-stone-500")}>
               {currentPage + 1} / {pages.length}
             </span>
             <Button
               size="icon" variant="ghost"
-              onClick={onClose}
+              onClick={handleClose}
               className={cn("h-8 w-8", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
               data-testid="button-reader-close" aria-label="Close reader"
             >
@@ -384,6 +530,65 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {showNarrator && (
+          <div className={cn("absolute left-0 top-11 z-20 w-72 rounded-xl shadow-2xl p-4", isDark ? "bg-stone-800 border border-stone-700" : "bg-stone-800 border border-stone-700")}>
+            <div className="flex items-center gap-1.5 mb-3">
+              <Volume2 className="h-3 w-3 text-purple-400" />
+              <p className="text-[10px] font-mono text-purple-400/80 uppercase tracking-wider">AI Narrator</p>
+            </div>
+            <p className="text-[10px] text-stone-400 mb-3">Choose a voice, then hit play on any text page to hear it read aloud.</p>
+            <div className="space-y-1.5 mb-4">
+              {VOICE_OPTIONS.map(v => (
+                <button
+                  key={v.value}
+                  onClick={() => { setSelectedVoice(v.value); stopNarration(); }}
+                  data-testid={`voice-${v.value}`}
+                  className={cn(
+                    "w-full text-left px-3 py-2 rounded-lg border transition-all flex items-center justify-between",
+                    v.value === selectedVoice
+                      ? "border-purple-500/40 bg-purple-500/10 text-purple-200"
+                      : "border-stone-600 hover:border-stone-500 text-stone-400"
+                  )}
+                >
+                  <div>
+                    <span className="text-[11px] font-mono font-bold">{v.label}</span>
+                    <span className="text-[9px] text-stone-500 ml-2">{v.description}</span>
+                  </div>
+                  {v.value === selectedVoice && <span className="text-purple-400 text-[10px]">●</span>}
+                </button>
+              ))}
+            </div>
+            {isTextPage && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={playCurrentPage}
+                  disabled={narrationLoading}
+                  className="flex-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/30 text-[11px] font-mono h-8"
+                  data-testid="button-narrator-play"
+                >
+                  {narrationLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Play className="h-3 w-3 mr-1.5" />}
+                  {narrationLoading ? "Generating..." : "Read This Page"}
+                </Button>
+                {isNarrating && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={stopNarration}
+                    className="h-8 w-8 text-stone-400 hover:text-red-400"
+                    data-testid="button-narrator-stop" aria-label="Stop narration"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            )}
+            {!isTextPage && (
+              <p className="text-[10px] text-stone-500 italic text-center">Navigate to a text page to enable narration</p>
+            )}
           </div>
         )}
 

@@ -1,0 +1,240 @@
+import { useState, useRef, useEffect, useCallback } from "react";
+import { X, Play, Pause, SkipForward, RotateCcw, Volume2, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { apiRequest } from "@/lib/queryClient";
+import { stripMarkdown } from "@/components/markdown-renderer";
+
+export type NarratorVoice = "alloy" | "echo" | "fable" | "onyx" | "nova";
+
+export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string }[] = [
+  { value: "alloy", label: "Alloy", description: "Neutral & balanced" },
+  { value: "echo", label: "Echo", description: "Warm & smooth" },
+  { value: "fable", label: "Fable", description: "Expressive & storytelling" },
+  { value: "onyx", label: "Onyx", description: "Deep & authoritative" },
+  { value: "nova", label: "Nova", description: "Bright & friendly" },
+];
+
+interface NarrationState {
+  bookTitle: string;
+  chapterTitle: string;
+  chapterNumber: number;
+  pageInChapter: number;
+  totalPagesInChapter: number;
+  text: string;
+  voice: NarratorVoice;
+  allPages: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string }[];
+  currentPageIndex: number;
+}
+
+interface AudioMiniPlayerProps {
+  narration: NarrationState;
+  onClose: () => void;
+  onUpdateNarration: (narration: NarrationState) => void;
+}
+
+export type { NarrationState };
+
+export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration }: AudioMiniPlayerProps) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  const generateAndPlay = useCallback(async (text: string, voice: NarratorVoice) => {
+    try {
+      setIsLoading(true);
+      setIsPlaying(false);
+      setProgress(0);
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+
+      const cleanText = stripMarkdown(text).slice(0, 4000);
+      const response = await apiRequest("POST", "/api/tts", { text: cleanText, voice });
+      const data = await response.json();
+
+      const audioData = `data:audio/mp3;base64,${data.audio}`;
+      const audio = new Audio(audioData);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        setIsPlaying(false);
+        setProgress(100);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      };
+
+      const updateProgress = () => {
+        if (audio && audio.duration > 0) {
+          setProgress((audio.currentTime / audio.duration) * 100);
+        }
+        if (!audio.paused) {
+          animationRef.current = requestAnimationFrame(updateProgress);
+        }
+      };
+
+      await audio.play();
+      setIsPlaying(true);
+      setIsLoading(false);
+      animationRef.current = requestAnimationFrame(updateProgress);
+    } catch (err) {
+      console.error("TTS playback error:", err);
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    generateAndPlay(narration.text, narration.voice);
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [narration.text, narration.currentPageIndex]);
+
+  const togglePlay = useCallback(() => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+      const updateProgress = () => {
+        if (audioRef.current && audioRef.current.duration > 0) {
+          setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+        }
+        if (audioRef.current && !audioRef.current.paused) {
+          animationRef.current = requestAnimationFrame(updateProgress);
+        }
+      };
+      animationRef.current = requestAnimationFrame(updateProgress);
+    }
+  }, [isPlaying]);
+
+  const replay = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play();
+      setIsPlaying(true);
+      setProgress(0);
+    } else {
+      generateAndPlay(narration.text, narration.voice);
+    }
+  }, [narration.text, narration.voice, generateAndPlay]);
+
+  const nextPage = useCallback(() => {
+    const nextIdx = narration.currentPageIndex + 1;
+    if (nextIdx < narration.allPages.length) {
+      const nextP = narration.allPages[nextIdx];
+      onUpdateNarration({
+        ...narration,
+        chapterNumber: nextP.chapterNumber,
+        chapterTitle: nextP.chapterTitle,
+        pageInChapter: nextP.pageInChapter,
+        totalPagesInChapter: nextP.totalPagesInChapter,
+        text: nextP.text,
+        currentPageIndex: nextIdx,
+      });
+    }
+  }, [narration, onUpdateNarration]);
+
+  const handleClose = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    onClose();
+  }, [onClose]);
+
+  const hasNextPage = narration.currentPageIndex < narration.allPages.length - 1;
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[200] w-80 rounded-2xl border border-purple-500/30 bg-card/95 backdrop-blur-xl shadow-[0_0_40px_rgba(147,51,234,0.15)] overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
+      <div className="h-1 bg-border/20 relative">
+        <div
+          className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-200"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Volume2 className="h-3 w-3 text-purple-400 shrink-0" />
+              <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-[0.2em]">AI Narrator</span>
+            </div>
+            <p className="text-[12px] font-medium text-foreground truncate" data-testid="mini-player-title">{narration.bookTitle}</p>
+            <p className="text-[10px] text-muted-foreground/50 font-mono truncate">
+              Ch {narration.chapterNumber}: {narration.chapterTitle} — pg {narration.pageInChapter}/{narration.totalPagesInChapter}
+            </p>
+          </div>
+          <Button
+            size="icon" variant="ghost"
+            onClick={handleClose}
+            className="h-6 w-6 text-muted-foreground/40 hover:text-foreground shrink-0"
+            data-testid="button-mini-player-close" aria-label="Close mini player"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            size="icon" variant="ghost"
+            onClick={replay}
+            disabled={isLoading}
+            className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            data-testid="button-mini-player-replay" aria-label="Replay page"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+
+          <Button
+            size="icon"
+            onClick={isLoading ? undefined : togglePlay}
+            disabled={isLoading}
+            className={cn(
+              "h-11 w-11 rounded-full transition-all",
+              isPlaying
+                ? "bg-purple-500 hover:bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)]"
+                : "bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30"
+            )}
+            data-testid="button-mini-player-play" aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isLoading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : isPlaying ? (
+              <Pause className="h-5 w-5" />
+            ) : (
+              <Play className="h-5 w-5 ml-0.5" />
+            )}
+          </Button>
+
+          <Button
+            size="icon" variant="ghost"
+            onClick={nextPage}
+            disabled={!hasNextPage || isLoading}
+            className="h-9 w-9 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            data-testid="button-mini-player-next" aria-label="Next page"
+          >
+            <SkipForward className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="mt-2 flex items-center justify-center">
+          <span className="text-[9px] font-mono text-muted-foreground/30">
+            Voice: {VOICE_OPTIONS.find(v => v.value === narration.voice)?.label || narration.voice}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

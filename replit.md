@@ -24,7 +24,8 @@ A production-grade AI publishing platform capable of generating complete books, 
 6. **Library** — Completed books collection with search bar, vertical filters, sort options (rank/title/words/quality/date), top-5 featured cards with rank badges, and clickable link list for the rest
 7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
 8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
-9. **Full-Screen Book Reader** — Immersive page-by-page reading experience with page flip animations, keyboard navigation, TOC jump menu, and progress tracking
+9. **Full-Screen Book Reader** — Immersive page-by-page reading with page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), and progress tracking
+10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, and next-page controls
 
 ## Database Schema
 
@@ -112,7 +113,8 @@ client/src/
     app-sidebar.tsx          — Navigation sidebar with neon glow branding
     error-boundary.tsx       — Global React error boundary with recovery UI
     markdown-renderer.tsx    — Shared markdown rendering (MarkdownRenderer for light/reader, MarkdownRendererDark for dark UI, stripMarkdown utility)
-    book-reader.tsx          — Full-screen immersive book reader with page flip animations
+    book-reader.tsx          — Full-screen immersive book reader with page flip animations, font size, themes, and AI narrator
+    audio-mini-player.tsx    — Floating narration mini-player (persists after closing reader) with play/pause/replay/next
     theme-toggle.tsx         — Minimal (dark-first design)
   pages/
     Dashboard.tsx            — Main dashboard with stat orbs, shimmer headings

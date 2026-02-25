@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
+import { textToSpeech } from "./replit_integrations/audio/client";
 import { insertProjectSchema, insertAutopilotConfigSchema } from "@shared/schema";
 import { executeAutopilotRun, isAutopilotRunning } from "./autopilot-engine";
 import { z } from "zod";
@@ -755,6 +756,28 @@ Return JSON with:
       res.json(run);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  const ttsVoices = ["alloy", "echo", "fable", "onyx", "nova"] as const;
+  type TTSVoice = typeof ttsVoices[number];
+
+  app.post("/api/tts", async (req, res) => {
+    try {
+      const { text, voice } = req.body;
+      if (!text || typeof text !== "string" || text.trim().length === 0) {
+        return res.status(400).json({ error: "Text is required" });
+      }
+      if (text.length > 4000) {
+        return res.status(400).json({ error: "Text too long (max 4000 characters)" });
+      }
+      const selectedVoice: TTSVoice = ttsVoices.includes(voice) ? voice : "alloy";
+      const audioBuffer = await textToSpeech(text.slice(0, 4000), selectedVoice, "mp3");
+      const base64Audio = audioBuffer.toString("base64");
+      res.json({ audio: base64Audio, format: "mp3" });
+    } catch (err: any) {
+      console.error("TTS error:", err.message);
+      res.status(500).json({ error: "Failed to generate speech" });
     }
   });
 
