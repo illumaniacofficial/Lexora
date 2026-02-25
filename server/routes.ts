@@ -160,7 +160,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/dashboard", async (_req, res) => {
     try {
       const stats = await storage.getDashboardStats();
-      const recentProjects = (await storage.getProjects()).slice(0, 5);
+      const allProjects = await storage.getProjects();
+      const recentRaw = allProjects.slice(0, 5);
+      const recentProjects = await Promise.all(recentRaw.map(async (p) => {
+        const chapters = await storage.getChapters(p.id);
+        const trend = await storage.getTrendReport(p.id);
+        const marketing = await storage.getMarketingAsset(p.id);
+        const completedChapters = chapters.filter(c => c.status === "complete").length;
+        return {
+          ...p,
+          totalChapters: chapters.length,
+          completedChapters,
+          hasTrend: !!trend,
+          hasCover: !!p.coverImageUrl,
+          hasMarketing: !!marketing,
+        };
+      }));
       const recentTrends = await storage.getTrendReports();
       res.json({ stats, recentProjects, recentTrends: recentTrends.slice(0, 3) });
     } catch (err: any) {
@@ -291,7 +306,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/projects", async (_req, res) => {
     try {
       const list = await storage.getProjects();
-      res.json(list);
+      const enriched = await Promise.all(list.map(async (p) => {
+        const chapters = await storage.getChapters(p.id);
+        const trend = await storage.getTrendReport(p.id);
+        const marketing = await storage.getMarketingAsset(p.id);
+        return {
+          ...p,
+          totalChapters: chapters.length,
+          completedChapters: chapters.filter(c => c.status === "complete").length,
+          hasTrend: !!trend,
+          hasCover: !!p.coverImageUrl,
+          hasMarketing: !!marketing,
+        };
+      }));
+      res.json(enriched);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

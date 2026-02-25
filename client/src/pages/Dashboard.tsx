@@ -9,13 +9,37 @@ import {
   BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity, AlertCircle,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, scoreColor, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
+import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, scoreColor, STATUS_GLOW } from "@/lib/utils";
 import type { Project, TrendReport } from "@shared/schema";
+
+interface DashboardProject extends Project {
+  totalChapters: number;
+  completedChapters: number;
+  hasTrend: boolean;
+  hasCover: boolean;
+  hasMarketing: boolean;
+}
 
 interface DashboardData {
   stats: { totalProjects: number; completedProjects: number; totalWords: number; totalCost: number; avgQuality: number };
-  recentProjects: Project[];
+  recentProjects: DashboardProject[];
   recentTrends: TrendReport[];
+}
+
+function getLivePct(p: DashboardProject): number {
+  let done = 0;
+  let total = 0;
+  total += 1; if (p.hasTrend) done += 1;
+  total += 1; if (p.totalChapters > 0) done += 1;
+  total += 1; if (p.hasCover) done += 1;
+  if (p.totalChapters > 0) {
+    total += p.totalChapters;
+    done += p.completedChapters;
+  } else {
+    total += 1;
+  }
+  total += 1; if (p.hasMarketing) done += 1;
+  return Math.round((done / total) * 100);
 }
 
 const statConfig = [
@@ -147,7 +171,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 recentProjects.map((project) => {
-                  const pct = getPipelinePct(project.status);
+                  const pct = getLivePct(project);
                   return (
                     <Link key={project.id} href={`/projects/${project.id}`}>
                       <div className="group flex items-center gap-4 p-4 rounded-xl border border-border/20 bg-card/30 hover:border-purple-500/20 hover:bg-purple-500/[0.03] transition-all duration-300 cursor-pointer" data-testid={`project-card-${project.id}`}>

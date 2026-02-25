@@ -12,11 +12,35 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Search, Trash2, BookOpen, ArrowRight, Hexagon } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { AlertCircle } from "lucide-react";
-import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
+import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project } from "@shared/schema";
+
+interface EnrichedProject extends Project {
+  totalChapters: number;
+  completedChapters: number;
+  hasTrend: boolean;
+  hasCover: boolean;
+  hasMarketing: boolean;
+}
+
+function getLivePct(p: EnrichedProject): number {
+  let done = 0;
+  let total = 0;
+  total += 1; if (p.hasTrend) done += 1;
+  total += 1; if (p.totalChapters > 0) done += 1;
+  total += 1; if (p.hasCover) done += 1;
+  if (p.totalChapters > 0) {
+    total += p.totalChapters;
+    done += p.completedChapters;
+  } else {
+    total += 1;
+  }
+  total += 1; if (p.hasMarketing) done += 1;
+  return Math.round((done / total) * 100);
+}
 import { PROJECT_STATUSES, VERTICALS } from "@shared/schema";
 
 
@@ -27,7 +51,7 @@ export default function Projects() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: projects = [], isLoading, error } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: projects = [], isLoading, error } = useQuery<EnrichedProject[]>({ queryKey: ["/api/projects"] });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/projects/${id}`),
@@ -119,7 +143,7 @@ export default function Projects() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((project) => {
-            const pct = getPipelinePct(project.status);
+            const pct = getLivePct(project);
             return (
               <div key={project.id} className="group relative" data-testid={`project-card-${project.id}`}>
                 <Link href={`/projects/${project.id}`}>

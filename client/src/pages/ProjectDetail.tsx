@@ -13,7 +13,7 @@ import {
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
+import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
@@ -394,7 +394,15 @@ export default function ProjectDetail() {
 
   const { project, chapters, runSteps, bookDna, marketing, trendReport } = data;
   const completedChapters = chapters.filter(c => c.status === "complete");
-  const pct = getPipelinePct(project.status);
+  const pct = (() => {
+    let done = 0, total = 0;
+    total += 1; if (!!trendReport) done += 1;
+    total += 1; if (chapters.length > 0) done += 1;
+    total += 1; if (!!project.coverImageUrl) done += 1;
+    if (chapters.length > 0) { total += chapters.length; done += completedChapters.length; } else { total += 1; }
+    total += 1; if (!!marketing) done += 1;
+    return Math.round((done / total) * 100);
+  })();
   const anyRunning = trendMutation.isPending || outlineMutation.isPending || chapterMutation.isPending || marketingMutation.isPending || coverMutation.isPending;
 
   const pipelineActions = [
