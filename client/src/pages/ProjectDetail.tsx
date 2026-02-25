@@ -505,7 +505,7 @@ export default function ProjectDetail() {
             <CardContent>
               {project.coverImageUrl ? (
                 <div className="rounded-xl overflow-hidden border border-border/50 shadow-md">
-                  <img src={project.coverImageUrl} alt="Book cover" className="w-full aspect-[3/4] object-cover" />
+                  <img src={project.coverImageUrl} alt="Book cover" className="w-full object-contain rounded-xl bg-muted/30" />
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center aspect-[3/4] rounded-xl bg-gradient-to-br from-muted/50 to-muted border border-dashed border-muted-foreground/20">
