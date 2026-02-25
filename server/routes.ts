@@ -1034,7 +1034,6 @@ Return JSON with:
   const TTS_CACHE_TTL = 10 * 60 * 1000;
 
   function ttsCacheKey(text: string, voice: string): string {
-    const crypto = require("crypto");
     return crypto.createHash("md5").update(`${voice}:${text}`).digest("hex");
   }
 
@@ -1063,14 +1062,8 @@ Return JSON with:
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      const mp3Response = await openai.audio.speech.create({
-        model: "tts-1",
-        voice: selectedVoice,
-        input: trimmed,
-        response_format: "mp3",
-      });
-      const arrayBuffer = await mp3Response.arrayBuffer();
-      const audioBuffer = Buffer.from(arrayBuffer);
+      const { textToSpeech } = await import("./replit_integrations/audio/client");
+      const audioBuffer = await textToSpeech(trimmed, selectedVoice, "mp3");
       const base64Audio = audioBuffer.toString("base64");
 
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
