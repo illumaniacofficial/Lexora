@@ -11,13 +11,13 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle } from "lucide-react";
+import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle, Play, Loader2, Clock, CheckCircle2, XCircle, StopCircle } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
-import type { AutopilotConfig } from "@shared/schema";
+import type { AutopilotConfig, AutopilotRun } from "@shared/schema";
 
 const schema = z.object({
   vertical: z.enum(VERTICALS),
@@ -34,6 +34,17 @@ type FormData = z.infer<typeof schema>;
 export default function Autopilot() {
   const { toast } = useToast();
   const { data: config, isLoading, error } = useQuery<AutopilotConfig | null>({ queryKey: ["/api/autopilot"] });
+  const { data: runs } = useQuery<AutopilotRun[]>({ queryKey: ["/api/autopilot/runs"] });
+
+  const activeRun = runs?.find(r => r.status === "running" || r.status === "pending");
+
+  useEffect(() => {
+    if (!activeRun) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/autopilot/runs"] });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeRun]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -57,6 +68,16 @@ export default function Autopilot() {
     mutationFn: (data: FormData) => apiRequest("POST", "/api/autopilot", data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/autopilot"] }); toast({ title: "Configuration saved" }); },
     onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/autopilot/run"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/autopilot/runs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+      toast({ title: "Autopilot run started", description: "AI is now generating a complete book autonomously." });
+    },
+    onError: (err: any) => toast({ title: "Failed to start run", description: err.message, variant: "destructive" }),
   });
 
   const isActive = form.watch("isActive");
@@ -93,6 +114,26 @@ export default function Autopilot() {
     );
   }
 
+  const statusIcon = (status: string) => {
+    switch (status) {
+      case "complete": return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />;
+      case "failed": return <XCircle className="h-3.5 w-3.5 text-red-400" />;
+      case "stopped": return <StopCircle className="h-3.5 w-3.5 text-amber-400" />;
+      case "running": return <Loader2 className="h-3.5 w-3.5 text-purple-400 animate-spin" />;
+      default: return <Clock className="h-3.5 w-3.5 text-muted-foreground/50" />;
+    }
+  };
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case "complete": return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+      case "failed": return "text-red-400 bg-red-500/10 border-red-500/20";
+      case "stopped": return "text-amber-400 bg-amber-500/10 border-amber-500/20";
+      case "running": return "text-purple-400 bg-purple-500/10 border-purple-500/20";
+      default: return "text-muted-foreground/60 bg-muted/10 border-border/20";
+    }
+  };
+
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full max-w-3xl">
       <Helmet><title>Autopilot — BookForge Studio</title></Helmet>
@@ -114,6 +155,32 @@ export default function Autopilot() {
 
       <div className="line-glow" />
 
+      {activeRun && (
+        <Card className="border-purple-500/30 bg-purple-500/5 glow-border overflow-hidden relative">
+          <div className="absolute inset-0 mesh-bg opacity-20 pointer-events-none" />
+          <CardContent className="pt-5 pb-5 relative">
+            <div className="flex items-center gap-3 mb-3">
+              <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
+              <p className="font-bold text-sm tracking-tight text-purple-300">Autopilot Running</p>
+            </div>
+            <div className="space-y-2">
+              {activeRun.bookTitle && (
+                <p className="text-[12px] font-mono text-white/80">
+                  <span className="text-muted-foreground/50">Book: </span>{activeRun.bookTitle}
+                </p>
+              )}
+              <p className="text-[12px] font-mono text-white/80">
+                <span className="text-muted-foreground/50">Step: </span>
+                <span className="text-purple-300">{activeRun.currentStep || "Starting..."}</span>
+              </p>
+              <p className="text-[10px] font-mono text-muted-foreground/40">
+                Vertical: {VERTICAL_LABELS[activeRun.vertical] || activeRun.vertical}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className={`border-border/20 bg-card/30 overflow-hidden relative ${isActive ? "glow-border" : ""}`}>
         {isActive && <div className="absolute inset-0 mesh-bg opacity-30 pointer-events-none" />}
         <CardContent className="pt-5 pb-5 relative">
@@ -123,8 +190,21 @@ export default function Autopilot() {
             </div>
             <div className="flex-1">
               <p className="font-bold text-sm tracking-tight">How Autopilot Works</p>
-              <p className="text-[11px] text-muted-foreground/50 mt-1 leading-relaxed font-mono">Auto-run trend analysis, greenlight topics, generate complete books, and stop if quality drops below threshold or budget is exceeded.</p>
+              <p className="text-[11px] text-muted-foreground/50 mt-1 leading-relaxed font-mono">Enable autopilot, configure your settings, then hit "Run Now" to auto-generate a complete book: topic discovery, trend analysis, outline, all chapters, and marketing — fully autonomous.</p>
             </div>
+            <Button
+              onClick={() => runMutation.mutate()}
+              disabled={!isActive || runMutation.isPending || !!activeRun}
+              data-testid="button-run-autopilot"
+              className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] font-mono text-[12px] shrink-0"
+            >
+              {runMutation.isPending || activeRun ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4 mr-2" />
+              )}
+              {activeRun ? "RUNNING..." : runMutation.isPending ? "STARTING..." : "RUN NOW"}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -284,6 +364,67 @@ export default function Autopilot() {
           </div>
         </form>
       </Form>
+
+      {runs && runs.length > 0 && (
+        <>
+          <div className="line-glow" />
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="h-3 w-3 text-cyan-500/50" />
+              <span className="text-[9px] font-mono font-bold text-cyan-400/60 tracking-[0.2em] uppercase">RUN HISTORY</span>
+            </div>
+            <div className="space-y-2.5">
+              {runs.map(run => (
+                <Card key={run.id} className="border-border/20 bg-card/30" data-testid={`autopilot-run-${run.id}`}>
+                  <CardContent className="py-3.5 px-4">
+                    <div className="flex items-center gap-3">
+                      {statusIcon(run.status)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[12px] font-mono font-bold truncate">
+                            {run.bookTitle || "Generating topic..."}
+                          </p>
+                          <Badge className={`${statusColor(run.status)} border font-mono text-[9px] shrink-0`}>
+                            {run.status.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[10px] font-mono text-muted-foreground/40">
+                            {VERTICAL_LABELS[run.vertical] || run.vertical}
+                          </span>
+                          {run.currentStep && run.status === "running" && (
+                            <span className="text-[10px] font-mono text-purple-400/70 truncate">
+                              {run.currentStep}
+                            </span>
+                          )}
+                          {run.estimatedCost > 0 && (
+                            <span className="text-[10px] font-mono text-muted-foreground/30">
+                              ${run.estimatedCost.toFixed(4)}
+                            </span>
+                          )}
+                          {run.errorMessage && (
+                            <span className="text-[10px] font-mono text-red-400/60 truncate">
+                              {run.errorMessage}
+                            </span>
+                          )}
+                          {run.currentStep && run.status === "stopped" && (
+                            <span className="text-[10px] font-mono text-amber-400/60 truncate">
+                              {run.currentStep}
+                            </span>
+                          )}
+                          <span className="text-[9px] font-mono text-muted-foreground/25 ml-auto shrink-0">
+                            {new Date(run.startedAt).toLocaleDateString()} {new Date(run.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { db } from "./db";
 import {
-  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig,
+  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns,
   type User, type InsertUser, type Project, type InsertProject, type BookDna, type InsertBookDna,
   type TrendReport, type InsertTrendReport, type Chapter, type InsertChapter,
   type RunStep, type InsertRunStep, type MarketingAsset, type InsertMarketingAsset,
   type AutopilotConfig, type InsertAutopilotConfig,
+  type AutopilotRun, type InsertAutopilotRun,
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
@@ -41,6 +42,10 @@ export interface IStorage {
 
   getAutopilotConfig(): Promise<AutopilotConfig | undefined>;
   upsertAutopilotConfig(data: InsertAutopilotConfig): Promise<AutopilotConfig>;
+
+  getAutopilotRuns(): Promise<AutopilotRun[]>;
+  createAutopilotRun(data: InsertAutopilotRun): Promise<AutopilotRun>;
+  updateAutopilotRun(id: number, data: Partial<AutopilotRun>): Promise<AutopilotRun>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -190,6 +195,20 @@ export class DatabaseStorage implements IStorage {
     }
     const [created] = await db.insert(autopilotConfig).values(data).returning();
     return created;
+  }
+
+  async getAutopilotRuns() {
+    return db.select().from(autopilotRuns).orderBy(desc(autopilotRuns.startedAt)).limit(20);
+  }
+
+  async createAutopilotRun(data: InsertAutopilotRun) {
+    const [created] = await db.insert(autopilotRuns).values(data).returning();
+    return created;
+  }
+
+  async updateAutopilotRun(id: number, data: Partial<AutopilotRun>) {
+    const [updated] = await db.update(autopilotRuns).set(data).where(eq(autopilotRuns.id, id)).returning();
+    return updated;
   }
 
   async getDashboardStats() {

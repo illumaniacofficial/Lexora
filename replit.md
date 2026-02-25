@@ -21,7 +21,7 @@ A production-grade AI publishing platform capable of generating complete books, 
    - Marketing Suite (blurbs, hooks, email sequences, social calendar, pricing)
 4. **Trend Intelligence** — Market analysis by vertical with demand/competition scoring
 5. **Marketing Suite** — View assets across all projects (XSS-sanitized)
-6. **Autopilot Mode** — Configure autonomous publishing with budget/quality controls
+6. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
 7. **Book Export** — Download completed books as .txt or .html (with author name, TOC, title page)
 
 ## Database Schema
@@ -33,6 +33,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 - `run_steps` — AI generation logs with token usage and cost tracking (indexed on projectId)
 - `marketing_assets` — Complete marketing suite (indexed on projectId)
 - `autopilot_config` — Autonomous publishing configuration
+- `autopilot_runs` — Run history with status, current step, tokens, cost, error tracking
 
 ## AI Models Used
 
@@ -95,12 +96,13 @@ english, spanish, portuguese, french, german
 
 ```
 server/
-  index.ts       — Express server entry point with seeding
-  routes.ts      — All API routes (/api/projects, /api/trends, etc.)
-  storage.ts     — Database abstraction layer (includes deleteChaptersByProject)
-  db.ts          — Drizzle + pg pool connection
-  openai.ts      — OpenAI client setup
-  seed.ts        — Database seeding with demo projects
+  index.ts             — Express server entry point with seeding
+  routes.ts            — All API routes (/api/projects, /api/trends, /api/autopilot, etc.)
+  storage.ts           — Database abstraction layer (includes deleteChaptersByProject)
+  autopilot-engine.ts  — Autonomous book generation engine (topic → trend → outline → chapters → marketing)
+  db.ts                — Drizzle + pg pool connection
+  openai.ts            — OpenAI client setup
+  seed.ts              — Database seeding with demo projects
 client/src/
   App.tsx                    — Root app with sidebar layout and routing
   lib/utils.ts               — Centralized constants and helpers

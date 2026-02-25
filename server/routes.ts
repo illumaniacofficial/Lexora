@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
 import { insertProjectSchema, insertAutopilotConfigSchema } from "@shared/schema";
+import { executeAutopilotRun, isAutopilotRunning } from "./autopilot-engine";
 import { z } from "zod";
 
 function slugify(text: string): string {
@@ -686,6 +687,49 @@ Return JSON with:
       res.json(config);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/autopilot/runs", async (_req, res) => {
+    try {
+      const runs = await storage.getAutopilotRuns();
+      res.json(runs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/autopilot/run", async (_req, res) => {
+    try {
+      if (isAutopilotRunning()) {
+        return res.status(409).json({ error: "An autopilot run is already in progress" });
+      }
+
+      const config = await storage.getAutopilotConfig();
+      if (!config || !config.isActive) {
+        return res.status(400).json({ error: "Autopilot is not active. Enable it first." });
+      }
+
+      const language = config.targetLanguages?.[0] || "english";
+
+      const run = await storage.createAutopilotRun({
+        vertical: config.vertical,
+        status: "pending",
+      });
+
+      executeAutopilotRun(
+        run.id,
+        config.vertical,
+        language,
+        config.minQualityScore,
+        config.budgetCapUsd
+      ).catch((err) => {
+        console.error("Autopilot run failed:", err.message);
+      });
+
+      res.json(run);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

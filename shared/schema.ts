@@ -136,6 +136,22 @@ export const autopilotConfig = pgTable("autopilot_config", {
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
+export const autopilotRuns = pgTable("autopilot_runs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  vertical: text("vertical").notNull(),
+  status: text("status").notNull().default("pending"),
+  currentStep: text("current_step"),
+  bookTitle: text("book_title"),
+  errorMessage: text("error_message"),
+  totalTokens: integer("total_tokens").notNull().default(0),
+  estimatedCost: real("estimated_cost").notNull().default(0),
+  startedAt: timestamp("started_at").notNull().default(sql`now()`),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({ id: true, startedAt: true, completedAt: true });
+
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTrendReportSchema = createInsertSchema(trendReports).omit({ id: true, createdAt: true });
@@ -158,3 +174,5 @@ export type BookDna = typeof bookDna.$inferSelect;
 export type InsertBookDna = z.infer<typeof insertBookDnaSchema>;
 export type AutopilotConfig = typeof autopilotConfig.$inferSelect;
 export type InsertAutopilotConfig = z.infer<typeof insertAutopilotConfigSchema>;
+export type AutopilotRun = typeof autopilotRuns.$inferSelect;
+export type InsertAutopilotRun = z.infer<typeof insertAutopilotRunSchema>;
