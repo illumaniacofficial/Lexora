@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon, AlertCircle } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { formatScore, VERTICAL_LABELS } from "@/lib/utils";
+import { formatScore, VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VERTICALS } from "@shared/schema";
@@ -37,11 +37,14 @@ function TrendReportCard({ report }: { report: TrendReport }) {
     <Card className="overflow-hidden border-border/20 bg-card/30 hover:border-purple-500/15 transition-all duration-300" data-testid={`trend-report-${report.id}`}>
       <div className="px-5 py-3.5 border-b border-border/15 aurora-card">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div>
-            <p className="text-[11px] font-mono font-bold text-purple-300/80 uppercase tracking-wider">{VERTICAL_LABELS[report.vertical] || report.vertical}</p>
-            <p className="text-[9px] font-mono text-muted-foreground/30 mt-0.5">
-              {new Date(report.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-            </p>
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">{VERTICAL_ICONS[report.vertical] || "📊"}</span>
+            <div>
+              <p className="text-[11px] font-mono font-bold text-purple-300/80 uppercase tracking-wider">{VERTICAL_LABELS[report.vertical] || report.vertical}</p>
+              <p className="text-[9px] font-mono text-muted-foreground/30 mt-0.5">
+                {new Date(report.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </p>
+            </div>
           </div>
           <Badge variant="outline" className={`text-sm font-mono font-bold px-3 py-0.5 border-border/30 ${glColor}`}>
             GL {formatScore(report.greenlightScore)}

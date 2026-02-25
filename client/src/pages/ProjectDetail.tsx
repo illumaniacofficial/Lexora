@@ -698,6 +698,10 @@ export default function ProjectDetail() {
                 <CardTitle className="text-[11px] font-mono font-bold tracking-wider uppercase text-muted-foreground/50">
                   <TrendingUp className="h-3 w-3 inline mr-1.5 text-cyan-400/50" /> Trend Report
                 </CardTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-base">{VERTICAL_ICONS[trendReport.vertical] || "📊"}</span>
+                  <span className="text-[12px] font-mono font-bold text-cyan-300/80 uppercase tracking-wider">{VERTICAL_LABELS[trendReport.vertical] || trendReport.vertical}</span>
+                </div>
               </CardHeader>
               <CardContent className="space-y-3.5">
                 {trendReport.summary && (
