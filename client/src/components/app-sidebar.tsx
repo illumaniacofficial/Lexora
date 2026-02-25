@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, BookOpen, Zap, Hexagon,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, BookOpen, Zap, Hexagon, Library,
 } from "lucide-react";
 
 const navItems = [
@@ -12,6 +12,7 @@ const navItems = [
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
+  { title: "Library", url: "/library", icon: Library },
   { title: "Autopilot", url: "/autopilot", icon: Bot },
 ];
 

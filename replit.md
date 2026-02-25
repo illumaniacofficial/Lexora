@@ -20,9 +20,10 @@ A production-grade AI publishing platform capable of generating complete books, 
    - AI Cover Generation (category-specific designs, cost-tracked via runStep)
    - Marketing Suite (blurbs, hooks, email sequences, social calendar, pricing)
 4. **Trend Intelligence** — Market analysis by vertical with demand/competition scoring
-5. **Marketing Suite** — View assets across all projects (XSS-sanitized)
-6. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
-7. **Book Export** — Download completed books as .txt or .html (with author name, TOC, title page)
+5. **Marketing Suite** — Per-project expandable marketing content: hooks, email sequences, social calendar, pricing matrix, blurbs (XSS-sanitized)
+6. **Library** — Completed books collection with search bar, vertical filters, sort options (rank/title/words/quality/date), top-5 featured cards with rank badges, and clickable link list for the rest
+7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
+8. **Book Export** — Download completed books as .txt or .html (with author name, TOC, title page)
 
 ## Database Schema
 
@@ -115,7 +116,8 @@ client/src/
     NewProject.tsx           — Create project form with vertical selector
     ProjectDetail.tsx        — Full pipeline view with neon step buttons
     TrendIntelligence.tsx    — Market analysis with cyan accent theme
-    Marketing.tsx            — Marketing overview with pink accent theme
+    Marketing.tsx            — Marketing suite with expandable per-project content (hooks, emails, pricing, blurbs)
+    Library.tsx              — Completed books library with search, filters, sorting, top-5 featured cards, ranked link list
     Autopilot.tsx            — Autopilot config with mesh backgrounds
 shared/
   schema.ts      — All Drizzle schemas, TypeScript types, DB indexes

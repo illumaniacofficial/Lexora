@@ -14,6 +14,7 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import TrendIntelligence from "@/pages/TrendIntelligence";
 import Marketing from "@/pages/Marketing";
 import Autopilot from "@/pages/Autopilot";
+import Library from "@/pages/Library";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/trends" component={TrendIntelligence} />
       <Route path="/marketing" component={Marketing} />
       <Route path="/autopilot" component={Autopilot} />
+      <Route path="/library" component={Library} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -4,11 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon } from "lucide-react";
+import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { AlertCircle } from "lucide-react";
-import { VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
-import type { Project } from "@shared/schema";
+import { useState } from "react";
+import { VERTICAL_LABELS, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
+import type { Project, MarketingAsset } from "@shared/schema";
 
 const featureCards = [
   { icon: Target, label: "Hook Generator", desc: "30 social media hooks", glow: "neon-glow" },
@@ -17,11 +17,161 @@ const featureCards = [
   { icon: DollarSign, label: "Pricing Matrix", desc: "Optimized formats", glow: "neon-glow-fire" },
 ];
 
+interface ProjectWithMarketing {
+  project: Project;
+  marketing: MarketingAsset | null;
+}
+
+function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Card className="border-border/20 bg-card/30 hover:border-pink-500/15 transition-all duration-300 overflow-hidden" data-testid={`marketing-project-${project.id}`}>
+      <CardContent className="pt-5 pb-5">
+        <div className="flex items-start gap-3.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl glow-border-pink bg-card/50 text-lg">
+            {VERTICAL_ICONS[project.vertical] || "📖"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Link href={`/projects/${project.id}`}>
+                <h3 className="font-bold text-sm tracking-tight hover:text-pink-300 transition-colors cursor-pointer">{project.title}</h3>
+              </Link>
+              <Badge variant="outline" className={`text-[10px] font-mono border-border/30 ${project.status === "complete" ? "text-emerald-400" : "text-pink-400"}`}>
+                {project.status === "complete" ? "COMPLETE" : "MARKETING"}
+              </Badge>
+            </div>
+            <p className="text-[10px] font-mono text-muted-foreground/40 mt-0.5 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</p>
+
+            {marketing ? (
+              <>
+                <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-muted-foreground/30 flex-wrap">
+                  {marketing.hooks && marketing.hooks.length > 0 && <span className="flex items-center gap-1"><Target className="h-3 w-3 text-purple-400/40" /> {marketing.hooks.length} Hooks</span>}
+                  {marketing.emailSequence && <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-cyan-400/40" /> Email Seq</span>}
+                  {marketing.socialCalendar && <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-emerald-400/40" /> Social Cal</span>}
+                  {marketing.pricingMatrix && <span className="flex items-center gap-1"><DollarSign className="h-3 w-3 text-amber-400/40" /> Pricing</span>}
+                </div>
+
+                {marketing.shortBlurb && (
+                  <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-3 line-clamp-2">{marketing.shortBlurb}</p>
+                )}
+
+                <button
+                  onClick={() => setExpanded(!expanded)}
+                  className="flex items-center gap-1 text-[10px] font-mono text-purple-400/60 hover:text-purple-300 transition-colors mt-2"
+                  data-testid={`toggle-marketing-${project.id}`}
+                >
+                  {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  {expanded ? "COLLAPSE" : "SHOW DETAILS"}
+                </button>
+
+                {expanded && (
+                  <div className="mt-4 space-y-3 border-t border-border/10 pt-4">
+                    {marketing.mediumBlurb && (
+                      <div>
+                        <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-pink-400/50 mb-1.5">Medium Blurb</p>
+                        <p className="text-[12px] text-muted-foreground/70 leading-relaxed">{marketing.mediumBlurb}</p>
+                      </div>
+                    )}
+                    {marketing.amazonDescription && (
+                      <div>
+                        <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-1.5">Amazon Description</p>
+                        <div className="text-[12px] text-muted-foreground/70 leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(marketing.amazonDescription) }} />
+                      </div>
+                    )}
+                    {marketing.hooks && marketing.hooks.length > 0 && (
+                      <div>
+                        <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2">Social Hooks</p>
+                        <div className="space-y-1">
+                          {marketing.hooks.map((h, i) => (
+                            <div key={i} className="text-[11px] bg-white/[0.02] border border-border/10 rounded-lg px-3 py-2">
+                              <span className="text-[9px] font-mono text-purple-400/50 font-bold mr-2">#{i + 1}</span>
+                              <span className="text-muted-foreground/60">{h}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {marketing.emailSequence && Array.isArray(marketing.emailSequence) && (
+                      <div>
+                        <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2">Email Sequence</p>
+                        <div className="space-y-1">
+                          {(marketing.emailSequence as Array<{ subject?: string; preview?: string; day?: number }>).map((email, i) => (
+                            <div key={i} className="text-[11px] bg-white/[0.02] border border-border/10 rounded-lg px-3 py-2">
+                              <span className="text-[9px] font-mono text-cyan-400/50 font-bold mr-2">Day {email.day || i + 1}</span>
+                              <span className="font-bold text-muted-foreground/70">{email.subject}</span>
+                              {email.preview && <p className="text-[10px] text-muted-foreground/40 mt-0.5">{email.preview}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {marketing.pricingMatrix && (
+                      <div>
+                        <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2">Pricing Matrix</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {Object.entries(marketing.pricingMatrix as Record<string, any>).map(([format, price]) => (
+                            <div key={format} className="bg-white/[0.02] border border-border/10 rounded-lg p-2.5 text-center">
+                              <div className="text-[12px] font-bold font-mono text-purple-300">{typeof price === "object" ? JSON.stringify(price) : price}</div>
+                              <div className="text-[8px] font-mono text-muted-foreground/30 capitalize mt-0.5 tracking-widest">{format}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="pt-2">
+                      <Link href={`/projects/${project.id}`}>
+                        <Button variant="outline" className="text-[10px] font-mono h-8 border-pink-500/20 text-pink-400 hover:bg-pink-500/10" data-testid={`link-project-${project.id}`}>
+                          View Full Project <ArrowRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-muted-foreground/30 flex-wrap">
+                <span className="text-amber-400/60">Marketing data not yet generated</span>
+                <Link href={`/projects/${project.id}`}>
+                  <span className="text-purple-400/60 hover:text-purple-300 transition-colors cursor-pointer underline underline-offset-2">Generate →</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Marketing() {
-  const { data: projects = [], isLoading, error } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: projects = [], isLoading: projectsLoading, error: projectsError } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
   const projectsWithMarketing = projects.filter(p => p.status === "marketing" || p.status === "complete");
 
-  if (error) {
+  const marketingQueries = projectsWithMarketing.map(p => p.id);
+  const { data: projectDetails = [], isLoading: detailsLoading } = useQuery<ProjectWithMarketing[]>({
+    queryKey: ["/api/marketing-details", marketingQueries],
+    queryFn: async () => {
+      const results = await Promise.all(
+        projectsWithMarketing.map(async (p) => {
+          try {
+            const res = await fetch(`/api/projects/${p.id}`);
+            if (!res.ok) return { project: p, marketing: null };
+            const data = await res.json();
+            return { project: p, marketing: data.marketing || null };
+          } catch {
+            return { project: p, marketing: null };
+          }
+        })
+      );
+      return results;
+    },
+    enabled: projectsWithMarketing.length > 0,
+  });
+
+  const isLoading = projectsLoading || detailsLoading;
+
+  if (projectsError) {
     return (
       <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
         <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
@@ -73,7 +223,7 @@ export default function Marketing() {
             <p className="font-bold text-lg mt-5 tracking-tight">No marketing assets yet</p>
             <p className="text-[11px] text-muted-foreground/40 font-mono mt-1 text-center max-w-sm">Complete the writing pipeline to generate marketing</p>
             <Link href="/projects/new">
-              <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[12px]">
+              <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[12px]" data-testid="button-start-project">
                 <BookOpen className="h-4 w-4 mr-2" /> START PROJECT
               </Button>
             </Link>
@@ -82,35 +232,15 @@ export default function Marketing() {
       ) : (
         <div className="space-y-3">
           <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">With Marketing ({projectsWithMarketing.length})</h2>
-          {projectsWithMarketing.map(project => (
-            <Link key={project.id} href={`/projects/${project.id}`}>
-              <Card className="cursor-pointer border-border/20 bg-card/30 hover:border-pink-500/15 transition-all duration-300 group" data-testid={`marketing-project-${project.id}`}>
-                <CardContent className="pt-5 pb-5">
-                  <div className="flex items-start gap-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl glow-border-pink bg-card/50 text-lg">
-                      {VERTICAL_ICONS[project.vertical] || "\u{1F4D6}"}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <h3 className="font-bold text-sm tracking-tight group-hover:text-pink-300 transition-colors">{project.title}</h3>
-                        <Badge variant="outline" className={`text-[10px] font-mono border-border/30 ${project.status === "complete" ? "text-emerald-400" : "text-pink-400"}`}>
-                          {project.status === "complete" ? "COMPLETE" : "MARKETING"}
-                        </Badge>
-                      </div>
-                      <p className="text-[10px] font-mono text-muted-foreground/40 mt-0.5 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</p>
-                      <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-muted-foreground/30 flex-wrap">
-                        <span className="flex items-center gap-1"><Target className="h-3 w-3 text-purple-400/40" /> Hooks</span>
-                        <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-cyan-400/40" /> Emails</span>
-                        <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-emerald-400/40" /> Social</span>
-                        <span className="flex items-center gap-1"><DollarSign className="h-3 w-3 text-amber-400/40" /> Pricing</span>
-                      </div>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground/15 group-hover:text-pink-400/50 transition-colors shrink-0 mt-1" />
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+          {projectDetails.length > 0 ? (
+            projectDetails.map(({ project, marketing }) => (
+              <MarketingProjectCard key={project.id} project={project} marketing={marketing} />
+            ))
+          ) : (
+            projectsWithMarketing.map(project => (
+              <MarketingProjectCard key={project.id} project={project} marketing={null} />
+            ))
+          )}
         </div>
       )}
     </div>

@@ -166,6 +166,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/library", async (_req, res) => {
+    try {
+      const allProjects = await storage.getProjects();
+      const completed = allProjects.filter(p => p.status === "complete");
+      const library = await Promise.all(completed.map(async (project) => {
+        const marketing = await storage.getMarketingAsset(project.id);
+        const chapterList = await storage.getChapters(project.id);
+        return {
+          ...project,
+          shortBlurb: marketing?.shortBlurb || null,
+          chapterCount: chapterList.length,
+          completedChapters: chapterList.filter(c => c.status === "complete").length,
+        };
+      }));
+      res.json(library);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/projects", async (_req, res) => {
     try {
       const list = await storage.getProjects();
