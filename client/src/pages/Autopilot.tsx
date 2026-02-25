@@ -192,7 +192,7 @@ export default function Autopilot() {
                 <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
                 <p className="font-bold text-sm tracking-tight text-purple-300">Autopilot Running</p>
               </div>
-              <ElapsedTime since={activeRun.createdAt} />
+              <ElapsedTime since={activeRun.startedAt} />
             </div>
             <div className="space-y-2">
               {activeRun.bookTitle && (
