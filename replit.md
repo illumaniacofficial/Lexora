@@ -24,8 +24,8 @@ A production-grade AI publishing platform capable of generating complete books, 
 6. **Library** — Completed books collection with search bar, vertical filters, sort options (rank/title/words/quality/date), top-5 featured cards with rank badges, and clickable link list for the rest
 7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
 8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
-9. **Full-Screen Book Reader** — Immersive page-by-page reading with page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), and progress tracking
-10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, and next-page controls
+9. **Full-Screen Book Reader** — Immersive book experience with paper textures, spine shadows, page edge effects, page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), progress tracking, and landscape two-page spread mode with a book spine
+10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, and next-page controls
 
 ## Database Schema
 
