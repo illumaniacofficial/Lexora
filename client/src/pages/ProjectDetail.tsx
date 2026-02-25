@@ -61,9 +61,21 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
             <p className="text-sm font-bold tracking-tight">{chapter.title}</p>
             <div className="flex items-center gap-2">
               {chapter.status === "complete" ? (
-                <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/20 bg-emerald-500/5">
-                  {chapter.wordCount.toLocaleString()} w
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/20 bg-emerald-500/5">
+                    {chapter.wordCount.toLocaleString()} w
+                  </Badge>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-7 text-[10px] font-mono border-border/30 hover:border-amber-500/30 hover:text-amber-300"
+                    onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
+                    disabled={isGenerating}
+                    data-testid={`button-regenerate-chapter-${chapter.id}`}
+                    aria-label="Regenerate chapter"
+                  >
+                    <RefreshCw className="h-2.5 w-2.5 mr-1" /> REGEN
+                  </Button>
+                </div>
               ) : chapter.status === "generating" ? (
                 <div className="flex items-center gap-1.5">
                   <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
@@ -389,7 +401,7 @@ export default function ProjectDetail() {
     { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp, glow: "neon-glow-cool" },
     { label: "Gen Outline", step: "2", done: chapters.length > 0, action: () => outlineMutation.mutate(), loading: outlineMutation.isPending, icon: List, glow: "neon-glow" },
     { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image, glow: "neon-glow-warm" },
-    { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) chapterMutation.mutate(p[0].id); }, loading: chapterMutation.isPending, icon: PenTool, glow: "neon-glow-fire" },
+    { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool, glow: "neon-glow-fire" },
     { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone, glow: "neon-glow-nature" },
   ];
 
@@ -475,22 +487,25 @@ export default function ProjectDetail() {
               <button
                 key={label}
                 onClick={action}
-                disabled={loading || anyRunning || done}
+                disabled={loading || anyRunning}
                 data-testid={`pipeline-step-${label.toLowerCase().replace(/\s+/g, "-")}`}
                 className={`flex flex-col items-center gap-2 p-3.5 rounded-xl border text-center text-[10px] font-mono font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${done
-                  ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400"
+                  ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:border-amber-500/20 hover:bg-amber-500/[0.03] hover:text-amber-300"
                   : "border-border/20 bg-card/20 hover:border-purple-500/20 hover:bg-purple-500/[0.03] text-muted-foreground/60"}`}
               >
                 {loading ? (
                   <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
                 ) : done ? (
-                  <CheckCircle className="h-5 w-5 text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                  <div className="relative">
+                    <CheckCircle className="h-5 w-5 text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+                    <RefreshCw className="absolute -bottom-1 -right-1.5 h-2.5 w-2.5 text-muted-foreground/40" />
+                  </div>
                 ) : (
                   <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${glow} shadow-lg`}>
                     <Icon className="h-3.5 w-3.5 text-white" />
                   </div>
                 )}
-                <span className="leading-tight tracking-wider uppercase">{step}. {label}</span>
+                <span className="leading-tight tracking-wider uppercase">{done ? `↻ ${label}` : `${step}. ${label}`}</span>
               </button>
             ))}
           </div>
