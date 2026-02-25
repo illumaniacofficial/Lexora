@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock,
+  ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
@@ -38,10 +38,12 @@ function StepStatus({ status }: { status: string }) {
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
+  onCancel: (id: number) => void;
+  isCancelling: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -63,9 +65,22 @@ function ChapterCard({ chapter, onGenerate, isGenerating }: {
                   {chapter.wordCount.toLocaleString()} w
                 </Badge>
               ) : chapter.status === "generating" ? (
-                <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
-                  <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-purple-400" /> Writing...
-                </Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
+                    <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-purple-400" /> Writing...
+                  </Badge>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-7 text-[10px] font-mono border-red-500/20 text-red-400 hover:border-red-500/40 hover:bg-red-500/10"
+                    onClick={(e) => { e.stopPropagation(); onCancel(chapter.id); }}
+                    disabled={isCancelling}
+                    data-testid={`button-cancel-chapter-${chapter.id}`}
+                    aria-label="Cancel generation"
+                  >
+                    {isCancelling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <X className="h-2.5 w-2.5 mr-1" />}
+                    CANCEL
+                  </Button>
+                </div>
               ) : (
                 <Button
                   size="sm" variant="outline"
@@ -144,6 +159,11 @@ export default function ProjectDetail() {
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-cover`),
     onSuccess: () => { invalidate(); toast({ title: "Cover generated" }); },
     onError: (e: any) => toast({ title: "Cover failed", description: e.message, variant: "destructive" }),
+  });
+  const cancelChapterMutation = useMutation({
+    mutationFn: (chapterId: number) => apiRequest("PATCH", `/api/projects/${projectId}/chapters/${chapterId}/cancel`),
+    onSuccess: () => { invalidate(); toast({ title: "Generation cancelled", description: "Chapter reset to pending" }); },
+    onError: (e: any) => toast({ title: "Cancel failed", description: e.message, variant: "destructive" }),
   });
 
   const exportPdf = useCallback(async () => {
@@ -480,7 +500,7 @@ export default function ProjectDetail() {
                 </Card>
               ) : (
                 chapters.map(ch => (
-                  <ChapterCard key={ch.id} chapter={ch} onGenerate={(cid) => chapterMutation.mutate(cid)} isGenerating={chapterMutation.isPending} />
+                  <ChapterCard key={ch.id} chapter={ch} onGenerate={(cid) => chapterMutation.mutate(cid)} isGenerating={chapterMutation.isPending} onCancel={(cid) => cancelChapterMutation.mutate(cid)} isCancelling={cancelChapterMutation.isPending} />
                 ))
               )}
             </TabsContent>

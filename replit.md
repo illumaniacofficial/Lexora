@@ -25,7 +25,8 @@ A production-grade AI publishing platform capable of generating complete books, 
 7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
 8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
 9. **Full-Screen Book Reader** — Immersive book experience with paper textures, spine shadows, page edge effects, page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), progress tracking, and landscape two-page spread mode with a book spine
-10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, and next-page controls
+10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, next-page controls, and auto-advance to next page on completion
+11. **Cancel Generation** — Cancel button on chapters stuck in "generating" status, resets to "pending" via PATCH endpoint with project ownership validation
 
 ## Database Schema
 
@@ -70,6 +71,8 @@ english, spanish, portuguese, french, german
 - `parseId()` helper validates all route param IDs (returns 400 for NaN/invalid)
 - Export endpoint validates `format` query param (only `txt`/`html` allowed)
 - Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing) and chapter status to `pending` on generation failure
+- Cancel chapter generation: `PATCH /api/projects/:id/chapters/:chapterId/cancel` resets stuck chapters with project ownership validation
+- Book reader persists theme and font size preferences in localStorage with validation/fallback
 - `ErrorBoundary` component wraps entire app for React render error recovery
 - All pages with `useQuery` have error state UI (AlertCircle + message), including ProjectDetail
 - SEO: `react-helmet-async` with per-page `<Helmet>` titles and meta descriptions on all pages (including NewProject)

@@ -67,12 +67,12 @@ const FONT_SIZES = [
 ];
 
 function linesForFontSize(fontSize: number): number {
-  if (fontSize <= 12) return 32;
-  if (fontSize <= 14) return 26;
-  if (fontSize <= 16) return 22;
-  if (fontSize <= 18) return 18;
-  if (fontSize <= 20) return 15;
-  return 12;
+  if (fontSize <= 12) return 44;
+  if (fontSize <= 14) return 38;
+  if (fontSize <= 16) return 32;
+  if (fontSize <= 18) return 28;
+  if (fontSize <= 20) return 24;
+  return 20;
 }
 
 function splitTextIntoPages(text: string, linesPerPage: number, charsPerLine: number): string[] {
@@ -314,8 +314,19 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const [showToc, setShowToc] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNarrator, setShowNarrator] = useState(false);
-  const [fontSize, setFontSize] = useState(16);
-  const [theme, setTheme] = useState<PageTheme>("parchment");
+  const [fontSize, setFontSize] = useState<number>(() => {
+    try {
+      const v = localStorage.getItem("bookforge-reader-fontsize");
+      const n = v ? Number(v) : 16;
+      return FONT_SIZES.some(s => s.value === n) ? n : 16;
+    } catch { return 16; }
+  });
+  const [theme, setTheme] = useState<PageTheme>(() => {
+    try {
+      const v = localStorage.getItem("bookforge-reader-theme");
+      return v && v in THEMES ? (v as PageTheme) : "parchment";
+    } catch { return "parchment"; }
+  });
   const [selectedVoice, setSelectedVoice] = useState<NarratorVoice>("alloy");
   const [isNarrating, setIsNarrating] = useState(false);
   const [narrationLoading, setNarrationLoading] = useState(false);
@@ -340,6 +351,14 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   );
 
   useEffect(() => { autoNarRef.current = autoNarrate; }, [autoNarrate]);
+
+  useEffect(() => {
+    try { localStorage.setItem("bookforge-reader-theme", theme); } catch {}
+  }, [theme]);
+
+  useEffect(() => {
+    try { localStorage.setItem("bookforge-reader-fontsize", String(fontSize)); } catch {}
+  }, [fontSize]);
 
   useEffect(() => {
     if (currentPage >= pages.length) setCurrentPage(Math.max(0, pages.length - 1));
@@ -453,12 +472,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const handleClose = useCallback(() => {
     const page = pages[currentPage];
-    if ((isNarrating || narrationProgress > 0) && page.type === "text" && onStartNarration) {
-      const currentTextPageIdx = textPages.findIndex(tp => tp.chapterNumber === page.chapterNumber && tp.pageInChapter === page.pageInChapter);
+    if ((isNarrating || narrationProgress > 0) && page.type === "text" && onStartNarration && textPages.length > 0) {
+      const firstPage = textPages[0];
       onStartNarration({
-        bookTitle: title, chapterTitle: page.chapterTitle, chapterNumber: page.chapterNumber,
-        pageInChapter: page.pageInChapter, totalPagesInChapter: page.totalPagesInChapter,
-        text: page.text, voice: selectedVoice, allPages: textPages, currentPageIndex: currentTextPageIdx >= 0 ? currentTextPageIdx : 0,
+        bookTitle: title, chapterTitle: firstPage.chapterTitle, chapterNumber: firstPage.chapterNumber,
+        pageInChapter: firstPage.pageInChapter, totalPagesInChapter: firstPage.totalPagesInChapter,
+        text: firstPage.text, voice: selectedVoice, allPages: textPages, currentPageIndex: 0,
       });
     }
     stopNarration();

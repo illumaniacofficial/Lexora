@@ -629,6 +629,21 @@ Write the full chapter content only, no meta-commentary.`,
     }
   });
 
+  app.patch("/api/projects/:id/chapters/:chapterId/cancel", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      if (chapter.status !== "generating") return res.status(400).json({ error: "Chapter is not generating" });
+      await storage.updateChapter(chapterId, { status: "pending" });
+      res.json({ success: true, chapterId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/projects/:id/generate-marketing", async (req, res) => {
     let prevStatus = "draft";
     try {

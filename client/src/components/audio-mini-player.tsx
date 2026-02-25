@@ -41,6 +41,11 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
   const [progress, setProgress] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationRef = useRef<number | null>(null);
+  const narrationRef = useRef(narration);
+  const onUpdateRef = useRef(onUpdateNarration);
+
+  useEffect(() => { narrationRef.current = narration; }, [narration]);
+  useEffect(() => { onUpdateRef.current = onUpdateNarration; }, [onUpdateNarration]);
 
   const generateAndPlay = useCallback(async (text: string, voice: NarratorVoice) => {
     try {
@@ -61,10 +66,28 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
       const audio = new Audio(audioData);
       audioRef.current = audio;
 
+      const expectedIdx = narration.currentPageIndex;
       audio.onended = () => {
         setIsPlaying(false);
         setProgress(100);
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        setTimeout(() => {
+          const latest = narrationRef.current;
+          if (latest.currentPageIndex !== expectedIdx) return;
+          const nextIdx = latest.currentPageIndex + 1;
+          if (nextIdx < latest.allPages.length) {
+            const nextP = latest.allPages[nextIdx];
+            onUpdateRef.current({
+              ...latest,
+              chapterNumber: nextP.chapterNumber,
+              chapterTitle: nextP.chapterTitle,
+              pageInChapter: nextP.pageInChapter,
+              totalPagesInChapter: nextP.totalPagesInChapter,
+              text: nextP.text,
+              currentPageIndex: nextIdx,
+            });
+          }
+        }, 600);
       };
 
       const updateProgress = () => {
