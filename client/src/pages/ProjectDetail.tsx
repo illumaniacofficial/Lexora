@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock,
-  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon,
+  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import BookReader from "@/components/book-reader";
 import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport } from "@shared/schema";
 
 interface ProjectDetailData {
@@ -102,6 +103,8 @@ export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
   const projectId = parseInt(id!);
+  const [showReader, setShowReader] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const { data, isLoading, refetch } = useQuery<ProjectDetailData>({
     queryKey: [`/api/projects/${projectId}`],
@@ -139,6 +142,161 @@ export default function ProjectDetail() {
     onSuccess: () => { invalidate(); toast({ title: "Cover generated" }); },
     onError: (e: any) => toast({ title: "Cover failed", description: e.message, variant: "destructive" }),
   });
+
+  const exportPdf = useCallback(async () => {
+    if (!data?.project) return;
+    const completed = (data.chapters || []).filter(c => c.status === "complete" && c.content);
+    if (completed.length === 0) return;
+    setPdfLoading(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "letter" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const marginX = 72;
+      const marginTop = 72;
+      const marginBottom = 72;
+      const contentW = pageW - marginX * 2;
+      const lineH = 16;
+      const maxY = pageH - marginBottom;
+
+      const addPageNumber = (num: number) => {
+        doc.setFont("times", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(160, 160, 160);
+        doc.text(String(num), pageW / 2, pageH - 36, { align: "center" });
+      };
+
+      let pageNum = 1;
+
+      doc.setFont("times", "bold");
+      doc.setFontSize(28);
+      doc.setTextColor(40, 40, 40);
+      const titleLines = doc.splitTextToSize(data.project.title, contentW);
+      const titleY = pageH / 2 - (titleLines.length * 34) / 2;
+      doc.text(titleLines, pageW / 2, titleY, { align: "center" });
+
+      doc.setFont("times", "italic");
+      doc.setFontSize(16);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`by ${data.project.authorName || "Unknown Author"}`, pageW / 2, titleY + titleLines.length * 34 + 20, { align: "center" });
+
+      doc.setDrawColor(180, 160, 130);
+      doc.setLineWidth(0.5);
+      doc.line(pageW / 2 - 40, titleY - 20, pageW / 2 + 40, titleY - 20);
+      doc.line(pageW / 2 - 40, titleY + titleLines.length * 34 + 50, pageW / 2 + 40, titleY + titleLines.length * 34 + 50);
+
+      doc.addPage();
+      pageNum++;
+      doc.setFont("times", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(40, 40, 40);
+      doc.text("Table of Contents", pageW / 2, marginTop + 20, { align: "center" });
+
+      doc.setDrawColor(180, 160, 130);
+      doc.line(pageW / 2 - 50, marginTop + 32, pageW / 2 + 50, marginTop + 32);
+
+      let tocY = marginTop + 60;
+      doc.setFont("times", "normal");
+      doc.setFontSize(12);
+      doc.setTextColor(60, 60, 60);
+      for (const ch of completed) {
+        const label = `Chapter ${ch.chapterNumber}: ${ch.title}`;
+        const lines = doc.splitTextToSize(label, contentW);
+        for (const line of lines) {
+          if (tocY > maxY) {
+            addPageNumber(pageNum);
+            doc.addPage();
+            pageNum++;
+            tocY = marginTop;
+          }
+          doc.text(line, marginX, tocY);
+          tocY += 18;
+        }
+        tocY += 4;
+      }
+      addPageNumber(pageNum);
+
+      for (const ch of completed) {
+        doc.addPage();
+        pageNum++;
+
+        doc.setFont("times", "normal");
+        doc.setFontSize(11);
+        doc.setTextColor(160, 160, 160);
+        doc.text(`Chapter ${ch.chapterNumber}`, pageW / 2, pageH / 2 - 40, { align: "center" });
+
+        doc.setDrawColor(180, 160, 130);
+        doc.line(pageW / 2 - 30, pageH / 2 - 25, pageW / 2 + 30, pageH / 2 - 25);
+
+        doc.setFont("times", "bold");
+        doc.setFontSize(22);
+        doc.setTextColor(40, 40, 40);
+        const chTitleLines = doc.splitTextToSize(ch.title, contentW);
+        doc.text(chTitleLines, pageW / 2, pageH / 2, { align: "center" });
+
+        addPageNumber(pageNum);
+
+        doc.addPage();
+        pageNum++;
+        let y = marginTop;
+
+        const paragraphs = (ch.content || "").split(/\n+/).filter(p => p.trim());
+        for (const para of paragraphs) {
+          const trimmed = para.trim();
+          let fontSize = 11;
+          let fontStyle: "normal" | "bold" | "italic" | "bolditalic" = "normal";
+          let indent = 24;
+          let extraSpacing = 4;
+          let textColor: [number, number, number] = [50, 50, 50];
+
+          if (trimmed.startsWith("### ")) {
+            fontSize = 13; fontStyle = "bold"; indent = 0; extraSpacing = 6; textColor = [40, 40, 40];
+          } else if (trimmed.startsWith("## ")) {
+            fontSize = 15; fontStyle = "bold"; indent = 0; extraSpacing = 8; textColor = [35, 35, 35];
+          } else if (trimmed.startsWith("# ")) {
+            fontSize = 18; fontStyle = "bold"; indent = 0; extraSpacing = 10; textColor = [30, 30, 30];
+          } else if (trimmed.startsWith("> ")) {
+            fontStyle = "italic"; textColor = [80, 80, 80]; indent = 36;
+          } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+            indent = 36;
+          } else if (trimmed.startsWith("---") || trimmed.startsWith("***")) {
+            doc.setDrawColor(180, 160, 130);
+            doc.line(pageW / 2 - 30, y, pageW / 2 + 30, y);
+            y += 12;
+            continue;
+          }
+
+          const cleanText = trimmed.replace(/^#+\s*/, "").replace(/^>\s*/, "");
+          doc.setFont("times", fontStyle);
+          doc.setFontSize(fontSize);
+          doc.setTextColor(...textColor);
+
+          const lines = doc.splitTextToSize(cleanText, contentW - indent);
+          for (const line of lines) {
+            if (y > maxY) {
+              addPageNumber(pageNum);
+              doc.addPage();
+              pageNum++;
+              y = marginTop;
+            }
+            doc.text(line, marginX + indent, y);
+            y += lineH;
+          }
+          y += extraSpacing;
+        }
+        addPageNumber(pageNum);
+      }
+
+      const slug = data.project.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      doc.save(`${slug}.pdf`);
+      toast({ title: "PDF exported" });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [data, toast]);
 
   if (isLoading) {
     return (
@@ -455,6 +613,21 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
 
+          {completedChapters.length > 0 && (
+            <Card className="border-border/20 bg-card/30 glow-border-nature">
+              <CardContent className="pt-5 pb-5">
+                <Button
+                  className="w-full neon-glow-nature text-white border-0 font-mono text-[11px] h-10"
+                  onClick={() => setShowReader(true)}
+                  data-testid="button-read-book"
+                >
+                  <Eye className="h-4 w-4 mr-2" /> READ BOOK
+                </Button>
+                <p className="text-[9px] text-muted-foreground/30 font-mono mt-2 text-center">{completedChapters.length} chapters · Full-screen reader</p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-border/20 bg-card/30 glow-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-[11px] font-mono font-bold tracking-wider uppercase text-muted-foreground/50">
@@ -467,6 +640,16 @@ export default function ProjectDetail() {
               ) : (
                 <>
                   <p className="text-[10px] text-muted-foreground/40 font-mono mb-3">{completedChapters.length}/{chapters.length} chapters ready</p>
+                  <Button
+                    variant="outline" size="sm"
+                    className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30"
+                    onClick={exportPdf}
+                    disabled={pdfLoading}
+                    data-testid="button-export-pdf"
+                  >
+                    {pdfLoading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-2 text-amber-400/60" />}
+                    .PDF (Book Format)
+                  </Button>
                   <a href={`/api/projects/${projectId}/export?format=txt`} download>
                     <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30" data-testid="button-export-txt">
                       <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground/40" /> .TXT
@@ -477,7 +660,6 @@ export default function ProjectDetail() {
                       <BookOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground/40" /> .HTML
                     </Button>
                   </a>
-                  <p className="text-[9px] text-muted-foreground/30 font-mono mt-1">Print HTML to PDF</p>
                 </>
               )}
             </CardContent>
@@ -524,6 +706,16 @@ export default function ProjectDetail() {
           )}
         </div>
       </div>
+
+      {showReader && (
+        <BookReader
+          title={project.title}
+          authorName={project.authorName || "Unknown Author"}
+          chapters={chapters}
+          coverImageUrl={project.coverImageUrl}
+          onClose={() => setShowReader(false)}
+        />
+      )}
     </div>
   );
 }

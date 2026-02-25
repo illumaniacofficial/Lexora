@@ -23,7 +23,8 @@ A production-grade AI publishing platform capable of generating complete books, 
 5. **Marketing Suite** — Per-project expandable marketing content: hooks, email sequences, social calendar, pricing matrix, blurbs (XSS-sanitized)
 6. **Library** — Completed books collection with search bar, vertical filters, sort options (rank/title/words/quality/date), top-5 featured cards with rank badges, and clickable link list for the rest
 7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
-8. **Book Export** — Download completed books as .txt or .html (with author name, TOC, title page)
+8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
+9. **Full-Screen Book Reader** — Immersive page-by-page reading experience with page flip animations, keyboard navigation, TOC jump menu, and progress tracking
 
 ## Database Schema
 
