@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import {
-  BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity,
+  BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity, AlertCircle,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, scoreColor, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
@@ -88,8 +88,8 @@ export default function Dashboard() {
   return (
     <div className="p-8 space-y-8 overflow-y-auto h-full">
       <Helmet>
-        <title>Dashboard — BookForge Studio</title>
-        <meta name="description" content="BookForge Studio command center — view project stats, recent manuscripts, trend intel, and quick actions." />
+        <title>Dashboard — Lexora</title>
+        <meta name="description" content="Lexora command center — view project stats, recent manuscripts, trend intel, and quick actions." />
       </Helmet>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>

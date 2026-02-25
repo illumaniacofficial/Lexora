@@ -184,7 +184,7 @@ export default function Marketing() {
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
       <Helmet>
-        <title>Marketing Suite — BookForge Studio</title>
+        <title>Marketing Suite — Lexora</title>
         <meta name="description" content="Complete marketing assets for your books — social hooks, email sequences, pricing matrices, and ad copy." />
       </Helmet>
       <div>

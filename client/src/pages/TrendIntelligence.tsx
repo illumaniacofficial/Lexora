@@ -163,7 +163,7 @@ export default function TrendIntelligence() {
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
       <Helmet>
-        <title>Trend Intelligence — BookForge Studio</title>
+        <title>Trend Intelligence — Lexora</title>
         <meta name="description" content="AI-powered market intelligence — analyze publishing verticals for demand, competition, and greenlight scores." />
       </Helmet>
       <div>

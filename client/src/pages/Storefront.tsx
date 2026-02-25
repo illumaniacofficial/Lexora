@@ -59,7 +59,7 @@ export default function Storefront() {
   if (error) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-6">
-        <Helmet><title>Invalid Invite — BookForge Studio</title></Helmet>
+        <Helmet><title>Invalid Invite — Lexora</title></Helmet>
         <div className="text-center max-w-sm">
           <AlertCircle className="h-16 w-16 text-red-400/40 mx-auto mb-6" />
           <h1 className="text-2xl font-bold text-white mb-2">Invite Not Found</h1>
@@ -72,7 +72,7 @@ export default function Storefront() {
   if (selectedBookId && bookDetail) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-white">
-        <Helmet><title>{bookDetail.title} — BookForge Store</title></Helmet>
+        <Helmet><title>{bookDetail.title} — Lexora Store</title></Helmet>
         <div className="max-w-4xl mx-auto p-6">
           <button
             onClick={() => { setSelectedBookId(null); setShowReader(false); }}
@@ -177,8 +177,8 @@ export default function Storefront() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
       <Helmet>
-        <title>BookForge Store — Browse Books</title>
-        <meta name="description" content="Browse and read published books from BookForge Studio Supreme." />
+        <title>Lexora Store — Browse Books</title>
+        <meta name="description" content="Browse and read published books from Lexora." />
       </Helmet>
 
       <div className="relative overflow-hidden">
@@ -187,7 +187,7 @@ export default function Storefront() {
         <div className="relative max-w-5xl mx-auto px-6 py-16 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Sparkles className="h-4 w-4 text-purple-400" />
-            <span className="text-[10px] font-mono text-purple-400/60 uppercase tracking-[0.3em]">BookForge Studio</span>
+            <span className="text-[10px] font-mono text-purple-400/60 uppercase tracking-[0.3em]">Lexora</span>
             <Sparkles className="h-4 w-4 text-purple-400" />
           </div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-3">
@@ -275,7 +275,7 @@ export default function Storefront() {
         )}
 
         <div className="mt-16 text-center border-t border-stone-800/50 pt-8">
-          <p className="text-[10px] font-mono text-stone-700">Powered by BookForge Studio Supreme</p>
+          <p className="text-[10px] font-mono text-stone-700">Powered by Lexora</p>
         </div>
       </div>
     </div>

@@ -51,7 +51,7 @@ export default function NewProject() {
   return (
     <div className="p-8 max-w-3xl mx-auto overflow-y-auto h-full">
       <Helmet>
-        <title>New Manuscript — BookForge Studio</title>
+        <title>New Manuscript — Lexora</title>
         <meta name="description" content="Initialize a new book manuscript — set your title, author, vertical, and language to start the AI publishing pipeline." />
       </Helmet>
       <div className="flex items-center gap-3 mb-8">

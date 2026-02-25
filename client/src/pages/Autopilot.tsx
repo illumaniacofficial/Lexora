@@ -137,7 +137,7 @@ export default function Autopilot() {
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full max-w-3xl">
       <Helmet>
-        <title>Autopilot — BookForge Studio</title>
+        <title>Autopilot — Lexora</title>
         <meta name="description" content="Fully autonomous book publishing — configure targets, budget, quality thresholds, and let AI handle everything." />
       </Helmet>
       <div>

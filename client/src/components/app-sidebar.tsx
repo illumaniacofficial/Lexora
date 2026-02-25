@@ -30,9 +30,9 @@ export function AppSidebar() {
             </div>
           </div>
           <div>
-            <div className="text-sm font-bold tracking-tight shimmer-text leading-none">BookForge</div>
+            <div className="text-sm font-bold tracking-tight shimmer-text leading-none">Lexora</div>
             <div className="text-[10px] font-mono font-medium text-purple-400/80 mt-1 leading-none tracking-widest uppercase">
-              STUDIO SUPREME
+              AI PUBLISHING
             </div>
           </div>
         </div>

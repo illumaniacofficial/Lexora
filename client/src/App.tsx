@@ -103,7 +103,7 @@ function App() {
           <TooltipProvider>
             <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration }}>
               <Helmet>
-                <title>BookForge Studio Supreme</title>
+                <title>Lexora</title>
               </Helmet>
               <AppRouter />
               {narrationState && (

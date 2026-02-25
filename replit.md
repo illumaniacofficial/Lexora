@@ -1,4 +1,4 @@
-# BookForge Studio Supreme
+# Lexora
 
 A production-grade AI publishing platform capable of generating complete books, designing covers, producing marketing campaigns, and predicting high-demand topics.
 

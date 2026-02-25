@@ -367,7 +367,7 @@ export default function ProjectDetail() {
   return (
     <div className="p-8 space-y-6 overflow-y-auto h-full">
       <Helmet>
-        <title>{project.title} — BookForge Studio</title>
+        <title>{project.title} — Lexora</title>
         <meta name="description" content={`${project.title} by ${project.authorName || "Unknown Author"} — ${statusLabel(project.status)} in ${VERTICAL_LABELS[project.vertical] || project.vertical}.`} />
       </Helmet>
       <div className="flex items-center gap-2 flex-wrap text-sm">
