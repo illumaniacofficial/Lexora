@@ -11,8 +11,9 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity } from "lucide-react";
-import { VERTICAL_LABELS } from "@/lib/utils";
+import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle } from "lucide-react";
+import { Helmet } from "react-helmet-async";
+import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
@@ -29,13 +30,10 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-const languageLabels: Record<string, string> = {
-  english: "English", spanish: "Espa\u00F1ol", portuguese: "Portugu\u00EAs", french: "Fran\u00E7ais", german: "Deutsch",
-};
 
 export default function Autopilot() {
   const { toast } = useToast();
-  const { data: config, isLoading } = useQuery<AutopilotConfig | null>({ queryKey: ["/api/autopilot"] });
+  const { data: config, isLoading, error } = useQuery<AutopilotConfig | null>({ queryKey: ["/api/autopilot"] });
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -85,8 +83,19 @@ export default function Autopilot() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
+        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
+        <p className="font-bold text-lg tracking-tight">Failed to load autopilot config</p>
+        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full max-w-3xl">
+      <Helmet><title>Autopilot — BookForge Studio</title></Helmet>
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Activity className="h-3 w-3 text-purple-500/50 animate-pulse-glow" />
@@ -236,7 +245,7 @@ export default function Autopilot() {
                           <Check className="h-2.5 w-2.5 text-white" />
                         </span>
                       )}
-                      {languageLabels[lang] || lang}
+                      {LANGUAGE_LABELS[lang] || lang}
                     </button>
                   );
                 })}

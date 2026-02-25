@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon } from "lucide-react";
+import { Helmet } from "react-helmet-async";
+import { AlertCircle } from "lucide-react";
 import { VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import type { Project } from "@shared/schema";
 
@@ -16,11 +18,22 @@ const featureCards = [
 ];
 
 export default function Marketing() {
-  const { data: projects = [], isLoading } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: projects = [], isLoading, error } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
   const projectsWithMarketing = projects.filter(p => p.status === "marketing" || p.status === "complete");
+
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
+        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
+        <p className="font-bold text-lg tracking-tight">Failed to load marketing data</p>
+        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
+      <Helmet><title>Marketing Suite — BookForge Studio</title></Helmet>
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Hexagon className="h-3 w-3 text-pink-500/50" />

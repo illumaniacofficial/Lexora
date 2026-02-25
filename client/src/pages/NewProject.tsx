@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon } from "lucide-react";
 import { Link } from "wouter";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
-import { VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
+import { VERTICAL_LABELS, VERTICAL_ICONS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -25,9 +25,6 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 
-const languageLabels: Record<string, string> = {
-  english: "English", spanish: "Espa\u00F1ol", portuguese: "Portugu\u00EAs", french: "Fran\u00E7ais", german: "Deutsch",
-};
 
 export default function NewProject() {
   const [, setLocation] = useLocation();
@@ -97,7 +94,7 @@ export default function NewProject() {
                   <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Language</FormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl><SelectTrigger data-testid="select-language" className="h-11 bg-card/30 border-border/30 font-mono text-sm"><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>{LANGUAGES.map(l => <SelectItem key={l} value={l}>{languageLabels[l] || l}</SelectItem>)}</SelectContent>
+                    <SelectContent>{LANGUAGES.map(l => <SelectItem key={l} value={l}>{LANGUAGE_LABELS[l] || l}</SelectItem>)}</SelectContent>
                   </Select>
                 </FormItem>
               )} />

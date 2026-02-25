@@ -58,11 +58,20 @@ english, spanish, portuguese, french, german
 - `sanitizeHtml(html)` — XSS sanitization for AI-generated HTML
 - `scoreColor(score)` — Dark-only color classes for quality scores
 
-## Input Validation
+## Input Validation & Error Handling
 
 - `patchProjectSchema` — Validates project PATCH requests
 - `trendAnalyzeSchema` — Validates trend analysis requests
 - All POST/PATCH routes use Zod schemas from drizzle-zod
+- `parseId()` helper validates all route param IDs (returns 400 for NaN/invalid)
+- Export endpoint validates `format` query param (only `txt`/`html` allowed)
+- Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing)
+- `ErrorBoundary` component wraps entire app for React render error recovery
+- All pages with `useQuery` have error state UI (AlertCircle + message)
+- SEO: `react-helmet-async` with per-page `<Helmet>` titles on all pages
+- Accessibility: `aria-label` on icon-only buttons, `sr-only` on delete labels
+- `data-testid` attributes on all interactive and meaningful display elements
+- `LANGUAGE_LABELS` centralized in `utils.ts` (shared by NewProject + Autopilot)
 
 ## Design System — Futuristic Abstract Artist Aesthetic
 

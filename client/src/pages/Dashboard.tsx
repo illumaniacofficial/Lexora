@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity,
 } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, scoreColor, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
 import type { Project, TrendReport } from "@shared/schema";
 
@@ -59,7 +60,7 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading } = useQuery<DashboardData>({ queryKey: ["/api/dashboard"] });
+  const { data, isLoading, error } = useQuery<DashboardData>({ queryKey: ["/api/dashboard"] });
 
   if (isLoading) {
     return (
@@ -72,10 +73,21 @@ export default function Dashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
+        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
+        <p className="font-bold text-lg tracking-tight">Failed to load dashboard</p>
+        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+      </div>
+    );
+  }
+
   const { stats, recentProjects, recentTrends } = data || { stats: { totalProjects: 0, completedProjects: 0, totalWords: 0, totalCost: 0, avgQuality: 0 }, recentProjects: [], recentTrends: [] };
 
   return (
     <div className="p-8 space-y-8 overflow-y-auto h-full">
+      <Helmet><title>Dashboard — BookForge Studio</title></Helmet>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -110,7 +122,7 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-bold tracking-tight">Recent Projects</CardTitle>
               </div>
               <Link href="/projects">
-                <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-purple-400 text-[11px] font-mono">
+                <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-purple-400 text-[11px] font-mono" data-testid="button-view-all-projects">
                   VIEW ALL <ArrowRight className="h-3 w-3 ml-1" />
                 </Button>
               </Link>
@@ -167,7 +179,7 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-bold tracking-tight">Trend Intel</CardTitle>
               </div>
               <Link href="/trends">
-                <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-cyan-400 text-[11px] font-mono">
+                <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-cyan-400 text-[11px] font-mono" data-testid="button-analyze-trends">
                   ANALYZE <ArrowRight className="h-3 w-3 ml-1" />
                 </Button>
               </Link>
@@ -210,7 +222,7 @@ export default function Dashboard() {
                   </Button>
                 </Link>
                 <Link href="/autopilot">
-                  <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/30 hover:border-purple-500/30 hover:text-purple-300 text-[12px] font-mono tracking-tight transition-all">
+                  <Button variant="outline" size="sm" data-testid="button-configure-autopilot" className="w-full justify-start border-border/30 bg-card/30 hover:border-purple-500/30 hover:text-purple-300 text-[12px] font-mono tracking-tight transition-all">
                     <Zap className="h-3.5 w-3.5 mr-2 text-purple-500/60" /> Configure Autopilot
                   </Button>
                 </Link>

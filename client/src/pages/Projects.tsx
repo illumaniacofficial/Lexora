@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Trash2, BookOpen, ArrowRight, FolderOpen, Hexagon } from "lucide-react";
+import { Plus, Search, Trash2, BookOpen, ArrowRight, Hexagon } from "lucide-react";
+import { Helmet } from "react-helmet-async";
+import { AlertCircle } from "lucide-react";
 import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
@@ -25,7 +27,7 @@ export default function Projects() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: projects = [], isLoading } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
+  const { data: projects = [], isLoading, error } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/projects/${id}`),
@@ -44,8 +46,19 @@ export default function Projects() {
     return matchSearch && matchVertical && matchStatus;
   });
 
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
+        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
+        <p className="font-bold text-lg tracking-tight">Failed to load projects</p>
+        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-6 overflow-y-auto h-full">
+      <Helmet><title>Projects — BookForge Studio</title></Helmet>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -150,6 +163,7 @@ export default function Projects() {
                   data-testid={`button-delete-${project.id}`}
                 >
                   <Trash2 className="h-3 w-3" />
+                  <span className="sr-only">Delete project</span>
                 </Button>
               </div>
             );

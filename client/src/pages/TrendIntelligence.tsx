@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon } from "lucide-react";
+import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon, AlertCircle } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { formatScore, VERTICAL_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -127,7 +128,7 @@ export default function TrendIntelligence() {
   const [analyzeVertical, setAnalyzeVertical] = useState("money");
   const [keywords, setKeywords] = useState("");
 
-  const { data: reports = [], isLoading } = useQuery<TrendReport[]>({
+  const { data: reports = [], isLoading, error } = useQuery<TrendReport[]>({
     queryKey: ["/api/trends", selectedVertical],
     queryFn: async () => {
       const url = selectedVertical !== "all" ? `/api/trends?vertical=${selectedVertical}` : "/api/trends";
@@ -146,8 +147,19 @@ export default function TrendIntelligence() {
     onError: (err: any) => toast({ title: "Analysis failed", description: err.message, variant: "destructive" }),
   });
 
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
+        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
+        <p className="font-bold text-lg tracking-tight">Failed to load trend data</p>
+        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
+      <Helmet><title>Trend Intelligence — BookForge Studio</title></Helmet>
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Hexagon className="h-3 w-3 text-cyan-500/50" />

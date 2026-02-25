@@ -10,8 +10,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock,
-  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Activity,
+  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon,
 } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -173,9 +174,10 @@ export default function ProjectDetail() {
 
   return (
     <div className="p-8 space-y-6 overflow-y-auto h-full">
+      <Helmet><title>{project.title} — BookForge Studio</title></Helmet>
       <div className="flex items-center gap-2 flex-wrap text-sm">
         <Link href="/projects">
-          <Button variant="ghost" size="sm" className="text-muted-foreground/50 hover:text-purple-400 font-mono text-[11px]">
+          <Button variant="ghost" size="sm" className="text-muted-foreground/50 hover:text-purple-400 font-mono text-[11px]" data-testid="button-back-projects">
             <ArrowLeft className="h-4 w-4 mr-1" /> PROJECTS
           </Button>
         </Link>
@@ -207,7 +209,7 @@ export default function ProjectDetail() {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {anyRunning && <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />}
-                  <Button size="icon" variant="ghost" onClick={() => refetch()} data-testid="button-refresh" className="h-8 w-8 text-muted-foreground/40 hover:text-purple-400">
+                  <Button size="icon" variant="ghost" onClick={() => refetch()} data-testid="button-refresh" className="h-8 w-8 text-muted-foreground/40 hover:text-purple-400" aria-label="Refresh project data">
                     <RefreshCw className="h-3.5 w-3.5" />
                   </Button>
                 </div>

@@ -148,6 +148,11 @@ const patchProjectSchema = z.object({
   coverImageUrl: z.string().nullable().optional(),
 }).strict();
 
+function parseId(raw: string): number | null {
+  const id = parseInt(raw, 10);
+  return isNaN(id) || id < 1 ? null : id;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.get("/api/dashboard", async (_req, res) => {
     try {
@@ -181,7 +186,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/projects/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
       const chapters = await storage.getChapters(id);
@@ -197,7 +203,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.patch("/api/projects/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const data = patchProjectSchema.parse(req.body);
       const updated = await storage.updateProject(id, data);
       res.json(updated);
@@ -208,7 +215,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/projects/:id", async (req, res) => {
     try {
-      await storage.deleteProject(parseInt(req.params.id));
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      await storage.deleteProject(id);
       res.status(204).send();
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -217,7 +226,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/projects/:id/export", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const format = (req.query.format as string) || "txt";
+      if (format !== "txt" && format !== "html") {
+        return res.status(400).json({ error: "Invalid format. Must be 'txt' or 'html'" });
+      }
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
       const chapters = await storage.getChapters(id);
@@ -225,8 +239,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (completedChapters.length === 0) {
         return res.status(400).json({ error: "No completed chapters to export" });
       }
-
-      const format = (req.query.format as string) || "txt";
       const authorName = project.authorName || "Unknown Author";
       const title = project.title;
 
@@ -280,10 +292,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/projects/:id/trend-analysis", async (req, res) => {
+    let prevStatus = "draft";
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
+      prevStatus = project.status;
 
       await storage.updateProject(id, { status: "trend_analysis" });
 
@@ -326,15 +341,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       res.json(trendReport);
     } catch (err: any) {
+      await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
       res.status(500).json({ error: err.message });
     }
   });
 
   app.post("/api/projects/:id/generate-outline", async (req, res) => {
+    let prevStatus = "draft";
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
+      prevStatus = project.status;
 
       await storage.updateProject(id, { status: "outlining" });
       await storage.deleteChaptersByProject(id);
@@ -395,14 +414,16 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       res.json({ dna: result, chapters: result.chapters });
     } catch (err: any) {
+      await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
       res.status(500).json({ error: err.message });
     }
   });
 
   app.post("/api/projects/:id/chapters/:chapterId/generate", async (req, res) => {
     try {
-      const projectId = parseInt(req.params.id);
-      const chapterId = parseInt(req.params.chapterId);
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
 
       const project = await storage.getProject(projectId);
       const chapter = await storage.getChapter(chapterId);
@@ -481,10 +502,13 @@ Write the full chapter content only, no meta-commentary.`,
   });
 
   app.post("/api/projects/:id/generate-marketing", async (req, res) => {
+    let prevStatus = "draft";
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
+      prevStatus = project.status;
 
       await storage.updateProject(id, { status: "marketing" });
 
@@ -537,13 +561,15 @@ Return JSON with:
 
       res.json(asset);
     } catch (err: any) {
+      await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
       res.status(500).json({ error: err.message });
     }
   });
 
   app.post("/api/projects/:id/generate-cover", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
 

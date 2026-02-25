@@ -79,6 +79,14 @@ export function sanitizeHtml(html: string): string {
     .replace(/javascript:/gi, "");
 }
 
+export const LANGUAGE_LABELS: Record<string, string> = {
+  english: "English",
+  spanish: "Español",
+  portuguese: "Português",
+  french: "Français",
+  german: "Deutsch",
+};
+
 export const VERTICAL_LABELS: Record<string, string> = {
   money: "Money & Finance",
   fitness: "Fitness & Exercise",
