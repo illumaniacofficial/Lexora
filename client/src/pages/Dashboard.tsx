@@ -87,6 +87,22 @@ function StatusDot({ status }: { status: string }) {
 export default function Dashboard() {
   const { data, isLoading, error } = useQuery<DashboardData>({ queryKey: ["/api/dashboard"] });
 
+  const { data: bookRequests = [] } = useQuery<BookRequest[]>({
+    queryKey: ["/api/book-requests"],
+  });
+
+  const markRead = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/book-requests/${id}/read`); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
+  });
+
+  const deleteRequest = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/book-requests/${id}`); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
+  });
+
+  const unreadCount = bookRequests.filter(r => !r.isRead).length;
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-8">
@@ -109,22 +125,6 @@ export default function Dashboard() {
   }
 
   const { stats, recentProjects, recentTrends } = data || { stats: { totalProjects: 0, completedProjects: 0, totalWords: 0, totalCost: 0, avgQuality: 0 }, recentProjects: [], recentTrends: [] };
-
-  const { data: bookRequests = [] } = useQuery<BookRequest[]>({
-    queryKey: ["/api/book-requests"],
-  });
-
-  const markRead = useMutation({
-    mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/book-requests/${id}/read`); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
-  });
-
-  const deleteRequest = useMutation({
-    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/book-requests/${id}`); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
-  });
-
-  const unreadCount = bookRequests.filter(r => !r.isRead).length;
 
   return (
     <div className="p-8 space-y-8 overflow-y-auto h-full">
