@@ -1,11 +1,12 @@
 import { db } from "./db";
 import {
-  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns,
+  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens,
   type User, type InsertUser, type Project, type InsertProject, type BookDna, type InsertBookDna,
   type TrendReport, type InsertTrendReport, type Chapter, type InsertChapter,
   type RunStep, type InsertRunStep, type MarketingAsset, type InsertMarketingAsset,
   type AutopilotConfig, type InsertAutopilotConfig,
   type AutopilotRun, type InsertAutopilotRun,
+  type InviteToken, type InsertInviteToken,
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
@@ -46,6 +47,12 @@ export interface IStorage {
   getAutopilotRuns(): Promise<AutopilotRun[]>;
   createAutopilotRun(data: InsertAutopilotRun): Promise<AutopilotRun>;
   updateAutopilotRun(id: number, data: Partial<AutopilotRun>): Promise<AutopilotRun>;
+
+  getInviteTokens(): Promise<InviteToken[]>;
+  getInviteByToken(token: string): Promise<InviteToken | undefined>;
+  createInviteToken(data: InsertInviteToken): Promise<InviteToken>;
+  deleteInviteToken(id: number): Promise<void>;
+  incrementInviteViewCount(id: number): Promise<void>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -209,6 +216,28 @@ export class DatabaseStorage implements IStorage {
   async updateAutopilotRun(id: number, data: Partial<AutopilotRun>) {
     const [updated] = await db.update(autopilotRuns).set(data).where(eq(autopilotRuns.id, id)).returning();
     return updated;
+  }
+
+  async getInviteTokens() {
+    return db.select().from(inviteTokens).orderBy(desc(inviteTokens.createdAt));
+  }
+
+  async getInviteByToken(token: string) {
+    const [invite] = await db.select().from(inviteTokens).where(eq(inviteTokens.token, token));
+    return invite;
+  }
+
+  async createInviteToken(data: InsertInviteToken) {
+    const [created] = await db.insert(inviteTokens).values(data).returning();
+    return created;
+  }
+
+  async deleteInviteToken(id: number) {
+    await db.delete(inviteTokens).where(eq(inviteTokens.id, id));
+  }
+
+  async incrementInviteViewCount(id: number) {
+    await db.update(inviteTokens).set({ viewCount: sql`${inviteTokens.viewCount} + 1` }).where(eq(inviteTokens.id, id));
   }
 
   async getDashboardStats() {

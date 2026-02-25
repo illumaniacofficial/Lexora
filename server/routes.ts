@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
 import { textToSpeech } from "./replit_integrations/audio/client";
-import { insertProjectSchema, insertAutopilotConfigSchema } from "@shared/schema";
+import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
+import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning } from "./autopilot-engine";
 import { z } from "zod";
 
@@ -182,6 +183,106 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
       }));
       res.json(library);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/invites", async (_req, res) => {
+    try {
+      const tokens = await storage.getInviteTokens();
+      res.json(tokens);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/invites", async (req, res) => {
+    try {
+      const label = req.body.label || "Reader Invite";
+      const token = crypto.randomBytes(16).toString("hex");
+      const invite = await storage.createInviteToken({ token, label, isActive: true });
+      res.json(invite);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/invites/:id", async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid invite ID" });
+    try {
+      await storage.deleteInviteToken(id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/store/:token", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) {
+        return res.status(404).json({ error: "Invalid or expired invite link" });
+      }
+      await storage.incrementInviteViewCount(invite.id);
+      const allProjects = await storage.getProjects();
+      const completed = allProjects.filter(p => p.status === "complete");
+      const books = await Promise.all(completed.map(async (project) => {
+        const marketing = await storage.getMarketingAsset(project.id);
+        const chapterList = await storage.getChapters(project.id);
+        return {
+          id: project.id,
+          title: project.title,
+          authorName: project.authorName,
+          vertical: project.vertical,
+          coverImageUrl: project.coverImageUrl,
+          wordCount: project.wordCount,
+          chapterCount: chapterList.length,
+          qualityScore: project.qualityScore,
+          shortBlurb: marketing?.shortBlurb || null,
+          mediumBlurb: marketing?.mediumBlurb || null,
+        };
+      }));
+      res.json({ books, inviteLabel: invite.label });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/store/:token/book/:bookId", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) {
+        return res.status(404).json({ error: "Invalid invite" });
+      }
+      const bookId = parseId(req.params.bookId);
+      if (!bookId) return res.status(400).json({ error: "Invalid book ID" });
+      const project = await storage.getProject(bookId);
+      if (!project || project.status !== "complete") {
+        return res.status(404).json({ error: "Book not found" });
+      }
+      const chapterList = await storage.getChapters(bookId);
+      const marketing = await storage.getMarketingAsset(bookId);
+      res.json({
+        id: project.id,
+        title: project.title,
+        authorName: project.authorName,
+        vertical: project.vertical,
+        coverImageUrl: project.coverImageUrl,
+        wordCount: project.wordCount,
+        qualityScore: project.qualityScore,
+        shortBlurb: marketing?.shortBlurb || null,
+        mediumBlurb: marketing?.mediumBlurb || null,
+        chapters: chapterList.filter(c => c.status === "complete").map(c => ({
+          id: c.id,
+          chapterNumber: c.chapterNumber,
+          title: c.title,
+          content: c.content,
+          wordCount: c.wordCount,
+          status: c.status,
+        })),
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

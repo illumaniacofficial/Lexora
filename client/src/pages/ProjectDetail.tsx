@@ -17,7 +17,7 @@ import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, 
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
-import AudioMiniPlayer, { type NarrationState } from "@/components/audio-mini-player";
+import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
 import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport } from "@shared/schema";
 
@@ -107,7 +107,7 @@ export default function ProjectDetail() {
   const projectId = parseInt(id!);
   const [showReader, setShowReader] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [narrationState, setNarrationState] = useState<NarrationState | null>(null);
+  const { startNarration } = useNarration();
 
   const { data, isLoading, error, refetch } = useQuery<ProjectDetailData>({
     queryKey: [`/api/projects/${projectId}`],
@@ -747,15 +747,7 @@ export default function ProjectDetail() {
           chapters={chapters}
           coverImageUrl={project.coverImageUrl}
           onClose={() => setShowReader(false)}
-          onStartNarration={(narration) => setNarrationState(narration)}
-        />
-      )}
-
-      {narrationState && !showReader && (
-        <AudioMiniPlayer
-          narration={narrationState}
-          onClose={() => setNarrationState(null)}
-          onUpdateNarration={(updated) => setNarrationState(updated)}
+          onStartNarration={startNarration}
         />
       )}
     </div>

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,11 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Library as LibraryIcon, Search, ArrowRight, Crown, BookOpen, Star, Filter,
-  ArrowUpDown, Hexagon, AlertCircle, Trophy, Medal,
+  ArrowUpDown, Hexagon, AlertCircle, Trophy, Medal, Share2, Copy, Trash2, Link as LinkIcon, Eye, Plus, Loader2,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
-import type { Project } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Project, InviteToken } from "@shared/schema";
 
 type LibraryBook = Project & { shortBlurb: string | null; completedChapters: number };
 
@@ -37,8 +39,35 @@ export default function Library() {
   const [search, setSearch] = useState("");
   const [verticalFilter, setVerticalFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortKey>("rank");
+  const [showInvites, setShowInvites] = useState(false);
+  const [inviteLabel, setInviteLabel] = useState("");
+  const { toast } = useToast();
 
   const { data: books = [], isLoading, error } = useQuery<LibraryBook[]>({ queryKey: ["/api/library"] });
+  const { data: invites = [] } = useQuery<InviteToken[]>({ queryKey: ["/api/invites"] });
+
+  const createInviteMutation = useMutation({
+    mutationFn: async (label: string) => {
+      const res = await apiRequest("POST", "/api/invites", { label: label || "Reader Invite" });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invites"] });
+      setInviteLabel("");
+      toast({ title: "Invite created", description: "Share the link with your readers" });
+    },
+  });
+
+  const deleteInviteMutation = useMutation({
+    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/invites/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/invites"] }); },
+  });
+
+  const copyInviteLink = (token: string) => {
+    const url = `${window.location.origin}/store/${token}`;
+    navigator.clipboard.writeText(url);
+    toast({ title: "Link copied!", description: "Invite link copied to clipboard" });
+  };
 
   const ranked = useMemo(() => {
     return [...books].sort((a, b) => {
@@ -98,9 +127,84 @@ export default function Library() {
           <Hexagon className="h-3 w-3 text-emerald-500/50" />
           <span className="text-[9px] font-mono font-bold text-emerald-400/60 tracking-[0.2em] uppercase">LIBRARY</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tighter">Published <span className="shimmer-text">Library</span></h1>
-        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Your completed books, ranked by quality</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tighter">Published <span className="shimmer-text">Library</span></h1>
+            <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Your completed books, ranked by quality</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowInvites(!showInvites)}
+            className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 font-mono text-[11px] h-8"
+            data-testid="button-toggle-invites"
+          >
+            <Share2 className="h-3.5 w-3.5 mr-1.5" /> {showInvites ? "Hide" : "Invites"} {invites.length > 0 && `(${invites.length})`}
+          </Button>
+        </div>
       </div>
+
+      {showInvites && (
+        <Card className="border-purple-500/15 bg-purple-500/[0.03]">
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Share2 className="h-3 w-3 text-purple-400" />
+              <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-[0.2em]">Reader Invites</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground/50 mb-4">Create invite links to share your book collection as a storefront. Readers can browse, read, and listen with AI narration.</p>
+            <div className="flex gap-2 mb-4">
+              <Input
+                value={inviteLabel}
+                onChange={e => setInviteLabel(e.target.value)}
+                placeholder="Label (e.g., Beta Readers, Marketing Team)"
+                className="bg-card/30 border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 flex-1"
+                data-testid="input-invite-label"
+              />
+              <Button
+                onClick={() => createInviteMutation.mutate(inviteLabel)}
+                disabled={createInviteMutation.isPending}
+                className="neon-glow text-white border-0 font-mono text-[11px] h-9 px-4"
+                data-testid="button-create-invite"
+              >
+                {createInviteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+                Create
+              </Button>
+            </div>
+            {invites.length > 0 && (
+              <div className="space-y-2">
+                {invites.map(inv => (
+                  <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/30 border border-border/10 group" data-testid={`invite-${inv.id}`}>
+                    <LinkIcon className="h-3.5 w-3.5 text-purple-400/50 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-medium truncate">{inv.label}</p>
+                      <p className="text-[9px] font-mono text-muted-foreground/30 truncate">{window.location.origin}/store/{inv.token}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[9px] font-mono text-muted-foreground/30 shrink-0">
+                      <Eye className="h-3 w-3" /> {inv.viewCount}
+                    </div>
+                    <Button
+                      size="icon" variant="ghost"
+                      onClick={() => copyInviteLink(inv.token)}
+                      className="h-7 w-7 text-muted-foreground/40 hover:text-purple-300"
+                      data-testid={`button-copy-invite-${inv.id}`} aria-label="Copy invite link"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="icon" variant="ghost"
+                      onClick={() => deleteInviteMutation.mutate(inv.id)}
+                      className="h-7 w-7 text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                      data-testid={`button-delete-invite-${inv.id}`} aria-label="Delete invite"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="line-glow" />
 

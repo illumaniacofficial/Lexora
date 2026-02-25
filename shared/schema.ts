@@ -150,7 +150,17 @@ export const autopilotRuns = pgTable("autopilot_runs", {
   completedAt: timestamp("completed_at"),
 });
 
+export const inviteTokens = pgTable("invite_tokens", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  label: text("label").notNull().default("Reader Invite"),
+  isActive: boolean("is_active").notNull().default(true),
+  viewCount: integer("view_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
 export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({ id: true, startedAt: true, completedAt: true });
+export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ id: true, createdAt: true, viewCount: true });
 
 export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true, createdAt: true, updatedAt: true });
@@ -176,3 +186,5 @@ export type AutopilotConfig = typeof autopilotConfig.$inferSelect;
 export type InsertAutopilotConfig = z.infer<typeof insertAutopilotConfigSchema>;
 export type AutopilotRun = typeof autopilotRuns.$inferSelect;
 export type InsertAutopilotRun = z.infer<typeof insertAutopilotRunSchema>;
+export type InviteToken = typeof inviteTokens.$inferSelect;
+export type InsertInviteToken = z.infer<typeof insertInviteTokenSchema>;
