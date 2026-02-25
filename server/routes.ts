@@ -164,7 +164,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const recentRaw = allProjects.slice(0, 5);
       const recentProjects = await Promise.all(recentRaw.map(async (p) => {
         const chapters = await storage.getChapters(p.id);
-        const trend = await storage.getTrendReport(p.id);
+        const trend = await storage.getTrendReportByProject(p.id);
         const marketing = await storage.getMarketingAsset(p.id);
         const completedChapters = chapters.filter(c => c.status === "complete").length;
         return {
@@ -308,7 +308,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const list = await storage.getProjects();
       const enriched = await Promise.all(list.map(async (p) => {
         const chapters = await storage.getChapters(p.id);
-        const trend = await storage.getTrendReport(p.id);
+        const trend = await storage.getTrendReportByProject(p.id);
         const marketing = await storage.getMarketingAsset(p.id);
         return {
           ...p,
@@ -738,11 +738,13 @@ Return JSON with:
   });
 
   app.post("/api/projects/:id/generate-cover", async (req, res) => {
+    let prevStatus = "draft";
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
+      prevStatus = project.status;
 
       const verticalStyles: Record<string, string> = {
         money: "professional financial book cover, gold and dark blue, modern typography, wealth symbols",
@@ -781,6 +783,7 @@ Return JSON with:
 
       res.json({ coverImageUrl: imageUrl });
     } catch (err: any) {
+      await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
       res.status(500).json({ error: err.message });
     }
   });

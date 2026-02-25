@@ -70,7 +70,7 @@ english, spanish, portuguese, french, german
 - All POST/PATCH routes use Zod schemas from drizzle-zod
 - `parseId()` helper validates all route param IDs (returns 400 for NaN/invalid)
 - Export endpoint validates `format` query param (only `txt`/`html` allowed)
-- Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing) and chapter status to `pending` on generation failure
+- Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing, cover generation) and chapter status to `pending` on generation failure
 - Cancel chapter generation: `PATCH /api/projects/:id/chapters/:chapterId/cancel` resets stuck chapters with project ownership validation
 - Book reader persists theme and font size preferences in localStorage with validation/fallback
 - `ErrorBoundary` component wraps entire app for React render error recovery

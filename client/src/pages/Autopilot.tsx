@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -31,20 +31,44 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 
+function ElapsedTime({ since }: { since: string | Date }) {
+  const [elapsed, setElapsed] = useState("");
+  useEffect(() => {
+    const start = new Date(since).getTime();
+    const tick = () => {
+      const diff = Math.floor((Date.now() - start) / 1000);
+      const m = Math.floor(diff / 60);
+      const s = diff % 60;
+      setElapsed(`${m}:${s.toString().padStart(2, "0")}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  return <span className="text-[10px] font-mono text-purple-400/60">{elapsed}</span>;
+}
+
 export default function Autopilot() {
   const { toast } = useToast();
   const { data: config, isLoading, error } = useQuery<AutopilotConfig | null>({ queryKey: ["/api/autopilot"] });
-  const { data: runs } = useQuery<AutopilotRun[]>({ queryKey: ["/api/autopilot/runs"] });
+  const [polling, setPolling] = useState(false);
+  const { data: runs } = useQuery<AutopilotRun[]>({
+    queryKey: ["/api/autopilot/runs"],
+    refetchInterval: polling ? 2000 : false,
+    staleTime: polling ? 0 : Infinity,
+  });
 
   const activeRun = runs?.find(r => r.status === "running" || r.status === "pending");
 
   useEffect(() => {
-    if (!activeRun) return;
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ["/api/autopilot/runs"] });
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [activeRun]);
+    if (activeRun) {
+      setPolling(true);
+    } else if (polling) {
+      setPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
+    }
+  }, [activeRun, polling]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -73,6 +97,7 @@ export default function Autopilot() {
   const runMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/autopilot/run"),
     onSuccess: () => {
+      setPolling(true);
       queryClient.invalidateQueries({ queryKey: ["/api/autopilot/runs"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({ title: "Autopilot run started", description: "AI is now generating a complete book autonomously." });
@@ -162,9 +187,12 @@ export default function Autopilot() {
         <Card className="border-purple-500/30 bg-purple-500/5 glow-border overflow-hidden relative">
           <div className="absolute inset-0 mesh-bg opacity-20 pointer-events-none" />
           <CardContent className="pt-5 pb-5 relative">
-            <div className="flex items-center gap-3 mb-3">
-              <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
-              <p className="font-bold text-sm tracking-tight text-purple-300">Autopilot Running</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
+                <p className="font-bold text-sm tracking-tight text-purple-300">Autopilot Running</p>
+              </div>
+              <ElapsedTime since={activeRun.createdAt} />
             </div>
             <div className="space-y-2">
               {activeRun.bookTitle && (
@@ -174,11 +202,16 @@ export default function Autopilot() {
               )}
               <p className="text-[12px] font-mono text-white/80">
                 <span className="text-muted-foreground/50">Step: </span>
-                <span className="text-purple-300">{activeRun.currentStep || "Starting..."}</span>
+                <span className="text-purple-300 animate-pulse">{activeRun.currentStep || "Initializing..."}</span>
               </p>
               <p className="text-[10px] font-mono text-muted-foreground/40">
                 Vertical: {VERTICAL_LABELS[activeRun.vertical] || activeRun.vertical}
               </p>
+              {activeRun.estimatedCost > 0 && (
+                <p className="text-[10px] font-mono text-muted-foreground/40">
+                  Cost so far: ${activeRun.estimatedCost.toFixed(4)}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
