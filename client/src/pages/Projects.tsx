@@ -188,9 +188,9 @@ export default function Projects() {
                   className="absolute top-3 right-3 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/40 hover:text-red-400"
                   onClick={(e) => { e.preventDefault(); setDeleteId(project.id); }}
                   data-testid={`button-delete-${project.id}`}
+                  aria-label="Delete project"
                 >
                   <Trash2 className="h-3 w-3" />
-                  <span className="sr-only">Delete project</span>
                 </Button>
               </div>
             );
