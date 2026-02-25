@@ -6,8 +6,10 @@ import {
 import {
   LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Pause, Settings, MessageSquare,
 } from "lucide-react";
+import { useSidebar } from "@/components/ui/sidebar";
 import { useNarration } from "@/App";
 import { VOICE_OPTIONS } from "@/components/audio-mini-player";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import logoPath from "@assets/image_1772031076380.png";
 
 const navItems = [
@@ -24,6 +26,8 @@ const navItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { narrationState } = useNarration();
+  const { state: sidebarState } = useSidebar();
+  const isCollapsed = sidebarState === "collapsed";
 
   return (
     <Sidebar>
@@ -98,6 +102,22 @@ export function AppSidebar() {
                 </div>
               </div>
             </SidebarGroupContent>
+            {isCollapsed && (
+              <div className="flex justify-center py-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative flex items-center justify-center h-8 w-8 rounded-lg border border-purple-500/30 bg-purple-500/10 cursor-default" data-testid="sidebar-now-playing-icon">
+                      <Volume2 className="h-4 w-4 text-purple-400" />
+                      <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)] border-2 border-background" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="text-xs">
+                    <p className="font-medium">{narrationState.bookTitle}</p>
+                    <p className="text-muted-foreground">Ch {narrationState.chapterNumber} · pg {narrationState.pageInChapter}/{narrationState.totalPagesInChapter}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            )}
           </SidebarGroup>
         )}
       </SidebarContent>
