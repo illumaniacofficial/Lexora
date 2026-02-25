@@ -1246,5 +1246,69 @@ If the user wants to generate an entire book step by step, guide them through: c
     }
   });
 
+  app.post("/api/admin/seed-from-dev", async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      
+      let seedPath = path.join(process.cwd(), "db-seed.json");
+      if (!fs.existsSync(seedPath)) {
+        seedPath = path.join(process.cwd(), "dist", "db-seed.json");
+      }
+      if (!fs.existsSync(seedPath)) {
+        return res.status(404).json({ error: "No seed file found" });
+      }
+
+      const seedData = JSON.parse(fs.readFileSync(seedPath, "utf-8"));
+      const { db: database } = await import("./db");
+      const schema = await import("@shared/schema");
+
+      const orderedTables: [any, any[]][] = [
+        [schema.projects, seedData.projects],
+        [schema.chapters, seedData.chapters],
+        [schema.bookDna, seedData.bookDna],
+        [schema.trendReports, seedData.trendReports],
+        [schema.marketingAssets, seedData.marketingAssets],
+        [schema.runSteps, seedData.runSteps],
+        [schema.appSettings, seedData.appSettings],
+        [schema.inviteTokens, seedData.inviteTokens],
+        [schema.bookRequests, seedData.bookRequests],
+        [schema.chatConversations, seedData.chatConversations],
+        [schema.chatMessages, seedData.chatMessages],
+        [schema.autopilotConfig, seedData.autopilotConfig],
+        [schema.autopilotRuns, seedData.autopilotRuns],
+      ];
+
+      let totalInserted = 0;
+      for (const [table, rows] of orderedTables) {
+        if (rows && rows.length > 0) {
+          for (const row of rows) {
+            try {
+              await database.insert(table).values(row).onConflictDoNothing();
+              totalInserted++;
+            } catch {}
+          }
+        }
+      }
+
+      const seqTables = [
+        "projects", "chapters", "book_dna", "trend_reports", "marketing_assets",
+        "run_steps", "app_settings", "invite_tokens", "book_requests",
+        "chat_conversations", "chat_messages", "autopilot_config", "autopilot_runs",
+      ];
+      const { sql: sqlTag } = await import("drizzle-orm");
+      for (const table of seqTables) {
+        try {
+          await database.execute(sqlTag.raw(`SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE((SELECT MAX(id) FROM ${table}), 1))`));
+        } catch {}
+      }
+
+      res.json({ success: true, totalInserted });
+    } catch (err: any) {
+      console.error("Seed error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }
