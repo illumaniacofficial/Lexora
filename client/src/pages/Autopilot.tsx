@@ -11,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle, Play, Loader2, Clock, CheckCircle2, XCircle, StopCircle } from "lucide-react";
+import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle, Play, Loader2, Clock, CheckCircle2, XCircle, StopCircle, Square } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -105,6 +105,15 @@ export default function Autopilot() {
     onError: (err: any) => toast({ title: "Failed to start run", description: err.message, variant: "destructive" }),
   });
 
+  const stopMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/autopilot/stop"),
+    onSuccess: () => {
+      toast({ title: "Stop signal sent", description: "The run will stop after the current step completes." });
+      queryClient.invalidateQueries({ queryKey: ["/api/autopilot/runs"] });
+    },
+    onError: () => toast({ title: "Failed to stop", variant: "destructive" }),
+  });
+
   const isActive = form.watch("isActive");
   const monthly = form.watch("monthlyBookTarget");
   const budget = form.watch("budgetCapUsd");
@@ -192,7 +201,24 @@ export default function Autopilot() {
                 <Loader2 className="h-5 w-5 text-purple-400 animate-spin" />
                 <p className="font-bold text-sm tracking-tight text-purple-300">Autopilot Running</p>
               </div>
-              <ElapsedTime since={activeRun.startedAt} />
+              <div className="flex items-center gap-3">
+                <ElapsedTime since={activeRun.startedAt} />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => stopMutation.mutate()}
+                  disabled={stopMutation.isPending}
+                  data-testid="button-stop-autopilot"
+                  className="h-7 px-3 border-red-500/30 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/50 text-red-400 font-mono text-[10px]"
+                >
+                  {stopMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                  ) : (
+                    <Square className="h-3 w-3 mr-1.5 fill-current" />
+                  )}
+                  STOP
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               {activeRun.bookTitle && (

@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown,
@@ -133,6 +134,7 @@ export default function ProjectDetail() {
   const { toast } = useToast();
   const projectId = parseInt(id!);
   const [showReader, setShowReader] = useState(false);
+  const [showCoverFull, setShowCoverFull] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const { startNarration } = useNarration();
 
@@ -687,8 +689,15 @@ export default function ProjectDetail() {
             <CardContent>
               {project.coverImageUrl ? (
                 <div className="space-y-3">
-                  <div className="rounded-xl overflow-hidden glow-border-pink">
-                    <img src={project.coverImageUrl} alt="Book cover" className="w-full object-contain rounded-xl bg-card/50" />
+                  <div
+                    className="relative rounded-xl overflow-hidden glow-border-pink cursor-pointer group"
+                    onClick={() => setShowCoverFull(true)}
+                    data-testid="button-view-cover-full"
+                  >
+                    <img src={project.coverImageUrl} alt="Book cover" className="w-full object-contain rounded-xl bg-card/50 transition-transform group-hover:scale-[1.02]" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-xl">
+                      <Eye className="h-6 w-6 text-white drop-shadow-lg" />
+                    </div>
                   </div>
                   <Button
                     size="sm" variant="outline"
@@ -700,6 +709,17 @@ export default function ProjectDetail() {
                     {coverMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1.5 text-pink-400" />}
                     REGENERATE COVER
                   </Button>
+                  <Dialog open={showCoverFull} onOpenChange={setShowCoverFull}>
+                    <DialogContent className="max-w-3xl w-auto bg-black/95 border-border/20 p-2">
+                      <DialogTitle className="sr-only">Book Cover Preview</DialogTitle>
+                      <img
+                        src={project.coverImageUrl}
+                        alt="Book cover full view"
+                        className="max-h-[85vh] w-auto object-contain rounded-lg"
+                        data-testid="img-cover-full"
+                      />
+                    </DialogContent>
+                  </Dialog>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center aspect-[3/4] rounded-xl bg-white/[0.02] border border-dashed border-border/20">

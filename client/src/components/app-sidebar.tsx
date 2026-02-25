@@ -4,10 +4,11 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, BookOpen, Zap, Hexagon, Library, Share2, Volume2, Pause, Settings,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Pause, Settings,
 } from "lucide-react";
 import { useNarration } from "@/App";
 import { VOICE_OPTIONS } from "@/components/audio-mini-player";
+import logoPath from "@assets/image_1772031076380.png";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -28,10 +29,8 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-border/40 px-5 py-5">
         <div className="flex items-center gap-3">
           <div className="relative flex h-10 w-10 items-center justify-center">
-            <div className="absolute inset-0 rounded-xl neon-glow opacity-80 blur-[1px]" />
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl neon-glow">
-              <BookOpen className="h-5 w-5 text-white drop-shadow-lg" />
-            </div>
+            <div className="absolute inset-0 rounded-xl neon-glow opacity-80 blur-[2px]" />
+            <img src={logoPath} alt="Lexora" className="relative h-10 w-10 rounded-xl object-cover drop-shadow-lg" />
           </div>
           <div>
             <div className="text-sm font-bold tracking-tight shimmer-text leading-none">Lexora</div>

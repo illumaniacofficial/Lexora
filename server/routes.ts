@@ -5,7 +5,7 @@ import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
 import { textToSpeech } from "./replit_integrations/audio/client";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
-import { executeAutopilotRun, isAutopilotRunning } from "./autopilot-engine";
+import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { z } from "zod";
 
 function slugify(text: string): string {
@@ -901,6 +901,18 @@ Return JSON with:
       });
 
       res.json(run);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/autopilot/stop", async (_req, res) => {
+    try {
+      const stopped = requestAutopilotStop();
+      if (!stopped) {
+        return res.status(400).json({ error: "No autopilot run is currently active" });
+      }
+      res.json({ success: true, message: "Stop signal sent. The run will stop after the current step completes." });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

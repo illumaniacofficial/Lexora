@@ -2,6 +2,7 @@ import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL } from "./openai";
 
 let isRunning = false;
+let shouldStop = false;
 
 async function runPipelineStep(
   projectId: number,
@@ -331,6 +332,7 @@ Return JSON with:
 export async function executeAutopilotRun(runId: number, vertical: string, language: string, minQuality: number, budgetCap: number): Promise<void> {
   if (isRunning) throw new Error("An autopilot run is already in progress");
   isRunning = true;
+  shouldStop = false;
 
   try {
     const existingProject = await findIncompleteProject(vertical);
@@ -407,6 +409,11 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
       return;
     }
 
+    if (shouldStop) {
+      await storage.updateAutopilotRun(runId, { status: "stopped", currentStep: "Stopped by user", completedAt: new Date() });
+      return;
+    }
+
     if (resumeStep === "trend_analysis" || !trendReport) {
       await storage.updateAutopilotRun(runId, { currentStep: "Trend analysis" });
       await runTrendAnalysis(projectId, bookTitle, vertical);
@@ -418,14 +425,32 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
       }
     }
 
+    if (shouldStop) {
+      const p = await storage.getProject(projectId);
+      await storage.updateAutopilotRun(runId, { status: "stopped", currentStep: "Stopped by user", completedAt: new Date(), totalTokens: p?.totalTokens || 0, estimatedCost: p?.estimatedCost || 0 });
+      return;
+    }
+
     if (resumeStep === "trend_analysis" || resumeStep === "outlining" || chapters.length === 0) {
       await storage.updateAutopilotRun(runId, { currentStep: "Generating outline" });
       await runOutline(projectId, bookTitle, vertical, language);
     }
 
+    if (shouldStop) {
+      const p = await storage.getProject(projectId);
+      await storage.updateAutopilotRun(runId, { status: "stopped", currentStep: "Stopped by user", completedAt: new Date(), totalTokens: p?.totalTokens || 0, estimatedCost: p?.estimatedCost || 0 });
+      return;
+    }
+
     if (!allChaptersComplete) {
       const continued = await runChapterWriting(projectId, bookTitle, vertical, language, runId, minQuality, budgetCap);
       if (!continued) return;
+    }
+
+    if (shouldStop) {
+      const p = await storage.getProject(projectId);
+      await storage.updateAutopilotRun(runId, { status: "stopped", currentStep: "Stopped by user", completedAt: new Date(), totalTokens: p?.totalTokens || 0, estimatedCost: p?.estimatedCost || 0 });
+      return;
     }
 
     if (!marketing) {
@@ -455,4 +480,16 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
 
 export function isAutopilotRunning() {
   return isRunning;
+}
+
+export function requestAutopilotStop() {
+  if (isRunning) {
+    shouldStop = true;
+    return true;
+  }
+  return false;
+}
+
+export function checkStopRequested(): boolean {
+  return shouldStop;
 }
