@@ -28,8 +28,9 @@ export function ThemeToggle() {
       variant="ghost"
       onClick={() => setDark(d => !d)}
       data-testid="button-theme-toggle"
+      className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
     >
-      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {dark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
     </Button>
   );
 }

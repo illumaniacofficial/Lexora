@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -7,11 +6,9 @@ import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Sparkles, BookOpen } from "lucide-react";
+import { ArrowLeft, Sparkles, BookOpen, Check } from "lucide-react";
 import { Link } from "wouter";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
 import { VERTICAL_LABELS, VERTICAL_BG, VERTICAL_ACCENT } from "@/lib/utils";
@@ -27,29 +24,29 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 const verticalDescriptions: Record<string, string> = {
-  money: "Personal finance, investing, wealth building, passive income",
-  fitness: "Exercise, nutrition, body transformation, athletic performance",
-  spirituality: "Mindfulness, meditation, life purpose, inner peace",
-  career: "Leadership, productivity, entrepreneurship, professional growth",
-  education: "Learning strategies, academic success, skill development",
-  relationships: "Dating, marriage, family dynamics, social skills",
-  health: "Chronic illness, natural remedies, mental wellness, longevity",
-  mindset: "Psychology, habits, peak performance, resilience",
-  parenting: "Child development, discipline, family balance, education",
-  technology: "AI, software, digital transformation, future trends",
+  money: "Personal finance, investing, wealth building",
+  fitness: "Exercise, nutrition, body transformation",
+  spirituality: "Mindfulness, meditation, life purpose",
+  career: "Leadership, productivity, entrepreneurship",
+  education: "Learning strategies, skill development",
+  relationships: "Dating, marriage, social skills",
+  health: "Wellness, natural remedies, longevity",
+  mindset: "Psychology, habits, peak performance",
+  parenting: "Child development, family balance",
+  technology: "AI, software, digital transformation",
 };
 
 const verticalIcons: Record<string, string> = {
-  money: "💰", fitness: "💪", spirituality: "🧘", career: "🚀",
-  education: "📚", relationships: "❤️", health: "🏥", mindset: "🧠",
-  parenting: "👨‍👩‍👧", technology: "⚡",
+  money: "\u{1F4B0}", fitness: "\u{1F4AA}", spirituality: "\u{1F9D8}", career: "\u{1F680}",
+  education: "\u{1F4DA}", relationships: "\u2764\uFE0F", health: "\u{1F3E5}", mindset: "\u{1F9E0}",
+  parenting: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", technology: "\u26A1",
 };
 
 const languageLabels: Record<string, string> = {
   english: "English",
-  spanish: "Spanish (Español)",
-  portuguese: "Portuguese (Português)",
-  french: "French (Français)",
+  spanish: "Spanish (Espa\u00F1ol)",
+  portuguese: "Portuguese (Portugu\u00EAs)",
+  french: "French (Fran\u00E7ais)",
   german: "German (Deutsch)",
 };
 
@@ -77,43 +74,46 @@ export default function NewProject() {
   });
 
   return (
-    <div className="p-6 max-w-3xl mx-auto overflow-y-auto h-full">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="p-8 max-w-3xl mx-auto overflow-y-auto h-full">
+      <div className="flex items-center gap-3 mb-8">
         <Link href="/projects">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>
         </Link>
       </div>
 
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary">
-            <BookOpen className="h-5 w-5 text-primary-foreground" />
+      <div className="mb-8">
+        <div className="flex items-center gap-3.5 mb-2">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-md">
+            <BookOpen className="h-5 w-5 text-white" />
           </div>
-          <h1 className="text-2xl font-bold">New Book Project</h1>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">New Book Project</h1>
+            <p className="text-muted-foreground text-sm">Set up your book and let AI handle the rest</p>
+          </div>
         </div>
-        <p className="text-muted-foreground text-sm">Set up your book project and let AI handle the rest — from trend analysis to complete manuscript and marketing.</p>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-6">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Book Details</CardTitle>
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold">Book Details</CardTitle>
               <CardDescription>Define your book's core identity</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <FormField
                 control={form.control}
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Book Title</FormLabel>
+                    <FormLabel className="text-sm font-medium">Book Title</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         placeholder="e.g., The Millionaire Morning: 5 Habits That Changed Everything"
+                        className="h-11 bg-background border-border/60"
                         data-testid="input-title"
                       />
                     </FormControl>
@@ -127,10 +127,10 @@ export default function NewProject() {
                 name="targetLanguage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Primary Language</FormLabel>
+                    <FormLabel className="text-sm font-medium">Primary Language</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-language">
+                        <SelectTrigger data-testid="select-language" className="h-11 bg-background border-border/60">
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
@@ -147,10 +147,10 @@ export default function NewProject() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Market Vertical</CardTitle>
-              <CardDescription>Select the niche that best fits your book — this shapes the AI's tone, frameworks, and marketing strategy</CardDescription>
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-semibold">Market Vertical</CardTitle>
+              <CardDescription>Select the niche that shapes AI tone, frameworks, and marketing</CardDescription>
             </CardHeader>
             <CardContent>
               <FormField
@@ -159,7 +159,7 @@ export default function NewProject() {
                 render={({ field }) => (
                   <FormItem>
                     <FormControl>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {VERTICALS.map((v) => {
                           const isSelected = field.value === v;
                           return (
@@ -168,14 +168,19 @@ export default function NewProject() {
                               type="button"
                               onClick={() => field.onChange(v)}
                               data-testid={`vertical-${v}`}
-                              className={`flex items-start gap-2.5 p-3 rounded-md border text-left transition-all ${isSelected
-                                ? `${VERTICAL_BG[v] || "bg-primary/10 border-primary"} ring-2 ring-primary ring-offset-1`
-                                : "border-card-border bg-card hover-elevate"
+                              className={`relative flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all ${isSelected
+                                ? `${VERTICAL_BG[v] || "bg-primary/10 border-primary"} ring-2 ring-primary/60 ring-offset-2 ring-offset-background shadow-sm`
+                                : "border-border/50 bg-card hover:border-border hover:shadow-sm"
                                 }`}
                             >
-                              <span className="text-xl leading-none mt-0.5">{verticalIcons[v] || "📖"}</span>
+                              {isSelected && (
+                                <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                  <Check className="h-3 w-3 text-primary-foreground" />
+                                </div>
+                              )}
+                              <span className="text-xl leading-none mt-0.5">{verticalIcons[v] || "\u{1F4D6}"}</span>
                               <div>
-                                <div className={`text-xs font-semibold leading-tight ${isSelected ? VERTICAL_ACCENT[v] || "" : ""}`}>
+                                <div className={`text-xs font-bold leading-tight ${isSelected ? VERTICAL_ACCENT[v] || "" : ""}`}>
                                   {VERTICAL_LABELS[v] || v}
                                 </div>
                                 <div className="text-[10px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
@@ -194,11 +199,11 @@ export default function NewProject() {
             </CardContent>
           </Card>
 
-          <div className="flex items-center gap-3 justify-end">
+          <div className="flex items-center gap-3 justify-end pt-2">
             <Link href="/projects">
-              <Button variant="outline" type="button">Cancel</Button>
+              <Button variant="outline" type="button" className="border-border/60">Cancel</Button>
             </Link>
-            <Button type="submit" disabled={mutation.isPending} data-testid="button-create">
+            <Button type="submit" disabled={mutation.isPending} data-testid="button-create" className="shadow-sm">
               <Sparkles className="h-4 w-4 mr-2" />
               {mutation.isPending ? "Creating..." : "Create Project"}
             </Button>

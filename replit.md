@@ -47,6 +47,17 @@ money, fitness, spirituality, career, education, relationships, health, mindset,
 
 english, spanish, portuguese, french, german
 
+## Design System
+
+- **Primary palette**: Violet/indigo (`--primary: 252 85% 60%` light, `255 80% 68%` dark)
+- **Font**: Inter with OpenType features cv02/03/04/11, tight letter-spacing on headings
+- **Gradients**: `premium-gradient` (violet→purple→pink) for icon backgrounds, `premium-gradient-subtle` for card accents
+- **Glass effect**: `glass-card` class with backdrop-blur for header
+- **Status dots**: Colored circles (`bg-emerald-500`, `bg-amber-500`, etc.) paired with text labels
+- **Vertical color system**: `VERTICAL_LABELS`, `VERTICAL_BG`, `VERTICAL_ACCENT` maps in `client/src/lib/utils.ts`
+- **Shadows**: CSS custom properties `--shadow-sm` through `--shadow-2xl` with dark mode variants
+- **Cards**: `border-border/50 shadow-sm` base, `hover:shadow-md hover:border-primary/20` on interactive cards
+
 ## File Structure
 
 ```

@@ -4,9 +4,8 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Settings, BookOpen, Zap,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, BookOpen, Zap, Sparkles,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -21,32 +20,38 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
-            <BookOpen className="h-4 w-4 text-primary-foreground" />
+      <SidebarHeader className="border-b border-sidebar-border px-5 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg premium-gradient shadow-md">
+            <BookOpen className="h-4.5 w-4.5 text-white" />
           </div>
           <div>
-            <div className="text-sm font-bold text-sidebar-foreground leading-tight">BookForge</div>
-            <div className="text-xs text-muted-foreground leading-tight">Studio Supreme</div>
+            <div className="text-sm font-bold tracking-tight text-sidebar-foreground leading-none">BookForge</div>
+            <div className="text-[11px] font-medium text-primary mt-0.5 leading-none flex items-center gap-1">
+              <Sparkles className="h-2.5 w-2.5" /> Studio Supreme
+            </div>
           </div>
-          <Badge variant="secondary" className="ml-auto text-xs">AI</Badge>
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="px-2 py-3">
         <SidebarGroup>
-          <SidebarGroupLabel>Platform</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/60 px-3 mb-1">Platform</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
                 const isActive = item.url === "/" ? location === "/" : location.startsWith(item.url);
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild data-active={isActive} data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive}
+                      data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                      className={isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:text-foreground"}
+                    >
                       <Link href={item.url}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
+                        <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
+                        <span className="text-[13px]">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -57,13 +62,13 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+      <SidebarFooter className="border-t border-sidebar-border px-5 py-4">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full premium-gradient-subtle border border-primary/10">
             <Zap className="h-3 w-3 text-primary" />
           </div>
-          <div className="text-xs text-muted-foreground">
-            Powered by AI Integrations
+          <div className="text-[11px] text-muted-foreground font-medium">
+            AI-Powered Publishing
           </div>
         </div>
       </SidebarFooter>

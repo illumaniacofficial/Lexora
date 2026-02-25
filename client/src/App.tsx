@@ -31,7 +31,7 @@ function Router() {
 }
 
 const sidebarStyle = {
-  "--sidebar-width": "15rem",
+  "--sidebar-width": "15.5rem",
   "--sidebar-width-icon": "3.5rem",
 };
 
@@ -43,11 +43,11 @@ function App() {
           <div className="flex h-screen w-full overflow-hidden">
             <AppSidebar />
             <div className="flex flex-col flex-1 overflow-hidden">
-              <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-background shrink-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <header className="flex items-center justify-between px-5 h-14 border-b border-border/60 bg-background/80 glass-card shrink-0">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-foreground" />
                 <ThemeToggle />
               </header>
-              <main className="flex-1 overflow-hidden">
+              <main className="flex-1 overflow-hidden bg-background">
                 <Router />
               </main>
             </div>
