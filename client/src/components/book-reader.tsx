@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, SkipForward } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, SkipForward, Columns2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
@@ -332,11 +332,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const [narrationLoading, setNarrationLoading] = useState(false);
   const [narrationProgress, setNarrationProgress] = useState(0);
   const [autoNarrate, setAutoNarrate] = useState(false);
+  const [dualPage, setDualPage] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const narrationAnimRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoNarRef = useRef(false);
   const isLandscape = useIsLandscape();
+  const showDual = isLandscape && dualPage;
 
   const pages = useMemo(
     () => buildPages(title, authorName, completedChapters, coverImageUrl, fontSize),
@@ -381,14 +383,14 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   }, [currentPage, pages.length, isFlipping]);
 
   const prev = useCallback(() => {
-    if (isLandscape) goTo(Math.max(0, currentPage - 2));
+    if (showDual) goTo(Math.max(0, currentPage - 2));
     else goTo(currentPage - 1);
-  }, [goTo, currentPage, isLandscape]);
+  }, [goTo, currentPage, showDual]);
 
   const next = useCallback(() => {
-    if (isLandscape) goTo(Math.min(pages.length - 1, currentPage + 2));
+    if (showDual) goTo(Math.min(pages.length - 1, currentPage + 2));
     else goTo(currentPage + 1);
-  }, [goTo, currentPage, isLandscape, pages.length]);
+  }, [goTo, currentPage, showDual, pages.length]);
 
   const adjustFontSize = useCallback((delta: number) => {
     setFontSize(prev => {
@@ -511,7 +513,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   }, [next, prev, handleClose, adjustFontSize]);
 
   const page = pages[currentPage];
-  const rightPage = isLandscape && currentPage + 1 < pages.length ? pages[currentPage + 1] : null;
+  const rightPage = showDual && currentPage + 1 < pages.length ? pages[currentPage + 1] : null;
   const t = THEMES[theme];
   const isDark = theme === "dark" || theme === "midnight";
   const currentSizeIdx = FONT_SIZES.findIndex(s => s.value === fontSize);
@@ -523,7 +525,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     <div className="fixed inset-0 z-[100] flex items-center justify-center select-none" ref={containerRef}>
       <div className={cn("absolute inset-0 backdrop-blur-xl", isDark ? "bg-black/95" : "bg-stone-900/95")} onClick={handleClose} />
 
-      <div className={cn("relative mx-4 h-[92vh] flex flex-col", isLandscape ? "w-full max-w-6xl" : "w-full max-w-3xl")}>
+      <div className={cn("relative mx-4 h-[92vh] flex flex-col", showDual ? "w-full max-w-6xl" : "w-full max-w-3xl")}>
         <div className="flex items-center justify-between mb-2 px-2 relative z-10">
           <div className="flex items-center gap-1.5 flex-wrap">
             <Button size="sm" variant="ghost"
@@ -559,6 +561,17 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
             >
               <Volume2 className={cn("h-3.5 w-3.5 mr-1", isNarrating && "animate-pulse")} /> Narrator
             </Button>
+
+            {isLandscape && (
+              <Button size="sm" variant="ghost"
+                onClick={() => setDualPage(!dualPage)}
+                className={cn("h-8 text-xs font-mono", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
+                data-testid="button-reader-page-layout" aria-label={dualPage ? "Single page" : "Dual page"}
+              >
+                {dualPage ? <Square className="h-3.5 w-3.5 mr-1" /> : <Columns2 className="h-3.5 w-3.5 mr-1" />}
+                {dualPage ? "1-Page" : "2-Page"}
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -576,7 +589,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               </div>
             )}
             <span className={cn("font-mono text-[10px]", "text-stone-500")}>
-              {currentPage + 1}{isLandscape && rightPage ? `–${currentPage + 2}` : ""} / {pages.length}
+              {currentPage + 1}{showDual && rightPage ? `–${currentPage + 2}` : ""} / {pages.length}
             </span>
             <Button size="icon" variant="ghost" onClick={handleClose}
               className={cn("h-8 w-8", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
@@ -686,7 +699,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
             aria-label="Previous page" data-testid="button-reader-prev"><ChevronLeft className="h-8 w-8" /></button>
 
           <div className="flex-1 relative min-h-0">
-            {isLandscape ? (
+            {showDual ? (
               <div className="absolute inset-0 flex gap-0">
                 <div className="flex-1 h-full relative">
                   <BookPage page={page} theme={theme} fontSize={fontSize} side="left"
@@ -718,7 +731,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
             )}
           </div>
 
-          <button onClick={next} disabled={isLandscape ? currentPage + 2 >= pages.length : currentPage === pages.length - 1}
+          <button onClick={next} disabled={showDual ? currentPage + 2 >= pages.length : currentPage === pages.length - 1}
             className={cn("absolute right-0 top-0 bottom-0 w-12 sm:w-16 z-10 flex items-center justify-center disabled:opacity-0 transition-all duration-200 -mr-12 sm:-mr-14",
               isDark ? "text-stone-500 hover:text-stone-200" : "text-stone-500 hover:text-white")}
             aria-label="Next page" data-testid="button-reader-next"><ChevronRight className="h-8 w-8" /></button>
@@ -729,7 +742,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
             pages.map((_, i) => (
               <button key={i} onClick={() => goTo(i)}
                 className={cn("h-1 rounded-full transition-all duration-200",
-                  i === currentPage || (isLandscape && i === currentPage + 1) ? "w-6 bg-amber-400" : "w-1.5 bg-stone-600 hover:bg-stone-400")}
+                  i === currentPage || (showDual && i === currentPage + 1) ? "w-6 bg-amber-400" : "w-1.5 bg-stone-600 hover:bg-stone-400")}
                 aria-label={`Go to page ${i + 1}`} />
             ))
           ) : (
