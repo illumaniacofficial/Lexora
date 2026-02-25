@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock,
-  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp,
+  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User,
 } from "lucide-react";
 import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, VERTICAL_BG, VERTICAL_ACCENT } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -259,7 +259,12 @@ export default function ProjectDetail() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h1 className="text-xl font-bold tracking-tight leading-tight">{project.title}</h1>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  {project.authorName && (
+                    <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                      <User className="h-3 w-3" /> by {project.authorName}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className={`text-xs font-semibold ${VERTICAL_ACCENT[project.vertical] || ""}`}>{VERTICAL_LABELS[project.vertical] || project.vertical}</span>
                     <span className="text-muted-foreground/30 text-xs">\u2022</span>
                     <span className="text-xs text-muted-foreground capitalize">{project.targetLanguage}</span>
@@ -523,6 +528,34 @@ export default function ProjectDetail() {
                     Generate AI Cover
                   </Button>
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Download className="h-3.5 w-3.5 text-primary" /> Export Book
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {completedChapters.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">Complete at least one chapter to export your book.</p>
+              ) : (
+                <>
+                  <p className="text-[11px] text-muted-foreground mb-3">{completedChapters.length} of {chapters.length} chapters ready</p>
+                  <a href={`/api/projects/${projectId}/export?format=txt`} download>
+                    <Button variant="outline" size="sm" className="w-full justify-start border-border/60" data-testid="button-export-txt">
+                      <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground" /> Download as .txt
+                    </Button>
+                  </a>
+                  <a href={`/api/projects/${projectId}/export?format=html`} download>
+                    <Button variant="outline" size="sm" className="w-full justify-start border-border/60" data-testid="button-export-html">
+                      <BookOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground" /> Download as .html
+                    </Button>
+                  </a>
+                  <p className="text-[10px] text-muted-foreground mt-1">HTML format can be printed to PDF from your browser</p>
+                </>
               )}
             </CardContent>
           </Card>

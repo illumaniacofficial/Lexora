@@ -25,6 +25,7 @@ export type ProjectStatus = typeof PROJECT_STATUSES[number];
 export const projects = pgTable("projects", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   title: text("title").notNull(),
+  authorName: text("author_name").notNull().default(""),
   vertical: text("vertical").notNull().default("money"),
   targetLanguage: text("target_language").notNull().default("english"),
   status: text("status").notNull().default("draft"),

@@ -5,6 +5,57 @@ import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
 import { insertProjectSchema, insertAutopilotConfigSchema } from "@shared/schema";
 import { z } from "zod";
 
+function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function buildHtmlExport(title: string, authorName: string, chapters: { chapterNumber: number; title: string; content: string | null }[]): string {
+  const chapterHtml = chapters.map(ch => `
+    <div class="chapter" style="page-break-before: always;">
+      <h2 style="font-size: 1.5em; margin-bottom: 0.3em; color: #333;">Chapter ${ch.chapterNumber}</h2>
+      <h3 style="font-size: 1.2em; color: #555; margin-bottom: 2em; font-weight: normal; font-style: italic;">${escapeHtml(ch.title)}</h3>
+      ${(ch.content || "").split("\n").map(p => p.trim() ? `<p style="margin-bottom: 1em; text-indent: 1.5em; line-height: 1.8;">${escapeHtml(p)}</p>` : "").join("\n")}
+    </div>`).join("\n");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(title)}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap');
+    body { font-family: 'Libre Baskerville', Georgia, serif; max-width: 700px; margin: 0 auto; padding: 40px 20px; color: #222; background: #fff; font-size: 16px; }
+    .title-page { text-align: center; padding: 100px 0; }
+    .title-page h1 { font-size: 2.5em; margin-bottom: 0.5em; color: #111; }
+    .title-page .author { font-size: 1.3em; color: #555; font-style: italic; }
+    .toc { page-break-after: always; padding: 40px 0; }
+    .toc h2 { font-size: 1.5em; margin-bottom: 1em; }
+    .toc ul { list-style: none; padding: 0; }
+    .toc li { padding: 0.5em 0; border-bottom: 1px solid #eee; font-size: 1em; }
+    @media print { body { padding: 0; } .title-page { padding: 200px 0; } }
+  </style>
+</head>
+<body>
+  <div class="title-page">
+    <h1>${escapeHtml(title)}</h1>
+    <p class="author">by ${escapeHtml(authorName)}</p>
+  </div>
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ul>
+      ${chapters.map(ch => `<li>Chapter ${ch.chapterNumber}: ${escapeHtml(ch.title)}</li>`).join("\n      ")}
+    </ul>
+  </div>
+  ${chapterHtml}
+</body>
+</html>`;
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function estimateCost(tokens: number, model: string): number {
   const rates: Record<string, number> = {
     "gpt-5-mini": 0.0000003,
@@ -111,6 +162,70 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       await storage.deleteProject(parseInt(req.params.id));
       res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/export", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const chapters = await storage.getChapters(id);
+      const completedChapters = chapters.filter(c => c.status === "complete" && c.content);
+      if (completedChapters.length === 0) {
+        return res.status(400).json({ error: "No completed chapters to export" });
+      }
+
+      const format = (req.query.format as string) || "txt";
+      const authorName = project.authorName || "Unknown Author";
+      const title = project.title;
+
+      if (format === "html") {
+        const html = buildHtmlExport(title, authorName, completedChapters);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${slugify(title)}.html"`);
+        return res.send(html);
+      }
+
+      const lines: string[] = [];
+      lines.push("=" .repeat(60));
+      lines.push("");
+      lines.push(title.toUpperCase());
+      lines.push("");
+      lines.push(`by ${authorName}`);
+      lines.push("");
+      lines.push("=".repeat(60));
+      lines.push("");
+      lines.push("");
+      lines.push("TABLE OF CONTENTS");
+      lines.push("-".repeat(40));
+      completedChapters.forEach(ch => {
+        lines.push(`  Chapter ${ch.chapterNumber}: ${ch.title}`);
+      });
+      lines.push("");
+      lines.push("");
+
+      completedChapters.forEach(ch => {
+        lines.push("=".repeat(60));
+        lines.push(`CHAPTER ${ch.chapterNumber}`);
+        lines.push(ch.title.toUpperCase());
+        lines.push("=".repeat(60));
+        lines.push("");
+        lines.push(ch.content || "");
+        lines.push("");
+        lines.push("");
+      });
+
+      lines.push("=".repeat(60));
+      lines.push("END");
+      lines.push("=".repeat(60));
+
+      const content = lines.join("\n");
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${slugify(title)}.txt"`);
+      res.send(content);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const schema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(200),
+  authorName: z.string().min(1, "Author name is required").max(200),
   vertical: z.enum(VERTICALS),
   targetLanguage: z.enum(LANGUAGES),
 });
@@ -56,7 +57,7 @@ export default function NewProject() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", vertical: "money", targetLanguage: "english" },
+    defaultValues: { title: "", authorName: "Sergio A. Delgado", vertical: "money", targetLanguage: "english" },
   });
 
   const selectedVertical = form.watch("vertical");
@@ -115,6 +116,25 @@ export default function NewProject() {
                         placeholder="e.g., The Millionaire Morning: 5 Habits That Changed Everything"
                         className="h-11 bg-background border-border/60"
                         data-testid="input-title"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="authorName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Author Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="e.g., Sergio A. Delgado"
+                        className="h-11 bg-background border-border/60"
+                        data-testid="input-author"
                       />
                     </FormControl>
                     <FormMessage />

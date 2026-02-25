@@ -9,6 +9,7 @@ export async function seedDatabase() {
 
     const [p1] = await db.insert(projects).values({
       title: "The Wealth Architecture: Build Passive Income in 90 Days",
+      authorName: "Sergio A. Delgado",
       vertical: "money",
       targetLanguage: "english",
       status: "complete",
@@ -53,6 +54,7 @@ export async function seedDatabase() {
 
     const [p2] = await db.insert(projects).values({
       title: "Atomic Fitness: The 12-Minute Morning That Changes Everything",
+      authorName: "Sergio A. Delgado",
       vertical: "fitness",
       targetLanguage: "english",
       status: "writing",
@@ -75,6 +77,7 @@ export async function seedDatabase() {
 
     const [p3] = await db.insert(projects).values({
       title: "The Mindful Leader: How Inner Peace Creates Outer Excellence",
+      authorName: "Sergio A. Delgado",
       vertical: "mindset",
       targetLanguage: "english",
       status: "draft",
