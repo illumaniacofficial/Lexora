@@ -48,7 +48,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 
 ## Supported Verticals
 
-money, fitness, spirituality, career, education, relationships, health, mindset, parenting, technology
+money, fitness, spirituality, career, education, relationships, health, mindset, parenting, technology, cooking, travel, photography, music, writing, art, gardening, pets, sports, gaming, philosophy, history, science, psychology, sociology, politics, law, business, marketing, sales, real-estate, crypto, ai, cybersecurity, productivity, minimalism, sustainability, fashion, beauty, diy
 
 ## Supported Languages
 

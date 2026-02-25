@@ -13,7 +13,12 @@ export const insertUserSchema = createInsertSchema(users).pick({ username: true,
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-export const VERTICALS = ["money", "fitness", "spirituality", "career", "education", "relationships", "health", "mindset", "parenting", "technology"] as const;
+export const VERTICALS = [
+  "money", "fitness", "spirituality", "career", "education", "relationships", "health", "mindset", "parenting", "technology",
+  "cooking", "travel", "photography", "music", "writing", "art", "gardening", "pets", "sports", "gaming",
+  "philosophy", "history", "science", "psychology", "sociology", "politics", "law", "business", "marketing", "sales",
+  "real-estate", "crypto", "ai", "cybersecurity", "productivity", "minimalism", "sustainability", "fashion", "beauty", "diy",
+] as const;
 export type Vertical = typeof VERTICALS[number];
 
 export const LANGUAGES = ["english", "spanish", "portuguese", "french", "german"] as const;
