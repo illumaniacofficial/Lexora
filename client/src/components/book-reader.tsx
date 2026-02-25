@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { X, ChevronLeft, ChevronRight, BookOpen, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MarkdownRenderer } from "@/components/markdown-renderer";
 import type { Chapter } from "@shared/schema";
 
 interface BookReaderProps {
@@ -122,41 +123,7 @@ function TextPage({ page }: { page: Extract<PageContent, { type: "text" }> }) {
       </div>
       <div className="w-full h-[1px] bg-stone-200 mb-5" />
       <div className="flex-1 overflow-y-auto pr-2 reader-scroll">
-        {page.text.split("\n\n").map((para, i) => {
-          const trimmed = para.trim();
-          if (trimmed.startsWith("# ")) {
-            return <h2 key={i} className="font-serif text-xl font-bold text-stone-800 mt-4 mb-3">{trimmed.replace(/^#+\s*/, "")}</h2>;
-          }
-          if (trimmed.startsWith("## ")) {
-            return <h3 key={i} className="font-serif text-lg font-bold text-stone-800 mt-3 mb-2">{trimmed.replace(/^#+\s*/, "")}</h3>;
-          }
-          if (trimmed.startsWith("### ")) {
-            return <h4 key={i} className="font-serif text-base font-bold text-stone-700 mt-3 mb-2">{trimmed.replace(/^#+\s*/, "")}</h4>;
-          }
-          if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-            const items = trimmed.split(/\n/).filter(l => l.trim());
-            return (
-              <ul key={i} className="list-disc pl-5 mb-3 space-y-1">
-                {items.map((item, j) => (
-                  <li key={j} className="font-serif text-sm text-stone-700 leading-relaxed">{item.replace(/^[-*]\s*/, "")}</li>
-                ))}
-              </ul>
-            );
-          }
-          if (trimmed.startsWith(">")) {
-            return (
-              <blockquote key={i} className="border-l-2 border-amber-700/30 pl-4 my-3 italic font-serif text-sm text-stone-600 leading-relaxed">
-                {trimmed.replace(/^>\s*/, "")}
-              </blockquote>
-            );
-          }
-          if (trimmed.startsWith("---") || trimmed.startsWith("***")) {
-            return <div key={i} className="w-12 h-[1px] bg-stone-300 mx-auto my-4" />;
-          }
-          return (
-            <p key={i} className="font-serif text-sm text-stone-700 leading-[1.9] mb-3 text-justify indent-6">{trimmed}</p>
-          );
-        })}
+        <MarkdownRenderer content={page.text} />
       </div>
     </div>
   );

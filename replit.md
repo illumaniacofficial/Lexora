@@ -68,10 +68,10 @@ english, spanish, portuguese, french, german
 - All POST/PATCH routes use Zod schemas from drizzle-zod
 - `parseId()` helper validates all route param IDs (returns 400 for NaN/invalid)
 - Export endpoint validates `format` query param (only `txt`/`html` allowed)
-- Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing)
+- Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing) and chapter status to `pending` on generation failure
 - `ErrorBoundary` component wraps entire app for React render error recovery
-- All pages with `useQuery` have error state UI (AlertCircle + message)
-- SEO: `react-helmet-async` with per-page `<Helmet>` titles on all pages
+- All pages with `useQuery` have error state UI (AlertCircle + message), including ProjectDetail
+- SEO: `react-helmet-async` with per-page `<Helmet>` titles and meta descriptions on all pages (including NewProject)
 - Accessibility: `aria-label` on icon-only buttons, `sr-only` on delete labels
 - `data-testid` attributes on all interactive and meaningful display elements
 - `LANGUAGE_LABELS` centralized in `utils.ts` (shared by NewProject + Autopilot)
@@ -110,6 +110,9 @@ client/src/
   lib/utils.ts               — Centralized constants and helpers
   components/
     app-sidebar.tsx          — Navigation sidebar with neon glow branding
+    error-boundary.tsx       — Global React error boundary with recovery UI
+    markdown-renderer.tsx    — Shared markdown rendering (MarkdownRenderer for light/reader, MarkdownRendererDark for dark UI, stripMarkdown utility)
+    book-reader.tsx          — Full-screen immersive book reader with page flip animations
     theme-toggle.tsx         — Minimal (dark-first design)
   pages/
     Dashboard.tsx            — Main dashboard with stat orbs, shimmer headings

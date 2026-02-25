@@ -87,7 +87,10 @@ export default function Dashboard() {
 
   return (
     <div className="p-8 space-y-8 overflow-y-auto h-full">
-      <Helmet><title>Dashboard — BookForge Studio</title></Helmet>
+      <Helmet>
+        <title>Dashboard — BookForge Studio</title>
+        <meta name="description" content="BookForge Studio command center — view project stats, recent manuscripts, trend intel, and quick actions." />
+      </Helmet>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -137,7 +140,7 @@ export default function Dashboard() {
                   <p className="text-sm font-semibold mt-4">No projects yet</p>
                   <p className="text-[11px] text-muted-foreground/50 mt-1 font-mono">Initialize your first manuscript</p>
                   <Link href="/projects/new">
-                    <Button size="sm" className="mt-5 neon-glow text-white border-0">
+                    <Button size="sm" data-testid="button-create-first-project" className="mt-5 neon-glow text-white border-0">
                       <Plus className="h-3 w-3 mr-1.5" /> Create
                     </Button>
                   </Link>
@@ -217,7 +220,7 @@ export default function Dashboard() {
               </div>
               <div className="space-y-2">
                 <Link href="/trends">
-                  <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/30 hover:border-cyan-500/30 hover:text-cyan-300 text-[12px] font-mono tracking-tight transition-all">
+                  <Button variant="outline" size="sm" data-testid="button-run-trend-analysis" className="w-full justify-start border-border/30 bg-card/30 hover:border-cyan-500/30 hover:text-cyan-300 text-[12px] font-mono tracking-tight transition-all">
                     <BarChart3 className="h-3.5 w-3.5 mr-2 text-cyan-500/60" /> Run Trend Analysis
                   </Button>
                 </Link>

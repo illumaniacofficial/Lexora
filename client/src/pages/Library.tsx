@@ -89,7 +89,10 @@ export default function Library() {
 
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
-      <Helmet><title>Library — BookForge Studio</title></Helmet>
+      <Helmet>
+        <title>Library — BookForge Studio</title>
+        <meta name="description" content="Your completed book library — browse, search, and explore published manuscripts ranked by quality." />
+      </Helmet>
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Hexagon className="h-3 w-3 text-emerald-500/50" />

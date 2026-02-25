@@ -17,6 +17,7 @@ import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, 
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
+import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
 import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport } from "@shared/schema";
 
 interface ProjectDetailData {
@@ -91,7 +92,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating }: {
       {expanded && chapter.content && (
         <div className="px-4 pb-4 border-t border-border/15">
           <ScrollArea className="h-52 mt-3">
-            <p className="text-sm text-muted-foreground/70 leading-relaxed whitespace-pre-wrap">{chapter.content}</p>
+            <MarkdownRendererDark content={chapter.content} />
           </ScrollArea>
         </div>
       )}
@@ -106,7 +107,7 @@ export default function ProjectDetail() {
   const [showReader, setShowReader] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery<ProjectDetailData>({
+  const { data, isLoading, error, refetch } = useQuery<ProjectDetailData>({
     queryKey: [`/api/projects/${projectId}`],
     refetchInterval: 5000,
   });
@@ -308,6 +309,17 @@ export default function ProjectDetail() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
+        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
+        <p className="font-bold text-lg tracking-tight">Failed to load project</p>
+        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+        <Link href="/projects"><Button className="mt-4 neon-glow text-white border-0" data-testid="button-back-projects-error">Back to Projects</Button></Link>
+      </div>
+    );
+  }
+
   if (!data?.project) {
     return (
       <div className="p-8 text-center py-20">
@@ -332,7 +344,10 @@ export default function ProjectDetail() {
 
   return (
     <div className="p-8 space-y-6 overflow-y-auto h-full">
-      <Helmet><title>{project.title} — BookForge Studio</title></Helmet>
+      <Helmet>
+        <title>{project.title} — BookForge Studio</title>
+        <meta name="description" content={`${project.title} by ${project.authorName || "Unknown Author"} — ${statusLabel(project.status)} in ${VERTICAL_LABELS[project.vertical] || project.vertical}.`} />
+      </Helmet>
       <div className="flex items-center gap-2 flex-wrap text-sm">
         <Link href="/projects">
           <Button variant="ghost" size="sm" className="text-muted-foreground/50 hover:text-purple-400 font-mono text-[11px]" data-testid="button-back-projects">
@@ -431,16 +446,16 @@ export default function ProjectDetail() {
 
           <Tabs defaultValue="chapters">
             <TabsList className="h-10 bg-card/30 border border-border/20">
-              <TabsTrigger value="chapters" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
+              <TabsTrigger value="chapters" data-testid="tab-chapters" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
                 <BookOpen className="h-3 w-3" /> Chapters ({chapters.length})
               </TabsTrigger>
-              <TabsTrigger value="dna" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
+              <TabsTrigger value="dna" data-testid="tab-dna" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
                 <Zap className="h-3 w-3" /> DNA
               </TabsTrigger>
-              <TabsTrigger value="marketing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
+              <TabsTrigger value="marketing" data-testid="tab-marketing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
                 <Megaphone className="h-3 w-3" /> Marketing
               </TabsTrigger>
-              <TabsTrigger value="logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
+              <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
                 <FileText className="h-3 w-3" /> Logs
               </TabsTrigger>
             </TabsList>
@@ -455,7 +470,7 @@ export default function ProjectDetail() {
                     </div>
                     <p className="font-bold mt-4 tracking-tight">No chapters yet</p>
                     <p className="text-[11px] text-muted-foreground/40 font-mono mt-1">Generate outline first</p>
-                    <Button className="mt-5 neon-glow text-white border-0 font-mono text-[11px]" onClick={() => outlineMutation.mutate()} disabled={outlineMutation.isPending}>
+                    <Button className="mt-5 neon-glow text-white border-0 font-mono text-[11px]" onClick={() => outlineMutation.mutate()} disabled={outlineMutation.isPending} data-testid="button-generate-outline-empty">
                       {outlineMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <List className="h-3.5 w-3.5 mr-1.5" />}
                       GENERATE OUTLINE
                     </Button>
@@ -597,8 +612,20 @@ export default function ProjectDetail() {
             </CardHeader>
             <CardContent>
               {project.coverImageUrl ? (
-                <div className="rounded-xl overflow-hidden glow-border-pink">
-                  <img src={project.coverImageUrl} alt="Book cover" className="w-full object-contain rounded-xl bg-card/50" />
+                <div className="space-y-3">
+                  <div className="rounded-xl overflow-hidden glow-border-pink">
+                    <img src={project.coverImageUrl} alt="Book cover" className="w-full object-contain rounded-xl bg-card/50" />
+                  </div>
+                  <Button
+                    size="sm" variant="outline"
+                    className="w-full border-border/30 font-mono text-[10px] hover:border-pink-500/30"
+                    onClick={() => coverMutation.mutate()}
+                    disabled={coverMutation.isPending}
+                    data-testid="button-regenerate-cover"
+                  >
+                    {coverMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1.5 text-pink-400" />}
+                    REGENERATE COVER
+                  </Button>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center aspect-[3/4] rounded-xl bg-white/[0.02] border border-dashed border-border/20">

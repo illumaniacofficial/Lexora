@@ -136,7 +136,10 @@ export default function Autopilot() {
 
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full max-w-3xl">
-      <Helmet><title>Autopilot — BookForge Studio</title></Helmet>
+      <Helmet>
+        <title>Autopilot — BookForge Studio</title>
+        <meta name="description" content="Fully autonomous book publishing — configure targets, budget, quality thresholds, and let AI handle everything." />
+      </Helmet>
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Activity className="h-3 w-3 text-purple-500/50 animate-pulse-glow" />

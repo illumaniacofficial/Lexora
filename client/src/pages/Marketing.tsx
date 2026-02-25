@@ -183,7 +183,10 @@ export default function Marketing() {
 
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
-      <Helmet><title>Marketing Suite — BookForge Studio</title></Helmet>
+      <Helmet>
+        <title>Marketing Suite — BookForge Studio</title>
+        <meta name="description" content="Complete marketing assets for your books — social hooks, email sequences, pricing matrices, and ad copy." />
+      </Helmet>
       <div>
         <div className="flex items-center gap-2 mb-2">
           <Hexagon className="h-3 w-3 text-pink-500/50" />

@@ -441,6 +441,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
   });
 
   app.post("/api/projects/:id/chapters/:chapterId/generate", async (req, res) => {
+    let activeChapterId: number | null = null;
     try {
       const projectId = parseId(req.params.id);
       const chapterId = parseId(req.params.chapterId);
@@ -452,6 +453,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       if (!project || !chapter) return res.status(404).json({ error: "Not found" });
 
+      activeChapterId = chapterId;
       await storage.updateChapter(chapterId, { status: "generating" });
 
       const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
@@ -518,6 +520,9 @@ Write the full chapter content only, no meta-commentary.`,
 
       res.json({ chapterId, wordCount, qualityScore, status: "complete" });
     } catch (err: any) {
+      if (activeChapterId) {
+        await storage.updateChapter(activeChapterId, { status: "pending" }).catch(() => {});
+      }
       res.status(500).json({ error: err.message });
     }
   });

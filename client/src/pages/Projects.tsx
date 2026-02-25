@@ -58,7 +58,10 @@ export default function Projects() {
 
   return (
     <div className="p-8 space-y-6 overflow-y-auto h-full">
-      <Helmet><title>Projects — BookForge Studio</title></Helmet>
+      <Helmet>
+        <title>Projects — BookForge Studio</title>
+        <meta name="description" content="Manage your book manuscripts — create, track progress, and navigate through your publishing pipeline." />
+      </Helmet>
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-2">

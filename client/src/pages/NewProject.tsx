@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon } from "lucide-react";
 import { Link } from "wouter";
+import { Helmet } from "react-helmet-async";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
 import { VERTICAL_LABELS, VERTICAL_ICONS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -49,9 +50,13 @@ export default function NewProject() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto overflow-y-auto h-full">
+      <Helmet>
+        <title>New Manuscript — BookForge Studio</title>
+        <meta name="description" content="Initialize a new book manuscript — set your title, author, vertical, and language to start the AI publishing pipeline." />
+      </Helmet>
       <div className="flex items-center gap-3 mb-8">
         <Link href="/projects">
-          <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-purple-400 font-mono text-[11px]">
+          <Button variant="ghost" size="sm" data-testid="button-back" className="text-muted-foreground/60 hover:text-purple-400 font-mono text-[11px]">
             <ArrowLeft className="h-4 w-4 mr-1" /> BACK
           </Button>
         </Link>
