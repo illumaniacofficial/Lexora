@@ -26,6 +26,7 @@ export interface IStorage {
   getTrendReportByProject(projectId: number): Promise<TrendReport | undefined>;
   createTrendReport(data: InsertTrendReport): Promise<TrendReport>;
 
+  deleteChaptersByProject(projectId: number): Promise<void>;
   getChapters(projectId: number): Promise<Chapter[]>;
   getChapter(id: number): Promise<Chapter | undefined>;
   createChapter(data: InsertChapter): Promise<Chapter>;
@@ -124,6 +125,10 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async deleteChaptersByProject(projectId: number) {
+    await db.delete(chapters).where(eq(chapters.projectId, projectId));
+  }
+
   async getChapters(projectId: number) {
     return db.select().from(chapters).where(eq(chapters.projectId, projectId)).orderBy(chapters.chapterNumber);
   }
@@ -188,16 +193,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDashboardStats() {
-    const allProjects = await db.select().from(projects);
-    const totalProjects = allProjects.length;
-    const completedProjects = allProjects.filter(p => p.status === "complete").length;
-    const totalWords = allProjects.reduce((sum, p) => sum + p.wordCount, 0);
-    const totalCost = allProjects.reduce((sum, p) => sum + p.estimatedCost, 0);
-    const scoredProjects = allProjects.filter(p => p.qualityScore !== null);
-    const avgQuality = scoredProjects.length > 0
-      ? scoredProjects.reduce((sum, p) => sum + (p.qualityScore || 0), 0) / scoredProjects.length
-      : 0;
-    return { totalProjects, completedProjects, totalWords, totalCost, avgQuality };
+    const result = await db.select({
+      totalProjects: sql<number>`count(*)::int`,
+      completedProjects: sql<number>`count(*) filter (where ${projects.status} = 'complete')::int`,
+      totalWords: sql<number>`coalesce(sum(${projects.wordCount}), 0)::int`,
+      totalCost: sql<number>`coalesce(sum(${projects.estimatedCost}), 0)::real`,
+      avgQuality: sql<number>`coalesce(avg(${projects.qualityScore}) filter (where ${projects.qualityScore} is not null), 0)::real`,
+    }).from(projects);
+    const row = result[0] || { totalProjects: 0, completedProjects: 0, totalWords: 0, totalCost: 0, avgQuality: 0 };
+    return row;
   }
 }
 

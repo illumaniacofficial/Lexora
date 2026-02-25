@@ -11,27 +11,27 @@ A production-grade AI publishing platform capable of generating complete books, 
 
 ## Key Features
 
-1. **Dashboard** — Publishing stats, recent projects, trend reports
+1. **Dashboard** — Publishing stats (SQL-aggregated), recent projects, trend reports
 2. **Book Projects** — Full pipeline from concept to complete manuscript
 3. **Publishing Pipeline** — Step-by-step AI generation:
    - Trend Analysis (market demand, greenlight scores)
    - Book Outline + DNA (core promise, reader avatar, chapter blueprints)
-   - Chapter Writing (full chapters, ~1500-2000 words each)
-   - AI Cover Generation (category-specific designs)
+   - Chapter Writing (full chapters with real AI quality evaluation)
+   - AI Cover Generation (category-specific designs, cost-tracked via runStep)
    - Marketing Suite (blurbs, hooks, email sequences, social calendar, pricing)
 4. **Trend Intelligence** — Market analysis by vertical with demand/competition scoring
-5. **Marketing Suite** — View assets across all projects
+5. **Marketing Suite** — View assets across all projects (XSS-sanitized)
 6. **Autopilot Mode** — Configure autonomous publishing with budget/quality controls
 7. **Book Export** — Download completed books as .txt or .html (with author name, TOC, title page)
 
 ## Database Schema
 
 - `projects` — Book projects with status, metrics, settings, and `authorName` field
-- `book_dna` — Core promise, reader avatar, tone rules, transformation arc
-- `trend_reports` — Market analysis with demand/greenlight scores
-- `chapters` — Individual chapters with content and quality scores
-- `run_steps` — AI generation logs with token usage and cost tracking
-- `marketing_assets` — Complete marketing suite (blurbs, hooks, email, social)
+- `book_dna` — Core promise, reader avatar, tone rules, transformation arc (indexed on projectId)
+- `trend_reports` — Market analysis with demand/greenlight scores (indexed on projectId, vertical)
+- `chapters` — Individual chapters with content and quality scores (indexed on projectId)
+- `run_steps` — AI generation logs with token usage and cost tracking (indexed on projectId)
+- `marketing_assets` — Complete marketing suite (indexed on projectId)
 - `autopilot_config` — Autonomous publishing configuration
 
 ## AI Models Used
@@ -47,6 +47,22 @@ money, fitness, spirituality, career, education, relationships, health, mindset,
 ## Supported Languages
 
 english, spanish, portuguese, french, german
+
+## Centralized Frontend Constants (client/src/lib/utils.ts)
+
+- `PIPELINE_STEPS` — Ordered pipeline status array
+- `getPipelinePct(status)` — Progress percentage from status
+- `STATUS_GLOW` — Neon glow classes per status
+- `VERTICAL_ICONS` — Emoji icons per vertical
+- `VERTICAL_LABELS` — Human-readable vertical names
+- `sanitizeHtml(html)` — XSS sanitization for AI-generated HTML
+- `scoreColor(score)` — Dark-only color classes for quality scores
+
+## Input Validation
+
+- `patchProjectSchema` — Validates project PATCH requests
+- `trendAnalyzeSchema` — Validates trend analysis requests
+- All POST/PATCH routes use Zod schemas from drizzle-zod
 
 ## Design System — Futuristic Abstract Artist Aesthetic
 
@@ -72,12 +88,13 @@ english, spanish, portuguese, french, german
 server/
   index.ts       — Express server entry point with seeding
   routes.ts      — All API routes (/api/projects, /api/trends, etc.)
-  storage.ts     — Database abstraction layer
+  storage.ts     — Database abstraction layer (includes deleteChaptersByProject)
   db.ts          — Drizzle + pg pool connection
   openai.ts      — OpenAI client setup
   seed.ts        — Database seeding with demo projects
 client/src/
   App.tsx                    — Root app with sidebar layout and routing
+  lib/utils.ts               — Centralized constants and helpers
   components/
     app-sidebar.tsx          — Navigation sidebar with neon glow branding
     theme-toggle.tsx         — Minimal (dark-first design)
@@ -90,5 +107,5 @@ client/src/
     Marketing.tsx            — Marketing overview with pink accent theme
     Autopilot.tsx            — Autopilot config with mesh backgrounds
 shared/
-  schema.ts      — All Drizzle schemas and TypeScript types
+  schema.ts      — All Drizzle schemas, TypeScript types, DB indexes
 ```

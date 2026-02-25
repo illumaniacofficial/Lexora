@@ -10,25 +10,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Plus, Search, Trash2, BookOpen, ArrowRight, FolderOpen, Hexagon } from "lucide-react";
-import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, VERTICAL_BG, VERTICAL_ACCENT } from "@/lib/utils";
+import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project } from "@shared/schema";
 import { PROJECT_STATUSES, VERTICALS } from "@shared/schema";
 
-const PIPELINE_STEPS = ["draft", "trend_analysis", "outlining", "writing", "editing", "marketing", "complete"];
-function getPct(status: string) {
-  const idx = PIPELINE_STEPS.indexOf(status);
-  return idx >= 0 ? Math.round((idx / (PIPELINE_STEPS.length - 1)) * 100) : 0;
-}
-
-const statusGlow: Record<string, string> = {
-  draft: "bg-zinc-500", trend_analysis: "bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.6)]",
-  outlining: "bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.6)]", writing: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]",
-  editing: "bg-orange-400", marketing: "bg-pink-400 shadow-[0_0_6px_rgba(244,114,182,0.6)]",
-  complete: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]", paused: "bg-zinc-500",
-};
 
 export default function Projects() {
   const { toast } = useToast();
@@ -115,7 +103,7 @@ export default function Projects() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((project) => {
-            const pct = getPct(project.status);
+            const pct = getPipelinePct(project.status);
             return (
               <div key={project.id} className="group relative" data-testid={`project-card-${project.id}`}>
                 <Link href={`/projects/${project.id}`}>
@@ -132,7 +120,7 @@ export default function Projects() {
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50">
-                            <span className={`h-1.5 w-1.5 rounded-full ${statusGlow[project.status] || "bg-zinc-500"}`} />
+                            <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
                             {statusLabel(project.status)}
                           </span>
                           <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>

@@ -12,7 +12,7 @@ import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Activity,
 } from "lucide-react";
-import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS } from "@/lib/utils";
+import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, getPipelinePct, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport } from "@shared/schema";
@@ -26,19 +26,6 @@ interface ProjectDetailData {
   trendReport?: TrendReport;
 }
 
-const PIPELINE_STEPS = ["draft", "trend_analysis", "outlining", "writing", "editing", "marketing", "complete"];
-
-function getPct(status: string) {
-  const idx = PIPELINE_STEPS.indexOf(status);
-  return idx >= 0 ? Math.round((idx / (PIPELINE_STEPS.length - 1)) * 100) : 0;
-}
-
-const statusGlow: Record<string, string> = {
-  draft: "bg-zinc-500", trend_analysis: "bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.6)]",
-  outlining: "bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.6)]", writing: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]",
-  editing: "bg-orange-400", marketing: "bg-pink-400 shadow-[0_0_6px_rgba(244,114,182,0.6)]",
-  complete: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]", paused: "bg-zinc-500",
-};
 
 function StepStatus({ status }: { status: string }) {
   if (status === "complete") return <CheckCircle className="h-4 w-4 text-emerald-400 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]" />;
@@ -173,7 +160,7 @@ export default function ProjectDetail() {
 
   const { project, chapters, runSteps, bookDna, marketing, trendReport } = data;
   const completedChapters = chapters.filter(c => c.status === "complete");
-  const pct = getPct(project.status);
+  const pct = getPipelinePct(project.status);
   const anyRunning = trendMutation.isPending || outlineMutation.isPending || chapterMutation.isPending || marketingMutation.isPending || coverMutation.isPending;
 
   const pipelineActions = [
@@ -203,7 +190,7 @@ export default function ProjectDetail() {
             <CardContent className="pt-6 pb-5">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl glow-border bg-card/50 text-xl">
-                  {({money:"\u{1F4B0}",fitness:"\u{1F4AA}",spirituality:"\u{1F9D8}",career:"\u{1F680}",education:"\u{1F4DA}",relationships:"\u2764\uFE0F",health:"\u{1F3E5}",mindset:"\u{1F9E0}",parenting:"\u{1F468}\u200D\u{1F469}\u200D\u{1F467}",technology:"\u26A1"} as Record<string,string>)[project.vertical] || "\u{1F4D6}"}
+                  {VERTICAL_ICONS[project.vertical] || "\u{1F4D6}"}
                 </div>
                 <div className="flex-1 min-w-0">
                   <h1 className="text-xl font-bold tracking-tighter leading-tight">{project.title}</h1>
@@ -229,7 +216,7 @@ export default function ProjectDetail() {
               <div className="mt-5">
                 <div className="flex items-center justify-between mb-2">
                   <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/60">
-                    <span className={`h-1.5 w-1.5 rounded-full ${statusGlow[project.status] || "bg-zinc-500"}`} />
+                    <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
                     {statusLabel(project.status)}
                     {project.greenlightScore && (
                       <Badge variant="outline" className="text-[10px] font-mono ml-2 border-border/30">GL {formatScore(project.greenlightScore)}</Badge>
@@ -373,7 +360,7 @@ export default function ProjectDetail() {
                   {marketing.amazonDescription && (
                     <Card className="border-border/20 bg-card/30"><CardContent className="pt-4 pb-4">
                       <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2">Amazon Description</p>
-                      <div className="text-sm leading-relaxed text-muted-foreground/80" dangerouslySetInnerHTML={{ __html: marketing.amazonDescription }} />
+                      <div className="text-sm leading-relaxed text-muted-foreground/80" dangerouslySetInnerHTML={{ __html: sanitizeHtml(marketing.amazonDescription) }} />
                     </CardContent></Card>
                   )}
                   {marketing.hooks && marketing.hooks.length > 0 && (

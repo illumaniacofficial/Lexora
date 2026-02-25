@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity,
 } from "lucide-react";
-import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, VERTICAL_BG, VERTICAL_ACCENT, scoreColor } from "@/lib/utils";
+import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, scoreColor, getPipelinePct, STATUS_GLOW } from "@/lib/utils";
 import type { Project, TrendReport } from "@shared/schema";
 
 interface DashboardData {
@@ -50,15 +50,9 @@ function StatCard({ label, value, sub, index }: { label: string; value: string; 
 }
 
 function StatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    draft: "bg-zinc-500", trend_analysis: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]",
-    outlining: "bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.6)]", writing: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]",
-    editing: "bg-orange-400", marketing: "bg-pink-400 shadow-[0_0_8px_rgba(244,114,182,0.6)]",
-    complete: "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]", paused: "bg-zinc-500",
-  };
   return (
     <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/70">
-      <span className={`h-1.5 w-1.5 rounded-full ${colors[status] || "bg-zinc-500"}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[status] || "bg-zinc-500"}`} />
       {statusLabel(status)}
     </span>
   );
@@ -138,8 +132,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 recentProjects.map((project) => {
-                  const steps = ["draft", "trend_analysis", "outlining", "writing", "editing", "marketing", "complete"];
-                  const pct = Math.round((steps.indexOf(project.status) / (steps.length - 1)) * 100);
+                  const pct = getPipelinePct(project.status);
                   return (
                     <Link key={project.id} href={`/projects/${project.id}`}>
                       <div className="group flex items-center gap-4 p-4 rounded-xl border border-border/20 bg-card/30 hover:border-purple-500/20 hover:bg-purple-500/[0.03] transition-all duration-300 cursor-pointer" data-testid={`project-card-${project.id}`}>

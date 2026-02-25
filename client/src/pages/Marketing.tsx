@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon } from "lucide-react";
-import { VERTICAL_LABELS } from "@/lib/utils";
+import { VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import type { Project } from "@shared/schema";
 
 const featureCards = [
@@ -75,7 +75,7 @@ export default function Marketing() {
                 <CardContent className="pt-5 pb-5">
                   <div className="flex items-start gap-3.5">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl glow-border-pink bg-card/50 text-lg">
-                      {({money:"\u{1F4B0}",fitness:"\u{1F4AA}",spirituality:"\u{1F9D8}",career:"\u{1F680}",education:"\u{1F4DA}",relationships:"\u2764\uFE0F",health:"\u{1F3E5}",mindset:"\u{1F9E0}",parenting:"\u{1F468}\u200D\u{1F469}\u200D\u{1F467}",technology:"\u26A1"} as Record<string,string>)[project.vertical] || "\u{1F4D6}"}
+                      {VERTICAL_ICONS[project.vertical] || "\u{1F4D6}"}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 flex-wrap">

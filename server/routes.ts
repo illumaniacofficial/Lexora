@@ -83,7 +83,6 @@ async function runStep(projectId: number, stepName: string, model: string, fn: (
       tokensUsed: tokens,
       costEstimate: cost,
       durationMs: Date.now() - start,
-      qualityScore: 8.5,
     });
     const allSteps = await storage.getRunSteps(projectId);
     const completedSteps = allSteps.filter(s => s.status === "complete");
@@ -100,6 +99,54 @@ async function runStep(projectId: number, stepName: string, model: string, fn: (
     throw err;
   }
 }
+
+async function evaluateChapterQuality(chapterContent: string, title: string, vertical: string): Promise<number> {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: FAST_MODEL,
+      messages: [{
+        role: "system",
+        content: "You are a professional book editor and quality evaluator. Respond ONLY with valid JSON.",
+      }, {
+        role: "user",
+        content: `Rate this chapter on a scale of 1-10 based on: clarity, engagement, actionable value, structure, and writing quality. The chapter is from a ${vertical} book, titled "${title}".
+
+Chapter content (first 2000 chars):
+${chapterContent.slice(0, 2000)}
+
+Return JSON with: { "score": <number 1-10>, "reason": "<brief one-sentence justification>" }`,
+      }],
+      max_completion_tokens: 256,
+      response_format: { type: "json_object" },
+    });
+    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+    const score = parseFloat(parsed.score);
+    if (isNaN(score) || score < 1 || score > 10) return 7.0;
+    return Math.round(score * 10) / 10;
+  } catch {
+    return 7.0;
+  }
+}
+
+const trendAnalyzeSchema = z.object({
+  vertical: z.string().min(1, "Vertical is required"),
+  keywords: z.string().optional().default(""),
+});
+
+const patchProjectSchema = z.object({
+  title: z.string().min(1).optional(),
+  authorName: z.string().optional(),
+  vertical: z.string().optional(),
+  targetLanguage: z.string().optional(),
+  status: z.string().optional(),
+  greenlightScore: z.number().min(0).max(10).nullable().optional(),
+  qualityScore: z.number().min(0).max(10).nullable().optional(),
+  totalTokens: z.number().int().min(0).optional(),
+  estimatedCost: z.number().min(0).optional(),
+  wordCount: z.number().int().min(0).optional(),
+  chapterCount: z.number().int().min(0).optional(),
+  coverImageUrl: z.string().nullable().optional(),
+}).strict();
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   app.get("/api/dashboard", async (_req, res) => {
@@ -151,7 +198,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/projects/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const updated = await storage.updateProject(id, req.body);
+      const data = patchProjectSchema.parse(req.body);
+      const updated = await storage.updateProject(id, data);
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -289,6 +337,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!project) return res.status(404).json({ error: "Not found" });
 
       await storage.updateProject(id, { status: "outlining" });
+      await storage.deleteChaptersByProject(id);
 
       const result = await runStep(id, "Book Outline + DNA", HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
@@ -403,7 +452,7 @@ Write the full chapter content only, no meta-commentary.`,
       });
 
       const wordCount = result.split(/\s+/).length;
-      const qualityScore = 7.5 + Math.random() * 2;
+      const qualityScore = await evaluateChapterQuality(result, chapter.title, project.vertical);
 
       await storage.updateChapter(chapterId, {
         content: result,
@@ -513,19 +562,23 @@ Return JSON with:
 
       const style = verticalStyles[project.vertical] || "professional book cover, modern design";
 
-      const completion = await openai.images.generate({
-        model: IMAGE_MODEL,
-        prompt: `Create a professional book cover for "${project.title}". Style: ${style}. The cover should have the title text prominently displayed, look like a bestselling non-fiction book, have thumbnail readability, and be visually striking. No real people. High quality book cover design.`,
-        size: "1024x1024",
-        n: 1,
+      const imageUrl = await runStep(id, "Cover Generation", IMAGE_MODEL, async () => {
+        const completion = await openai.images.generate({
+          model: IMAGE_MODEL,
+          prompt: `Create a professional book cover for "${project.title}". Style: ${style}. The cover should have the title text prominently displayed, look like a bestselling non-fiction book, have thumbnail readability, and be visually striking. No real people. High quality book cover design.`,
+          size: "1024x1024",
+          n: 1,
+        });
+
+        const imageB64 = (completion.data[0] as any)?.b64_json;
+        let url = (completion.data[0] as any)?.url;
+
+        if (imageB64) {
+          url = `data:image/png;base64,${imageB64}`;
+        }
+
+        return { result: url, tokens: 1 };
       });
-
-      const imageB64 = (completion.data[0] as any)?.b64_json;
-      let imageUrl = (completion.data[0] as any)?.url;
-
-      if (imageB64) {
-        imageUrl = `data:image/png;base64,${imageB64}`;
-      }
 
       await storage.updateProject(id, { coverImageUrl: imageUrl });
 
@@ -547,7 +600,7 @@ Return JSON with:
 
   app.post("/api/trends/analyze", async (req, res) => {
     try {
-      const { vertical, keywords } = req.body;
+      const { vertical, keywords } = trendAnalyzeSchema.parse(req.body);
 
       const completion = await openai.chat.completions.create({
         model: FAST_MODEL,

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -51,7 +51,9 @@ export const bookDna = pgTable("book_dna", {
   bannedPhrases: text("banned_phrases").array(),
   keyVocabulary: text("key_vocabulary").array(),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => [
+  index("book_dna_project_idx").on(table.projectId),
+]);
 
 export const trendReports = pgTable("trend_reports", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -66,7 +68,10 @@ export const trendReports = pgTable("trend_reports", {
   keywords: text("keywords").array(),
   summary: text("summary"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => [
+  index("trend_reports_project_idx").on(table.projectId),
+  index("trend_reports_vertical_idx").on(table.vertical),
+]);
 
 export const chapters = pgTable("chapters", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -80,7 +85,9 @@ export const chapters = pgTable("chapters", {
   status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => [
+  index("chapters_project_idx").on(table.projectId),
+]);
 
 export const runSteps = pgTable("run_steps", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -95,7 +102,9 @@ export const runSteps = pgTable("run_steps", {
   retryCount: integer("retry_count").notNull().default(0),
   durationMs: integer("duration_ms"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => [
+  index("run_steps_project_idx").on(table.projectId),
+]);
 
 export const marketingAssets = pgTable("marketing_assets", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -111,7 +120,9 @@ export const marketingAssets = pgTable("marketing_assets", {
   pricingMatrix: jsonb("pricing_matrix"),
   authorBio: text("author_bio"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => [
+  index("marketing_assets_project_idx").on(table.projectId),
+]);
 
 export const autopilotConfig = pgTable("autopilot_config", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),

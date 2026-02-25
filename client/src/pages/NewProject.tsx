@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon } from "lucide-react";
 import { Link } from "wouter";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
-import { VERTICAL_LABELS } from "@/lib/utils";
+import { VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -24,11 +24,6 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-const verticalIcons: Record<string, string> = {
-  money: "\u{1F4B0}", fitness: "\u{1F4AA}", spirituality: "\u{1F9D8}", career: "\u{1F680}",
-  education: "\u{1F4DA}", relationships: "\u2764\uFE0F", health: "\u{1F3E5}", mindset: "\u{1F9E0}",
-  parenting: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", technology: "\u26A1",
-};
 
 const languageLabels: Record<string, string> = {
   english: "English", spanish: "Espa\u00F1ol", portuguese: "Portugu\u00EAs", french: "Fran\u00E7ais", german: "Deutsch",
@@ -133,7 +128,7 @@ export default function NewProject() {
                                 <Check className="h-2.5 w-2.5 text-white" />
                               </div>
                             )}
-                            <span className="text-lg">{verticalIcons[v] || "\u{1F4D6}"}</span>
+                            <span className="text-lg">{VERTICAL_ICONS[v] || "\u{1F4D6}"}</span>
                             <span className={`text-[11px] font-bold tracking-tight ${isSelected ? "text-purple-300" : "text-muted-foreground/70"}`}>
                               {VERTICAL_LABELS[v] || v}
                             </span>

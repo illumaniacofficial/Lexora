@@ -22,9 +22,9 @@ export function formatScore(n: number | null | undefined) {
 
 export function scoreColor(score: number | null | undefined): string {
   if (score == null) return "text-muted-foreground";
-  if (score >= 8) return "text-green-600 dark:text-green-400";
-  if (score >= 6) return "text-yellow-600 dark:text-yellow-400";
-  return "text-red-600 dark:text-red-400";
+  if (score >= 8) return "text-green-400";
+  if (score >= 6) return "text-amber-400";
+  return "text-red-400";
 }
 
 export function statusLabel(status: string): string {
@@ -47,6 +47,38 @@ export function statusVariant(status: string): "default" | "secondary" | "destru
   return "outline";
 }
 
+export const PIPELINE_STEPS = ["draft", "trend_analysis", "outlining", "writing", "editing", "marketing", "complete"];
+
+export function getPipelinePct(status: string): number {
+  const idx = PIPELINE_STEPS.indexOf(status);
+  return idx >= 0 ? Math.round((idx / (PIPELINE_STEPS.length - 1)) * 100) : 0;
+}
+
+export const STATUS_GLOW: Record<string, string> = {
+  draft: "bg-zinc-500",
+  trend_analysis: "bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.6)]",
+  outlining: "bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.6)]",
+  writing: "bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]",
+  editing: "bg-orange-400",
+  marketing: "bg-pink-400 shadow-[0_0_6px_rgba(244,114,182,0.6)]",
+  complete: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]",
+  paused: "bg-zinc-500",
+};
+
+export const VERTICAL_ICONS: Record<string, string> = {
+  money: "\u{1F4B0}", fitness: "\u{1F4AA}", spirituality: "\u{1F9D8}", career: "\u{1F680}",
+  education: "\u{1F4DA}", relationships: "\u2764\uFE0F", health: "\u{1F3E5}", mindset: "\u{1F9E0}",
+  parenting: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", technology: "\u26A1",
+};
+
+export function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/on\w+="[^"]*"/gi, "")
+    .replace(/on\w+='[^']*'/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
 export const VERTICAL_LABELS: Record<string, string> = {
   money: "Money & Finance",
   fitness: "Fitness & Exercise",
@@ -58,30 +90,4 @@ export const VERTICAL_LABELS: Record<string, string> = {
   mindset: "Mindset & Psychology",
   parenting: "Parenting & Family",
   technology: "Technology & Innovation",
-};
-
-export const VERTICAL_BG: Record<string, string> = {
-  money: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800",
-  fitness: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800",
-  spirituality: "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800",
-  career: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
-  education: "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
-  relationships: "bg-pink-50 dark:bg-pink-950/30 border-pink-200 dark:border-pink-800",
-  health: "bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800",
-  mindset: "bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800",
-  parenting: "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800",
-  technology: "bg-slate-50 dark:bg-slate-950/30 border-slate-200 dark:border-slate-800",
-};
-
-export const VERTICAL_ACCENT: Record<string, string> = {
-  money: "text-amber-700 dark:text-amber-300",
-  fitness: "text-red-700 dark:text-red-300",
-  spirituality: "text-purple-700 dark:text-purple-300",
-  career: "text-blue-700 dark:text-blue-300",
-  education: "text-green-700 dark:text-green-300",
-  relationships: "text-pink-700 dark:text-pink-300",
-  health: "text-teal-700 dark:text-teal-300",
-  mindset: "text-indigo-700 dark:text-indigo-300",
-  parenting: "text-orange-700 dark:text-orange-300",
-  technology: "text-slate-700 dark:text-slate-300",
 };
