@@ -124,13 +124,13 @@ export default function ProjectDetail() {
   const [pdfLoading, setPdfLoading] = useState(false);
   const { startNarration } = useNarration();
 
-  const { data, isLoading, error, refetch } = useQuery<ProjectDetailData>({
-    queryKey: [`/api/projects/${projectId}`],
+  const { data, isLoading, isFetching, error, refetch } = useQuery<ProjectDetailData>({
+    queryKey: ["/api/projects", projectId],
     refetchInterval: 5000,
   });
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
+    queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
     queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
     queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
   };
@@ -404,8 +404,8 @@ export default function ProjectDetail() {
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {anyRunning && <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />}
-                  <Button size="icon" variant="ghost" onClick={() => refetch()} data-testid="button-refresh" className="h-8 w-8 text-muted-foreground/40 hover:text-purple-400" aria-label="Refresh project data">
-                    <RefreshCw className="h-3.5 w-3.5" />
+                  <Button size="icon" variant="ghost" onClick={() => { invalidate(); refetch(); }} data-testid="button-refresh" className="h-8 w-8 text-muted-foreground/40 hover:text-purple-400" aria-label="Refresh project data">
+                    <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
                   </Button>
                 </div>
               </div>
