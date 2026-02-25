@@ -192,6 +192,35 @@ export default function ProjectDetail() {
 
       let pageNum = 1;
 
+      if (data.project.coverImageUrl) {
+        try {
+          const loadCoverImage = (): Promise<string> => {
+            return new Promise((resolve, reject) => {
+              const img = new Image();
+              img.crossOrigin = "anonymous";
+              img.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext("2d")!;
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL("image/jpeg", 0.92));
+              };
+              img.onerror = () => reject(new Error("Failed to load cover"));
+              img.src = data.project.coverImageUrl!;
+            });
+          };
+          const coverDataUrl = await loadCoverImage();
+          const coverSize = Math.min(pageW - 72, pageH - 72);
+          const coverX = (pageW - coverSize) / 2;
+          const coverY = (pageH - coverSize) / 2;
+          doc.addImage(coverDataUrl, "JPEG", coverX, coverY, coverSize, coverSize);
+          doc.addPage();
+          pageNum++;
+        } catch {
+        }
+      }
+
       doc.setFont("times", "bold");
       doc.setFontSize(28);
       doc.setTextColor(40, 40, 40);
