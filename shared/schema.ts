@@ -18,6 +18,9 @@ export const VERTICALS = [
   "cooking", "travel", "photography", "music", "writing", "art", "gardening", "pets", "sports", "gaming",
   "philosophy", "history", "science", "psychology", "sociology", "politics", "law", "business", "marketing", "sales",
   "real-estate", "crypto", "ai", "cybersecurity", "productivity", "minimalism", "sustainability", "fashion", "beauty", "diy",
+  "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery", "literary-fiction", "dystopian", "erotica",
+  "memoir", "biography", "true-crime", "comedy", "adventure", "young-adult", "children", "poetry", "drama", "western",
+  "novel",
 ] as const;
 export type Vertical = typeof VERTICALS[number];
 
@@ -178,6 +181,33 @@ export const appSettings = pgTable("app_settings", {
   exportFormat: text("export_format").notNull().default("html"),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
+
+export const chatConversations = pgTable("chat_conversations", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  title: text("title").notNull().default("New Conversation"),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("chat_conversations_project_idx").on(table.projectId),
+]);
+
+export const chatMessages = pgTable("chat_messages", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  conversationId: integer("conversation_id").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("user"),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("chat_messages_conversation_idx").on(table.conversationId),
+]);
+
+export const insertChatConversationSchema = createInsertSchema(chatConversations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
+export type ChatConversation = typeof chatConversations.$inferSelect;
+export type InsertChatConversation = z.infer<typeof insertChatConversationSchema>;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 
 export const insertAppSettingsSchema = createInsertSchema(appSettings).omit({ id: true, updatedAt: true });
 export type AppSettings = typeof appSettings.$inferSelect;

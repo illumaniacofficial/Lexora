@@ -7,6 +7,16 @@ import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { z } from "zod";
 
+const FICTION_GENRES = new Set([
+  "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
+  "literary-fiction", "dystopian", "erotica", "comedy", "adventure",
+  "young-adult", "children", "drama", "western", "novel",
+]);
+
+function isFiction(vertical: string): boolean {
+  return FICTION_GENRES.has(vertical);
+}
+
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -515,10 +525,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           model: HIGH_MODEL,
           messages: [{
             role: "system",
-            content: `You are a professional book architect specializing in the ${project.vertical} niche. Respond ONLY with valid JSON.`,
+            content: `You are a professional book architect specializing in the ${project.vertical} ${isFiction(project.vertical) ? "genre" : "niche"}. Respond ONLY with valid JSON.`,
           }, {
             role: "user",
-            content: `Create a complete book outline for "${project.title}" in the ${project.vertical} vertical for ${project.targetLanguage} speaking audience.
+            content: isFiction(project.vertical)
+              ? `Create a complete book outline for the ${project.vertical} novel "${project.title}" for ${project.targetLanguage} speaking readers.
+
+Return JSON with:
+- corePromise: string (the story's central premise and hook)
+- readerAvatar: string (target reader description)
+- toneRules: string (narrative voice, POV, and style guidelines)
+- transformationArc: string (protagonist's arc from beginning to end)
+- frameworkSummary: string (the story's thematic framework and central conflict)
+- chapters: array of objects with {chapterNumber, title, blueprint (150 word description of plot events, character development, tension points, and scene details for this chapter)}
+
+Generate 15-25 chapters. Each chapter should advance the plot and deepen character arcs. Include rising action, climax, and resolution.`
+              : `Create a complete book outline for "${project.title}" in the ${project.vertical} vertical for ${project.targetLanguage} speaking audience.
 
 Return JSON with:
 - corePromise: string (the book's core transformation promise)
@@ -588,8 +610,9 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       await storage.updateChapter(chapterId, { status: "generating" });
 
       const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
+        const fiction = isFiction(project.vertical);
         const systemPrompt = dna
-          ? `You are a professional author writing in the ${project.vertical} niche.
+          ? `You are a professional ${fiction ? "fiction author" : "author"} writing ${fiction ? `a ${project.vertical} novel` : `in the ${project.vertical} niche`}.
 Book: "${project.title}"
 Core Promise: ${dna.corePromise}
 Reader Avatar: ${dna.readerAvatar}
@@ -597,16 +620,22 @@ Tone Rules: ${dna.toneRules}
 Framework: ${dna.frameworkSummary}
 Transformation Arc: ${dna.transformationArc}
 Write in ${project.targetLanguage}.`
-          : `You are a professional author writing a ${project.vertical} book titled "${project.title}". Write in ${project.targetLanguage}.`;
+          : `You are a professional ${fiction ? "fiction author" : "author"} writing a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`;
 
-        const completion = await openai.chat.completions.create({
-          model: HIGH_MODEL,
-          messages: [{
-            role: "system",
-            content: systemPrompt,
-          }, {
-            role: "user",
-            content: `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
+        const chapterInstructions = fiction
+          ? `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
+
+Blueprint: ${chapter.blueprint}
+
+Write a complete, immersive chapter of approximately 2000-3000 words. Include:
+- Vivid scene-setting and sensory details
+- Natural dialogue that reveals character
+- Rising tension and conflict
+- Character development and emotional depth
+- A compelling hook ending that pulls readers to the next chapter
+
+Write the full chapter content only, no meta-commentary. Show, don't tell.`
+          : `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
 
 Blueprint: ${chapter.blueprint}
 
@@ -617,7 +646,16 @@ Write a complete, compelling chapter of approximately 1500-2000 words. Include:
 - Actionable frameworks or exercises
 - Chapter summary and key takeaways
 
-Write the full chapter content only, no meta-commentary.`,
+Write the full chapter content only, no meta-commentary.`;
+
+        const completion = await openai.chat.completions.create({
+          model: HIGH_MODEL,
+          messages: [{
+            role: "system",
+            content: systemPrompt,
+          }, {
+            role: "user",
+            content: chapterInstructions,
           }],
           max_completion_tokens: 8192,
         });
@@ -788,6 +826,26 @@ Return JSON with:
         fashion: "stylish fashion book cover, runway photography, high-contrast black and white, chic fonts",
         beauty: "luxurious beauty book cover, soft pink and gold, floral accents, elegant script",
         diy: "hands-on DIY book cover, workshop tools, craft paper textures, bold hand-drawn type",
+        "sci-fi": "futuristic sci-fi book cover, space nebulae, holographic chrome text, starships and alien worlds, cinematic lighting",
+        fantasy: "epic fantasy book cover, enchanted landscapes, dragon silhouettes, ornate gold filigree borders, magical glow",
+        horror: "dark horror book cover, ominous shadows, dripping blood red typography, haunted atmosphere, moonlit fog",
+        romance: "passionate romance book cover, soft bokeh, flowing fabrics, warm rose and gold palette, elegant script font",
+        thriller: "intense thriller book cover, rain-soaked streets, high contrast shadows, shattered glass, tense red accents",
+        mystery: "atmospheric mystery book cover, magnifying glass, foggy alleyways, dark teal and amber, vintage detective aesthetic",
+        "literary-fiction": "sophisticated literary fiction cover, abstract watercolor art, muted earth tones, understated elegant typography",
+        dystopian: "gritty dystopian book cover, crumbling cityscapes, ash-grey skies, rebellious red accents, stark typography",
+        erotica: "sensual erotica book cover, silk and satin textures, deep burgundy and black, intimate soft lighting, tasteful elegance",
+        memoir: "personal memoir book cover, vintage photograph aesthetic, warm sepia and cream, handwritten-style title",
+        biography: "distinguished biography book cover, portrait silhouette, classic navy and gold, authoritative serif typography",
+        "true-crime": "gripping true crime book cover, crime scene tape, noir photography, stark red and black, investigative feel",
+        comedy: "bright comedy book cover, playful illustrations, bold vibrant colors, fun hand-lettered typography",
+        adventure: "thrilling adventure book cover, vast mountain landscapes, treasure maps, bold earth tones and gold accents",
+        "young-adult": "dynamic young adult book cover, vibrant gradients, swooping motion lines, bold modern typography",
+        children: "colorful children's book cover, whimsical illustrations, friendly characters, bright primary colors, rounded playful fonts",
+        poetry: "ethereal poetry book cover, watercolor florals, delicate calligraphy, soft pastels, minimalist elegance",
+        drama: "emotional drama book cover, theatrical curtain motifs, deep crimson and gold, spotlight lighting effects",
+        western: "rugged western book cover, desert sunset landscapes, leather textures, lasso motifs, weathered serif fonts",
+        novel: "elegant novel book cover, classic design, rich colors, sophisticated typography, premium literary feel",
       };
 
       const style = verticalStyles[project.vertical] || "professional book cover, modern design";
@@ -795,8 +853,8 @@ Return JSON with:
       const imageUrl = await runStep(id, "Cover Generation", IMAGE_MODEL, async () => {
         const completion = await openai.images.generate({
           model: IMAGE_MODEL,
-          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling non-fiction book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).`,
-          size: "1024x1792",
+          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).`,
+          size: "1024x1536",
           n: 1,
         });
 
@@ -1022,6 +1080,120 @@ Return JSON with:
     } catch (err: any) {
       console.error("TTS error:", err.message, err.stack);
       res.status(500).json({ error: "Failed to generate speech" });
+    }
+  });
+
+  app.get("/api/chat/conversations", async (_req, res) => {
+    try {
+      const conversations = await storage.getChatConversations();
+      res.json(conversations);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/chat/conversations", async (req, res) => {
+    try {
+      const { title, projectId } = req.body;
+      const conv = await storage.createChatConversation({
+        title: title || "New Conversation",
+        projectId: projectId || null,
+      });
+      res.json(conv);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/chat/conversations/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      await storage.deleteChatConversation(id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/chat/conversations/:id/messages", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const messages = await storage.getChatMessages(id);
+      res.json(messages);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/chat/conversations/:id/messages", async (req, res) => {
+    try {
+      const convId = parseId(req.params.id);
+      if (!convId) return res.status(400).json({ error: "Invalid ID" });
+
+      const conv = await storage.getChatConversation(convId);
+      if (!conv) return res.status(404).json({ error: "Conversation not found" });
+
+      const { content } = req.body;
+      if (!content || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ error: "Content is required" });
+      }
+
+      const userMsg = await storage.createChatMessage({
+        conversationId: convId,
+        role: "user",
+        content: content.trim(),
+      });
+
+      const history = await storage.getChatMessages(convId);
+      const chatHistory = history.map(m => ({
+        role: m.role as "user" | "assistant" | "system",
+        content: m.content,
+      }));
+
+      const completion = await openai.chat.completions.create({
+        model: HIGH_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: `You are Lexora, an expert AI book architect and writing partner. You help users plan, structure, and write books across all genres — fiction (sci-fi, fantasy, horror, romance, thriller, mystery, erotica, literary fiction, etc.) and non-fiction (self-help, business, education, etc.).
+
+Your capabilities:
+1. Help brainstorm book concepts, titles, and premises
+2. Create detailed outlines with chapter breakdowns
+3. Develop character profiles, world-building, and plot arcs for fiction
+4. Write individual chapters or scenes on request
+5. Provide feedback and suggestions on writing style, pacing, and structure
+6. Generate book DNA (core promise, reader avatar, tone rules, transformation arc)
+7. Help with marketing copy, blurbs, and descriptions
+
+When the user provides a book structure or prompt, follow their guidance precisely. Be creative, detailed, and professional. Format your responses with clear markdown headings and structure when generating outlines or long-form content.
+
+If the user wants to generate an entire book step by step, guide them through: concept → outline → chapter-by-chapter writing. Ask clarifying questions when needed.`,
+          },
+          ...chatHistory,
+        ],
+        max_completion_tokens: 8192,
+      });
+
+      const aiContent = completion.choices[0].message.content || "I couldn't generate a response. Please try again.";
+
+      const aiMsg = await storage.createChatMessage({
+        conversationId: convId,
+        role: "assistant",
+        content: aiContent,
+      });
+
+      if (history.length <= 2) {
+        const firstLine = content.trim().split("\n")[0].slice(0, 60);
+        await storage.updateChatConversation(convId, { title: firstLine || "New Conversation" });
+      }
+
+      res.json({ userMessage: userMsg, assistantMessage: aiMsg });
+    } catch (err: any) {
+      console.error("Chat error:", err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 

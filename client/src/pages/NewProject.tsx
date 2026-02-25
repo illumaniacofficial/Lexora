@@ -12,7 +12,7 @@ import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon } from "lucide-react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
-import { VERTICAL_LABELS, VERTICAL_ICONS, LANGUAGE_LABELS } from "@/lib/utils";
+import { VERTICAL_LABELS, VERTICAL_ICONS, LANGUAGE_LABELS, GENRE_GROUPS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -108,35 +108,42 @@ export default function NewProject() {
 
           <Card className="border-border/30 bg-card/40">
             <CardHeader className="pb-4">
-              <CardTitle className="text-sm font-bold tracking-tight">Market Vertical</CardTitle>
-              <CardDescription className="text-[11px] font-mono text-muted-foreground/40">Select the niche for AI tone, frameworks, and targeting</CardDescription>
+              <CardTitle className="text-sm font-bold tracking-tight">Genre / Vertical</CardTitle>
+              <CardDescription className="text-[11px] font-mono text-muted-foreground/40">Select the genre for AI tone, structure, and targeting</CardDescription>
             </CardHeader>
             <CardContent>
               <FormField control={form.control} name="vertical" render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {VERTICALS.map((v) => {
-                        const isSelected = field.value === v;
-                        return (
-                          <button
-                            key={v} type="button" onClick={() => field.onChange(v)} data-testid={`vertical-${v}`}
-                            className={`relative flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all duration-300 ${isSelected
-                              ? "border-purple-500/40 bg-purple-500/10 glow-border"
-                              : "border-border/20 bg-card/20 hover:border-border/40 hover:bg-white/[0.02]"}`}
-                          >
-                            {isSelected && (
-                              <div className="absolute top-2 right-2 h-4 w-4 rounded-full neon-glow flex items-center justify-center">
-                                <Check className="h-2.5 w-2.5 text-white" />
-                              </div>
-                            )}
-                            <span className="text-lg">{VERTICAL_ICONS[v] || "\u{1F4D6}"}</span>
-                            <span className={`text-[11px] font-bold tracking-tight ${isSelected ? "text-purple-300" : "text-muted-foreground/70"}`}>
-                              {VERTICAL_LABELS[v] || v}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="space-y-6">
+                      {GENRE_GROUPS.map((group) => (
+                        <div key={group.label}>
+                          <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2.5 px-1">{group.label}</div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {group.genres.map((v) => {
+                              const isSelected = field.value === v;
+                              return (
+                                <button
+                                  key={v} type="button" onClick={() => field.onChange(v)} data-testid={`vertical-${v}`}
+                                  className={`relative flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-300 ${isSelected
+                                    ? "border-purple-500/40 bg-purple-500/10 glow-border"
+                                    : "border-border/20 bg-card/20 hover:border-border/40 hover:bg-white/[0.02]"}`}
+                                >
+                                  {isSelected && (
+                                    <div className="absolute top-2 right-2 h-4 w-4 rounded-full neon-glow flex items-center justify-center">
+                                      <Check className="h-2.5 w-2.5 text-white" />
+                                    </div>
+                                  )}
+                                  <span className="text-lg">{VERTICAL_ICONS[v] || "\u{1F4D6}"}</span>
+                                  <span className={`text-[11px] font-bold tracking-tight ${isSelected ? "text-purple-300" : "text-muted-foreground/70"}`}>
+                                    {VERTICAL_LABELS[v] || v}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </FormControl>
                 </FormItem>

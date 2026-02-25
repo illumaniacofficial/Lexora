@@ -27,6 +27,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 9. **Full-Screen Book Reader** — Immersive book experience with paper textures, spine shadows, page edge effects, page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), progress tracking, and landscape two-page spread mode with a book spine
 10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, next-page controls, and auto-advance to next page on completion; client-side audio cache + next-page prefetching for seamless transitions; server-side TTS cache (50 entries, 10min TTL) for instant replays
 11. **Cancel Generation** — Cancel button on chapters stuck in "generating" status, resets to "pending" via PATCH endpoint with project ownership validation
+12. **Chat Studio** — Conversational AI book architect page for planning, structuring, and writing books step by step. Supports all genres (fiction and non-fiction). Persistent conversations with message history. Markdown rendering for AI responses.
 
 ## Database Schema
 
@@ -39,16 +40,35 @@ A production-grade AI publishing platform capable of generating complete books, 
 - `autopilot_config` — Autonomous publishing configuration
 - `autopilot_runs` — Run history with status, current step, tokens, cost, error tracking
 - `app_settings` — Platform settings (author defaults, AI model, chapter word target, auto-cover/marketing, TTS voice, storefront title, export format)
+- `chat_conversations` — Chat Studio conversations with title and optional project link
+- `chat_messages` — Chat messages (user/assistant roles) with conversation reference
 
 ## AI Models Used
 
 - `gpt-5.1` — High quality drafting and revisions
 - `gpt-5-mini` — Fast tasks (trend analysis, marketing, outlines)
-- `gpt-image-1` — Book cover generation (1024x1792 portrait format, hyper-realistic prompt)
+- `gpt-image-1` — Book cover generation (1024x1536 portrait format, hyper-realistic prompt)
 
-## Supported Verticals
+## Supported Genres / Verticals (61 total)
 
-money, fitness, spirituality, career, education, relationships, health, mindset, parenting, technology, cooking, travel, photography, music, writing, art, gardening, pets, sports, gaming, philosophy, history, science, psychology, sociology, politics, law, business, marketing, sales, real-estate, crypto, ai, cybersecurity, productivity, minimalism, sustainability, fashion, beauty, diy
+**Fiction**: sci-fi, fantasy, horror, romance, thriller, mystery, literary-fiction, dystopian, erotica, comedy, adventure, young-adult, children, drama, western, novel
+
+**Memoir & Biography**: memoir, biography, true-crime, poetry
+
+**Self-Help & Lifestyle**: money, fitness, spirituality, career, education, relationships, health, mindset, parenting, productivity, minimalism
+
+**Knowledge & Society**: philosophy, history, science, psychology, sociology, politics, law, technology
+
+**Business & Finance**: business, marketing, sales, real-estate, crypto, ai, cybersecurity
+
+**Creative & Hobbies**: cooking, travel, photography, music, writing, art, gardening, pets, sports, gaming, fashion, beauty, diy, sustainability
+
+## Fiction vs Non-Fiction AI Handling
+
+- Fiction genres use genre-aware prompts: character arcs, plot structure, dialogue, 15-25 chapters, 2000-3000 word chapters
+- Non-fiction genres use structured prompts: frameworks, exercises, case studies, 8-12 chapters, 1500-2000 word chapters
+- Cover generation adjusts "fiction" vs "non-fiction" in prompt based on genre type
+- `isFiction()` helper function in routes.ts determines genre type
 
 ## Supported Languages
 
@@ -59,8 +79,9 @@ english, spanish, portuguese, french, german
 - `PIPELINE_STEPS` — Ordered pipeline status array
 - `getPipelinePct(status)` — Progress percentage from status
 - `STATUS_GLOW` — Neon glow classes per status
-- `VERTICAL_ICONS` — Emoji icons per vertical
-- `VERTICAL_LABELS` — Human-readable vertical names
+- `VERTICAL_ICONS` — Emoji icons per vertical (61 genres)
+- `VERTICAL_LABELS` — Human-readable vertical names (61 genres)
+- `GENRE_GROUPS` — Categorized genre groups for UI display (Fiction, Memoir, Self-Help, Knowledge, Business, Creative)
 - `sanitizeHtml(html)` — XSS sanitization for AI-generated HTML
 - `scoreColor(score)` — Dark-only color classes for quality scores
 
@@ -105,8 +126,8 @@ english, spanish, portuguese, french, german
 ```
 server/
   index.ts             — Express server entry point with seeding
-  routes.ts            — All API routes (/api/projects, /api/trends, /api/autopilot, etc.)
-  storage.ts           — Database abstraction layer (includes deleteChaptersByProject)
+  routes.ts            — All API routes (/api/projects, /api/trends, /api/autopilot, /api/chat, etc.)
+  storage.ts           — Database abstraction layer (includes deleteChaptersByProject, chat CRUD)
   autopilot-engine.ts  — Autonomous book generation engine (topic → trend → outline → chapters → marketing)
   db.ts                — Drizzle + pg pool connection
   openai.ts            — OpenAI client setup
@@ -124,11 +145,12 @@ client/src/
   pages/
     Dashboard.tsx            — Main dashboard with stat orbs, shimmer headings
     Projects.tsx             — Project grid with glow status dots
-    NewProject.tsx           — Create project form with vertical selector
+    NewProject.tsx           — Create project form with grouped genre selector (Fiction, Non-Fiction categories)
     ProjectDetail.tsx        — Full pipeline view with neon step buttons
     TrendIntelligence.tsx    — Market analysis with cyan accent theme
     Marketing.tsx            — Marketing suite with expandable per-project content (hooks, emails, pricing, blurbs)
     Library.tsx              — Completed books library with search, filters, sorting, top-5 featured cards, ranked link list
+    ChatStudio.tsx           — Conversational AI chat for book planning and writing
     Autopilot.tsx            — Autopilot config with mesh backgrounds
     Settings.tsx             — App settings (10 configurable preferences)
 shared/

@@ -1,6 +1,6 @@
 import { db } from "./db";
 import {
-  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings,
+  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings, chatConversations, chatMessages,
   type User, type InsertUser, type Project, type InsertProject, type BookDna, type InsertBookDna,
   type TrendReport, type InsertTrendReport, type Chapter, type InsertChapter,
   type RunStep, type InsertRunStep, type MarketingAsset, type InsertMarketingAsset,
@@ -8,6 +8,8 @@ import {
   type AutopilotRun, type InsertAutopilotRun,
   type InviteToken, type InsertInviteToken,
   type AppSettings, type InsertAppSettings,
+  type ChatConversation, type InsertChatConversation,
+  type ChatMessage, type InsertChatMessage,
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
@@ -57,6 +59,14 @@ export interface IStorage {
 
   getAppSettings(): Promise<AppSettings | undefined>;
   upsertAppSettings(data: InsertAppSettings): Promise<AppSettings>;
+
+  getChatConversations(): Promise<ChatConversation[]>;
+  getChatConversation(id: number): Promise<ChatConversation | undefined>;
+  createChatConversation(data: InsertChatConversation): Promise<ChatConversation>;
+  updateChatConversation(id: number, data: Partial<InsertChatConversation>): Promise<ChatConversation>;
+  deleteChatConversation(id: number): Promise<void>;
+  getChatMessages(conversationId: number): Promise<ChatMessage[]>;
+  createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -256,6 +266,38 @@ export class DatabaseStorage implements IStorage {
       return updated;
     }
     const [created] = await db.insert(appSettings).values(data).returning();
+    return created;
+  }
+
+  async getChatConversations() {
+    return db.select().from(chatConversations).orderBy(desc(chatConversations.updatedAt));
+  }
+
+  async getChatConversation(id: number) {
+    const [conv] = await db.select().from(chatConversations).where(eq(chatConversations.id, id));
+    return conv;
+  }
+
+  async createChatConversation(data: InsertChatConversation) {
+    const [created] = await db.insert(chatConversations).values(data).returning();
+    return created;
+  }
+
+  async updateChatConversation(id: number, data: Partial<InsertChatConversation>) {
+    const [updated] = await db.update(chatConversations).set({ ...data, updatedAt: new Date() }).where(eq(chatConversations.id, id)).returning();
+    return updated;
+  }
+
+  async deleteChatConversation(id: number) {
+    await db.delete(chatConversations).where(eq(chatConversations.id, id));
+  }
+
+  async getChatMessages(conversationId: number) {
+    return db.select().from(chatMessages).where(eq(chatMessages.conversationId, conversationId)).orderBy(chatMessages.createdAt);
+  }
+
+  async createChatMessage(data: InsertChatMessage) {
+    const [created] = await db.insert(chatMessages).values(data).returning();
     return created;
   }
 

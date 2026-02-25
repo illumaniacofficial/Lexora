@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Pause, Settings,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Pause, Settings, MessageSquare,
 } from "lucide-react";
 import { useNarration } from "@/App";
 import { VOICE_OPTIONS } from "@/components/audio-mini-player";
@@ -16,6 +16,7 @@ const navItems = [
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Library", url: "/library", icon: Library },
+  { title: "Chat Studio", url: "/chat", icon: MessageSquare },
   { title: "Autopilot", url: "/autopilot", icon: Bot },
   { title: "Settings", url: "/settings", icon: Settings },
 ];

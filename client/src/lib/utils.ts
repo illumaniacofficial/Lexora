@@ -75,7 +75,38 @@ export const VERTICAL_ICONS: Record<string, string> = {
   politics: "🏛️", law: "⚖️", business: "💼", marketing: "📣", sales: "🤝",
   "real-estate": "🏠", crypto: "₿", ai: "🤖", cybersecurity: "🔒", productivity: "⏱️",
   minimalism: "◻️", sustainability: "♻️", fashion: "👗", beauty: "💄", diy: "🔨",
+  "sci-fi": "🚀", fantasy: "🐉", horror: "👻", romance: "💕", thriller: "🔪", mystery: "🔍",
+  "literary-fiction": "📖", dystopian: "🌆", erotica: "🔥",
+  memoir: "📝", biography: "👤", "true-crime": "🕵️", comedy: "😂", adventure: "⛰️",
+  "young-adult": "🌟", children: "🧸", poetry: "🪶", drama: "🎭", western: "🤠", novel: "📕",
 };
+
+export const GENRE_GROUPS = [
+  {
+    label: "Fiction",
+    genres: ["sci-fi", "fantasy", "horror", "romance", "thriller", "mystery", "literary-fiction", "dystopian", "erotica", "comedy", "adventure", "young-adult", "children", "drama", "western", "novel"],
+  },
+  {
+    label: "Memoir & Biography",
+    genres: ["memoir", "biography", "true-crime", "poetry"],
+  },
+  {
+    label: "Self-Help & Lifestyle",
+    genres: ["money", "fitness", "spirituality", "career", "education", "relationships", "health", "mindset", "parenting", "productivity", "minimalism"],
+  },
+  {
+    label: "Knowledge & Society",
+    genres: ["philosophy", "history", "science", "psychology", "sociology", "politics", "law", "technology"],
+  },
+  {
+    label: "Business & Finance",
+    genres: ["business", "marketing", "sales", "real-estate", "crypto", "ai", "cybersecurity"],
+  },
+  {
+    label: "Creative & Hobbies",
+    genres: ["cooking", "travel", "photography", "music", "writing", "art", "gardening", "pets", "sports", "gaming", "fashion", "beauty", "diy", "sustainability"],
+  },
+] as const;
 
 export function sanitizeHtml(html: string): string {
   return html
@@ -134,4 +165,24 @@ export const VERTICAL_LABELS: Record<string, string> = {
   fashion: "Fashion & Style",
   beauty: "Beauty & Skincare",
   diy: "DIY & Crafts",
+  "sci-fi": "Science Fiction",
+  fantasy: "Fantasy",
+  horror: "Horror",
+  romance: "Romance",
+  thriller: "Thriller",
+  mystery: "Mystery",
+  "literary-fiction": "Literary Fiction",
+  dystopian: "Dystopian",
+  erotica: "Erotica",
+  memoir: "Memoir",
+  biography: "Biography",
+  "true-crime": "True Crime",
+  comedy: "Comedy & Humor",
+  adventure: "Adventure",
+  "young-adult": "Young Adult",
+  children: "Children's Books",
+  poetry: "Poetry",
+  drama: "Drama",
+  western: "Western",
+  novel: "Novel",
 };
