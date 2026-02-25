@@ -181,23 +181,48 @@ export default function Library() {
               {top5.map((book) => (
                 <Link key={book.id} href={`/projects/${book.id}`}>
                   <Card
-                    className={`cursor-pointer bg-card/30 transition-all duration-300 group h-full ${getRankBorder(book.rank)}`}
+                    className={`cursor-pointer bg-card/30 transition-all duration-300 group h-full overflow-hidden ${getRankBorder(book.rank)}`}
                     data-testid={`library-featured-${book.id}`}
                   >
-                    <CardContent className="pt-5 pb-5">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono ${
-                            book.rank === 1 ? "neon-glow-fire" : book.rank <= 3 ? "neon-glow" : "bg-card/50 border border-border/20"
+                    {book.coverImageUrl && (
+                      <div className="relative w-full aspect-[3/2] overflow-hidden rounded-t-xl -mt-0 -mx-0">
+                        <img
+                          src={book.coverImageUrl}
+                          alt={`Cover for ${book.title}`}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          data-testid={`img-cover-${book.id}`}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+                        <div className="absolute top-2.5 left-2.5">
+                          <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono backdrop-blur-sm ${
+                            book.rank === 1 ? "neon-glow-fire" : book.rank <= 3 ? "neon-glow" : "bg-card/70 border border-border/20"
                           }`}>
                             {book.rank <= 3 ? getRankIcon(book.rank) : <span className="text-muted-foreground/50">#{book.rank}</span>}
                           </div>
-                          <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/20 text-emerald-400">
+                        </div>
+                        <div className="absolute top-2.5 right-2.5">
+                          <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 backdrop-blur-sm bg-card/50">
                             COMPLETE
                           </Badge>
                         </div>
-                        <span className="text-lg">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
                       </div>
+                    )}
+                    <CardContent className={`pb-5 ${book.coverImageUrl ? "pt-3" : "pt-5"}`}>
+                      {!book.coverImageUrl && (
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono ${
+                              book.rank === 1 ? "neon-glow-fire" : book.rank <= 3 ? "neon-glow" : "bg-card/50 border border-border/20"
+                            }`}>
+                              {book.rank <= 3 ? getRankIcon(book.rank) : <span className="text-muted-foreground/50">#{book.rank}</span>}
+                            </div>
+                            <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/20 text-emerald-400">
+                              COMPLETE
+                            </Badge>
+                          </div>
+                          <span className="text-lg">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
+                        </div>
+                      )}
 
                       <h3 className="font-bold text-sm tracking-tight group-hover:text-purple-300 transition-colors mb-1 line-clamp-2">{book.title}</h3>
                       <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider mb-2">
