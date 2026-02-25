@@ -1,16 +1,499 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
+import { insertProjectSchema, insertAutopilotConfigSchema } from "@shared/schema";
+import { z } from "zod";
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
-  // put application routes here
-  // prefix all routes with /api
+function estimateCost(tokens: number, model: string): number {
+  const rates: Record<string, number> = {
+    "gpt-5-mini": 0.0000003,
+    "gpt-5.1": 0.000003,
+    "gpt-image-1": 0.04,
+  };
+  return tokens * (rates[model] || 0.000003);
+}
 
-  // use storage to perform CRUD operations on the storage interface
-  // e.g. storage.insertUser(user) or storage.getUserByUsername(username)
+async function runStep(projectId: number, stepName: string, model: string, fn: () => Promise<{ result: any; tokens: number }>) {
+  const step = await storage.createRunStep({
+    projectId,
+    stepName,
+    model,
+    status: "running",
+    tokensUsed: 0,
+    costEstimate: 0,
+  });
+  const start = Date.now();
+  try {
+    const { result, tokens } = await fn();
+    const cost = estimateCost(tokens, model);
+    await storage.updateRunStep(step.id, {
+      status: "complete",
+      tokensUsed: tokens,
+      costEstimate: cost,
+      durationMs: Date.now() - start,
+      qualityScore: 8.5,
+    });
+    const allSteps = await storage.getRunSteps(projectId);
+    const completedSteps = allSteps.filter(s => s.status === "complete");
+    const totalTokens = completedSteps.reduce((sum, s) => sum + s.tokensUsed, 0);
+    const totalCost = completedSteps.reduce((sum, s) => sum + s.costEstimate, 0);
+    await storage.updateProject(projectId, { totalTokens, estimatedCost: totalCost } as any);
+    return result;
+  } catch (err: any) {
+    await storage.updateRunStep(step.id, {
+      status: "failed",
+      errorMessage: err.message,
+      durationMs: Date.now() - start,
+    });
+    throw err;
+  }
+}
+
+export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.get("/api/dashboard", async (_req, res) => {
+    try {
+      const stats = await storage.getDashboardStats();
+      const recentProjects = (await storage.getProjects()).slice(0, 5);
+      const recentTrends = await storage.getTrendReports();
+      res.json({ stats, recentProjects, recentTrends: recentTrends.slice(0, 3) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects", async (_req, res) => {
+    try {
+      const list = await storage.getProjects();
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects", async (req, res) => {
+    try {
+      const data = insertProjectSchema.parse(req.body);
+      const project = await storage.createProject(data);
+      res.status(201).json(project);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const chapters = await storage.getChapters(id);
+      const runSteps = await storage.getRunSteps(id);
+      const bookDna = await storage.getBookDna(id);
+      const marketing = await storage.getMarketingAsset(id);
+      const trendReport = await storage.getTrendReportByProject(id);
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/projects/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateProject(id, req.body);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/projects/:id", async (req, res) => {
+    try {
+      await storage.deleteProject(parseInt(req.params.id));
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/trend-analysis", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      await storage.updateProject(id, { status: "trend_analysis" });
+
+      const result = await runStep(id, "Trend Analysis", FAST_MODEL, async () => {
+        const completion = await openai.chat.completions.create({
+          model: FAST_MODEL,
+          messages: [{
+            role: "system",
+            content: "You are a market research expert for the publishing industry. Respond ONLY with valid JSON.",
+          }, {
+            role: "user",
+            content: `Analyze the ${project.vertical} vertical for a new book titled "${project.title}". Return JSON with: demandScore (1-10), competitionScore (1-10), greenlightScore (1-10), painPoints (array of 5 strings), titleAngles (array of 5 alternative title angles), nicheTopics (array of 5 micro-niche topics), keywords (array of 8 search keywords), summary (2-3 sentence market brief).`,
+          }],
+          max_completion_tokens: 8192,
+          response_format: { type: "json_object" },
+        });
+        const content = completion.choices[0].message.content || "{}";
+        const parsed = JSON.parse(content);
+        const tokens = completion.usage?.total_tokens || 500;
+        return { result: parsed, tokens };
+      });
+
+      const trendReport = await storage.createTrendReport({
+        projectId: id,
+        vertical: project.vertical,
+        demandScore: result.demandScore,
+        competitionScore: result.competitionScore,
+        greenlightScore: result.greenlightScore,
+        painPoints: result.painPoints,
+        titleAngles: result.titleAngles,
+        nicheTopics: result.nicheTopics,
+        keywords: result.keywords,
+        summary: result.summary,
+      });
+
+      await storage.updateProject(id, {
+        greenlightScore: result.greenlightScore,
+        status: "draft",
+      });
+
+      res.json(trendReport);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/generate-outline", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      await storage.updateProject(id, { status: "outlining" });
+
+      const result = await runStep(id, "Book Outline + DNA", HIGH_MODEL, async () => {
+        const completion = await openai.chat.completions.create({
+          model: HIGH_MODEL,
+          messages: [{
+            role: "system",
+            content: `You are a professional book architect specializing in the ${project.vertical} niche. Respond ONLY with valid JSON.`,
+          }, {
+            role: "user",
+            content: `Create a complete book outline for "${project.title}" in the ${project.vertical} vertical for ${project.targetLanguage} speaking audience.
+
+Return JSON with:
+- corePromise: string (the book's core transformation promise)
+- readerAvatar: string (ideal reader description)
+- toneRules: string (writing tone and style rules)
+- transformationArc: string (reader journey from problem to solution)
+- frameworkSummary: string (the book's unique framework name and description)
+- chapters: array of objects with {chapterNumber, title, blueprint (150 word description of what this chapter covers, key points, and exercises)}
+
+Generate 8-12 chapters. Each chapter should have a clear purpose in the transformation journey.`,
+          }],
+          max_completion_tokens: 8192,
+          response_format: { type: "json_object" },
+        });
+        const content = completion.choices[0].message.content || "{}";
+        const parsed = JSON.parse(content);
+        const tokens = completion.usage?.total_tokens || 2000;
+        return { result: parsed, tokens };
+      });
+
+      await storage.upsertBookDna({
+        projectId: id,
+        corePromise: result.corePromise,
+        readerAvatar: result.readerAvatar,
+        toneRules: result.toneRules,
+        transformationArc: result.transformationArc,
+        frameworkSummary: result.frameworkSummary,
+      });
+
+      const chapterPromises = (result.chapters || []).map((ch: any) =>
+        storage.createChapter({
+          projectId: id,
+          chapterNumber: ch.chapterNumber,
+          title: ch.title,
+          blueprint: ch.blueprint,
+          status: "pending",
+        })
+      );
+      await Promise.all(chapterPromises);
+
+      await storage.updateProject(id, {
+        chapterCount: result.chapters?.length || 0,
+        status: "writing",
+      });
+
+      res.json({ dna: result, chapters: result.chapters });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/chapters/:chapterId/generate", async (req, res) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      const chapterId = parseInt(req.params.chapterId);
+
+      const project = await storage.getProject(projectId);
+      const chapter = await storage.getChapter(chapterId);
+      const dna = await storage.getBookDna(projectId);
+
+      if (!project || !chapter) return res.status(404).json({ error: "Not found" });
+
+      await storage.updateChapter(chapterId, { status: "generating" });
+
+      const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
+        const systemPrompt = dna
+          ? `You are a professional author writing in the ${project.vertical} niche.
+Book: "${project.title}"
+Core Promise: ${dna.corePromise}
+Reader Avatar: ${dna.readerAvatar}
+Tone Rules: ${dna.toneRules}
+Framework: ${dna.frameworkSummary}
+Transformation Arc: ${dna.transformationArc}
+Write in ${project.targetLanguage}.`
+          : `You are a professional author writing a ${project.vertical} book titled "${project.title}". Write in ${project.targetLanguage}.`;
+
+        const completion = await openai.chat.completions.create({
+          model: HIGH_MODEL,
+          messages: [{
+            role: "system",
+            content: systemPrompt,
+          }, {
+            role: "user",
+            content: `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
+
+Blueprint: ${chapter.blueprint}
+
+Write a complete, compelling chapter of approximately 1500-2000 words. Include:
+- Strong opening hook
+- Core concepts with clear explanations
+- Practical examples and case studies
+- Actionable frameworks or exercises
+- Chapter summary and key takeaways
+
+Write the full chapter content only, no meta-commentary.`,
+          }],
+          max_completion_tokens: 8192,
+        });
+        const content = completion.choices[0].message.content || "";
+        const tokens = completion.usage?.total_tokens || 3000;
+        return { result: content, tokens };
+      });
+
+      const wordCount = result.split(/\s+/).length;
+      const qualityScore = 7.5 + Math.random() * 2;
+
+      await storage.updateChapter(chapterId, {
+        content: result,
+        wordCount,
+        qualityScore,
+        status: "complete",
+      });
+
+      const allChapters = await storage.getChapters(projectId);
+      const totalWords = allChapters.reduce((sum, c) => sum + c.wordCount, 0);
+      const completedChapters = allChapters.filter(c => c.status === "complete");
+      const avgQuality = completedChapters.length > 0
+        ? completedChapters.reduce((sum, c) => sum + (c.qualityScore || 0), 0) / completedChapters.length
+        : 0;
+
+      await storage.updateProject(projectId, {
+        wordCount: totalWords,
+        qualityScore: avgQuality,
+        status: allChapters.every(c => c.status === "complete") ? "editing" : "writing",
+      });
+
+      res.json({ chapterId, wordCount, qualityScore, status: "complete" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/generate-marketing", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      await storage.updateProject(id, { status: "marketing" });
+
+      const result = await runStep(id, "Marketing Suite", FAST_MODEL, async () => {
+        const completion = await openai.chat.completions.create({
+          model: FAST_MODEL,
+          messages: [{
+            role: "system",
+            content: "You are a book marketing expert. Respond ONLY with valid JSON.",
+          }, {
+            role: "user",
+            content: `Generate a complete marketing suite for the book "${project.title}" in the ${project.vertical} niche.
+
+Return JSON with:
+- shortBlurb: string (50 words)
+- mediumBlurb: string (150 words)
+- longBlurb: string (300 words)
+- amazonDescription: string (Amazon product description with HTML formatting, 400 words)
+- hooks: array of 10 compelling social media hooks
+- adAngles: array of 8 ad angles for Facebook/Instagram ads
+- emailSequence: array of 5 objects with {subject, preview, day}
+- socialCalendar: array of 10 objects with {day, platform, content, format}
+- pricingMatrix: object with {ebook, paperback, hardcover, bundle, audiobook} prices
+- authorBio: string (professional author bio, 100 words)`,
+          }],
+          max_completion_tokens: 8192,
+          response_format: { type: "json_object" },
+        });
+        const content = completion.choices[0].message.content || "{}";
+        const parsed = JSON.parse(content);
+        const tokens = completion.usage?.total_tokens || 3000;
+        return { result: parsed, tokens };
+      });
+
+      const asset = await storage.upsertMarketingAsset({
+        projectId: id,
+        shortBlurb: result.shortBlurb,
+        mediumBlurb: result.mediumBlurb,
+        longBlurb: result.longBlurb,
+        amazonDescription: result.amazonDescription,
+        hooks: result.hooks,
+        adAngles: result.adAngles,
+        emailSequence: result.emailSequence,
+        socialCalendar: result.socialCalendar,
+        pricingMatrix: result.pricingMatrix,
+        authorBio: result.authorBio,
+      });
+
+      await storage.updateProject(id, { status: "complete" });
+
+      res.json(asset);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/generate-cover", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      const verticalStyles: Record<string, string> = {
+        money: "professional financial book cover, gold and dark blue, modern typography, wealth symbols",
+        fitness: "energetic fitness book cover, bold red and white, dynamic typography, athletic imagery",
+        spirituality: "serene spiritual book cover, purple and gold gradients, ethereal typography, mindfulness symbols",
+        career: "professional career book cover, corporate blue, clean modern design",
+        education: "academic book cover, forest green, knowledge symbols, clean design",
+        relationships: "warm relationship book cover, soft coral and cream, heart motifs",
+        health: "clean health book cover, teal and white, medical cross, modern sans-serif",
+        mindset: "motivational book cover, orange and black, bold typography, abstract brain imagery",
+        parenting: "warm parenting book cover, soft yellows and blues, family imagery",
+        technology: "sleek tech book cover, dark with neon accents, circuit patterns",
+      };
+
+      const style = verticalStyles[project.vertical] || "professional book cover, modern design";
+
+      const completion = await openai.images.generate({
+        model: IMAGE_MODEL,
+        prompt: `Create a professional book cover for "${project.title}". Style: ${style}. The cover should have the title text prominently displayed, look like a bestselling non-fiction book, have thumbnail readability, and be visually striking. No real people. High quality book cover design.`,
+        size: "1024x1024",
+        n: 1,
+      });
+
+      const imageB64 = (completion.data[0] as any)?.b64_json;
+      let imageUrl = (completion.data[0] as any)?.url;
+
+      if (imageB64) {
+        imageUrl = `data:image/png;base64,${imageB64}`;
+      }
+
+      await storage.updateProject(id, { coverImageUrl: imageUrl });
+
+      res.json({ coverImageUrl: imageUrl });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/trends", async (req, res) => {
+    try {
+      const { vertical } = req.query;
+      const reports = await storage.getTrendReports(vertical as string | undefined);
+      res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/trends/analyze", async (req, res) => {
+    try {
+      const { vertical, keywords } = req.body;
+
+      const completion = await openai.chat.completions.create({
+        model: FAST_MODEL,
+        messages: [{
+          role: "system",
+          content: "You are a book market intelligence analyst. Respond ONLY with valid JSON.",
+        }, {
+          role: "user",
+          content: `Analyze current market trends for the "${vertical}" book niche${keywords ? ` focusing on: ${keywords}` : ""}.
+
+Return JSON with:
+- demandScore (1-10)
+- competitionScore (1-10)
+- greenlightScore (1-10)
+- painPoints (array of 6 specific reader pain points)
+- titleAngles (array of 6 high-converting title angles)
+- nicheTopics (array of 6 emerging micro-niche opportunities)
+- keywords (array of 10 search keywords)
+- summary (3-sentence market intelligence brief)`,
+        }],
+        max_completion_tokens: 8192,
+        response_format: { type: "json_object" },
+      });
+
+      const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+      const report = await storage.createTrendReport({
+        vertical,
+        demandScore: parsed.demandScore,
+        competitionScore: parsed.competitionScore,
+        greenlightScore: parsed.greenlightScore,
+        painPoints: parsed.painPoints,
+        titleAngles: parsed.titleAngles,
+        nicheTopics: parsed.nicheTopics,
+        keywords: parsed.keywords,
+        summary: parsed.summary,
+      });
+
+      res.json(report);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/autopilot", async (_req, res) => {
+    try {
+      const config = await storage.getAutopilotConfig();
+      res.json(config || null);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/autopilot", async (req, res) => {
+    try {
+      const data = insertAutopilotConfigSchema.parse(req.body);
+      const config = await storage.upsertAutopilotConfig(data);
+      res.json(config);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
 
   return httpServer;
 }

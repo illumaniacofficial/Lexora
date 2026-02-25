@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -9,10 +9,140 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
+export const insertUserSchema = createInsertSchema(users).pick({ username: true, password: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export const VERTICALS = ["money", "fitness", "spirituality", "career", "education", "relationships", "health", "mindset", "parenting", "technology"] as const;
+export type Vertical = typeof VERTICALS[number];
+
+export const LANGUAGES = ["english", "spanish", "portuguese", "french", "german"] as const;
+export type Language = typeof LANGUAGES[number];
+
+export const PROJECT_STATUSES = ["draft", "trend_analysis", "outlining", "writing", "editing", "marketing", "complete", "paused"] as const;
+export type ProjectStatus = typeof PROJECT_STATUSES[number];
+
+export const projects = pgTable("projects", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  title: text("title").notNull(),
+  vertical: text("vertical").notNull().default("money"),
+  targetLanguage: text("target_language").notNull().default("english"),
+  status: text("status").notNull().default("draft"),
+  greenlightScore: real("greenlight_score"),
+  qualityScore: real("quality_score"),
+  totalTokens: integer("total_tokens").notNull().default(0),
+  estimatedCost: real("estimated_cost").notNull().default(0),
+  wordCount: integer("word_count").notNull().default(0),
+  chapterCount: integer("chapter_count").notNull().default(0),
+  coverImageUrl: text("cover_image_url"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const bookDna = pgTable("book_dna", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  corePromise: text("core_promise"),
+  readerAvatar: text("reader_avatar"),
+  toneRules: text("tone_rules"),
+  transformationArc: text("transformation_arc"),
+  frameworkSummary: text("framework_summary"),
+  bannedPhrases: text("banned_phrases").array(),
+  keyVocabulary: text("key_vocabulary").array(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const trendReports = pgTable("trend_reports", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  vertical: text("vertical").notNull(),
+  demandScore: real("demand_score"),
+  competitionScore: real("competition_score"),
+  greenlightScore: real("greenlight_score"),
+  painPoints: text("pain_points").array(),
+  titleAngles: text("title_angles").array(),
+  nicheTopics: text("niche_topics").array(),
+  keywords: text("keywords").array(),
+  summary: text("summary"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const chapters = pgTable("chapters", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  chapterNumber: integer("chapter_number").notNull(),
+  title: text("title").notNull(),
+  blueprint: text("blueprint"),
+  content: text("content"),
+  wordCount: integer("word_count").notNull().default(0),
+  qualityScore: real("quality_score"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const runSteps = pgTable("run_steps", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  stepName: text("step_name").notNull(),
+  model: text("model").notNull().default("gpt-5.1"),
+  tokensUsed: integer("tokens_used").notNull().default(0),
+  costEstimate: real("cost_estimate").notNull().default(0),
+  qualityScore: real("quality_score"),
+  status: text("status").notNull().default("pending"),
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").notNull().default(0),
+  durationMs: integer("duration_ms"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const marketingAssets = pgTable("marketing_assets", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  shortBlurb: text("short_blurb"),
+  mediumBlurb: text("medium_blurb"),
+  longBlurb: text("long_blurb"),
+  amazonDescription: text("amazon_description"),
+  hooks: text("hooks").array(),
+  adAngles: text("ad_angles").array(),
+  emailSequence: jsonb("email_sequence"),
+  socialCalendar: jsonb("social_calendar"),
+  pricingMatrix: jsonb("pricing_matrix"),
+  authorBio: text("author_bio"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const autopilotConfig = pgTable("autopilot_config", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  vertical: text("vertical").notNull().default("money"),
+  monthlyBookTarget: integer("monthly_book_target").notNull().default(2),
+  budgetCapUsd: real("budget_cap_usd").notNull().default(50),
+  minQualityScore: real("min_quality_score").notNull().default(7.0),
+  targetLanguages: text("target_languages").array().notNull().default(sql`ARRAY['english']`),
+  isActive: boolean("is_active").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTrendReportSchema = createInsertSchema(trendReports).omit({ id: true, createdAt: true });
+export const insertMarketingAssetSchema = createInsertSchema(marketingAssets).omit({ id: true, createdAt: true });
+export const insertRunStepSchema = createInsertSchema(runSteps).omit({ id: true, createdAt: true });
+export const insertBookDnaSchema = createInsertSchema(bookDna).omit({ id: true, createdAt: true });
+export const insertAutopilotConfigSchema = createInsertSchema(autopilotConfig).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Chapter = typeof chapters.$inferSelect;
+export type InsertChapter = z.infer<typeof insertChapterSchema>;
+export type TrendReport = typeof trendReports.$inferSelect;
+export type InsertTrendReport = z.infer<typeof insertTrendReportSchema>;
+export type MarketingAsset = typeof marketingAssets.$inferSelect;
+export type InsertMarketingAsset = z.infer<typeof insertMarketingAssetSchema>;
+export type RunStep = typeof runSteps.$inferSelect;
+export type InsertRunStep = z.infer<typeof insertRunStepSchema>;
+export type BookDna = typeof bookDna.$inferSelect;
+export type InsertBookDna = z.infer<typeof insertBookDnaSchema>;
+export type AutopilotConfig = typeof autopilotConfig.$inferSelect;
+export type InsertAutopilotConfig = z.infer<typeof insertAutopilotConfigSchema>;
