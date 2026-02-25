@@ -146,7 +146,7 @@ export default function Dashboard() {
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
               <div className="flex items-center gap-3">
                 <Hexagon className="h-4 w-4 text-purple-500/60" />
-                <CardTitle className="text-sm font-bold tracking-tight">Recent Projects</CardTitle>
+                <CardTitle className="text-sm font-bold tracking-tight">In-Progress Projects</CardTitle>
               </div>
               <Link href="/projects">
                 <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-purple-400 text-[11px] font-mono" data-testid="button-view-all-projects">

@@ -161,7 +161,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const stats = await storage.getDashboardStats();
       const allProjects = await storage.getProjects();
-      const recentRaw = allProjects.slice(0, 5);
+      const inProgress = allProjects.filter(p => p.status !== "complete");
+      const recentRaw = inProgress.slice(0, 5);
       const recentProjects = await Promise.all(recentRaw.map(async (p) => {
         const chapters = await storage.getChapters(p.id);
         const trend = await storage.getTrendReportByProject(p.id);
@@ -305,7 +306,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/projects", async (_req, res) => {
     try {
-      const list = await storage.getProjects();
+      const allList = await storage.getProjects();
+      const list = allList.filter(p => p.status !== "complete");
       const enriched = await Promise.all(list.map(async (p) => {
         const chapters = await storage.getChapters(p.id);
         const trend = await storage.getTrendReportByProject(p.id);

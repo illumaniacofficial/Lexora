@@ -93,7 +93,7 @@ export default function Projects() {
             <span className="text-[9px] font-mono font-bold text-muted-foreground/40 tracking-[0.2em] uppercase">LIBRARY</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tighter">Book <span className="shimmer-text">Projects</span></h1>
-          <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">{projects.length} manuscripts in system</p>
+          <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">{projects.length} in-progress manuscripts · Completed books move to Library</p>
         </div>
         <Link href="/projects/new">
           <Button data-testid="button-new-project" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]">
