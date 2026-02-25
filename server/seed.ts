@@ -1,8 +1,56 @@
 import { db } from "./db";
-import { projects, bookDna, trendReports, chapters, marketingAssets, runSteps, appSettings, inviteTokens, bookRequests, chatConversations, chatMessages, autopilotConfig, autopilotRuns } from "@shared/schema";
+import { projects } from "@shared/schema";
 import { sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
+
+function toSnake(s: string): string {
+  return s.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
+}
+
+function escapeStr(s: string): string {
+  return s.replace(/'/g, "''").replace(/\\/g, "\\\\");
+}
+
+function escapeVal(v: any, colName: string): string {
+  if (v === null || v === undefined) return "NULL";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
+  if (Array.isArray(v)) {
+    if (v.length === 0) return "'{}'";
+    if (typeof v[0] === "string") {
+      const items = v.map(s => `"${String(s).replace(/"/g, '\\"')}"`).join(",");
+      return `ARRAY[${v.map(s => `'${escapeStr(String(s))}'`).join(",")}]::text[]`;
+    }
+    return `'${escapeStr(JSON.stringify(v))}'::jsonb`;
+  }
+  if (typeof v === "object" && v !== null) {
+    return `'${escapeStr(JSON.stringify(v))}'::jsonb`;
+  }
+  return `'${escapeStr(String(v))}'`;
+}
+
+const TABLE_MAP: Record<string, string> = {
+  projects: "projects",
+  bookDna: "book_dna",
+  chapters: "chapters",
+  trendReports: "trend_reports",
+  marketingAssets: "marketing_assets",
+  runSteps: "run_steps",
+  appSettings: "app_settings",
+  inviteTokens: "invite_tokens",
+  bookRequests: "book_requests",
+  chatConversations: "chat_conversations",
+  chatMessages: "chat_messages",
+  autopilotConfig: "autopilot_config",
+  autopilotRuns: "autopilot_runs",
+};
+
+const SEED_ORDER = [
+  "projects", "bookDna", "chapters", "trendReports", "marketingAssets",
+  "runSteps", "appSettings", "inviteTokens", "bookRequests",
+  "chatConversations", "chatMessages", "autopilotConfig", "autopilotRuns",
+];
 
 export async function seedDatabase() {
   try {
@@ -21,58 +69,44 @@ export async function seedDatabase() {
 
     if (existing.length >= seedProjectCount) return;
 
-    if (existing.length > 0 && existing.length < seedProjectCount) {
-      console.log(`Production has ${existing.length} projects, seed has ${seedProjectCount}. Clearing stale data and re-seeding...`);
-      const tablesToClear = [
-        autopilotRuns, autopilotConfig, chatMessages, chatConversations,
-        bookRequests, inviteTokens, appSettings, runSteps,
-        marketingAssets, chapters, trendReports, bookDna, projects,
-      ];
-      for (const table of tablesToClear) {
-        try { await db.delete(table); } catch {}
+    if (existing.length > 0) {
+      console.log(`Production has ${existing.length} projects, seed has ${seedProjectCount}. Clearing and re-seeding...`);
+      const clearOrder = [...SEED_ORDER].reverse();
+      for (const key of clearOrder) {
+        const tableName = TABLE_MAP[key];
+        try {
+          await db.execute(sql.raw(`DELETE FROM "${tableName}"`));
+        } catch {}
       }
     }
 
-    const orderedTables: [any, any[]][] = [
-      [projects, seedData.projects],
-      [bookDna, seedData.bookDna],
-      [chapters, seedData.chapters],
-      [trendReports, seedData.trendReports],
-      [marketingAssets, seedData.marketingAssets],
-      [runSteps, seedData.runSteps],
-      [appSettings, seedData.appSettings],
-      [inviteTokens, seedData.inviteTokens],
-      [bookRequests, seedData.bookRequests],
-      [chatConversations, seedData.chatConversations],
-      [chatMessages, seedData.chatMessages],
-      [autopilotConfig, seedData.autopilotConfig],
-      [autopilotRuns, seedData.autopilotRuns],
-    ];
-
     let totalInserted = 0;
-    for (const [table, rows] of orderedTables) {
-      if (rows && rows.length > 0) {
-        for (const row of rows) {
-          try {
-            await db.insert(table).values(row).onConflictDoNothing();
-            totalInserted++;
-          } catch {}
+    let errors = 0;
+    for (const key of SEED_ORDER) {
+      const tableName = TABLE_MAP[key];
+      const rows = seedData[key] || [];
+      for (const row of rows) {
+        try {
+          const cols = Object.keys(row);
+          const colsSql = cols.map(c => `"${toSnake(c)}"`).join(", ");
+          const valsSql = cols.map(c => escapeVal(row[c], c)).join(", ");
+          const query = `INSERT INTO "${tableName}" (${colsSql}) OVERRIDING SYSTEM VALUE VALUES (${valsSql}) ON CONFLICT DO NOTHING`;
+          await db.execute(sql.raw(query));
+          totalInserted++;
+        } catch (e: any) {
+          errors++;
+          if (errors <= 5) console.error(`Seed error [${tableName}]:`, e.message?.substring(0, 200));
         }
       }
     }
 
-    const seqTables = [
-      "projects", "chapters", "book_dna", "trend_reports", "marketing_assets",
-      "run_steps", "app_settings", "invite_tokens", "book_requests",
-      "chat_conversations", "chat_messages", "autopilot_config", "autopilot_runs",
-    ];
-    for (const table of seqTables) {
+    for (const tableName of Object.values(TABLE_MAP)) {
       try {
-        await db.execute(sql.raw(`SELECT setval(pg_get_serial_sequence('${table}', 'id'), COALESCE((SELECT MAX(id) FROM ${table}), 1))`));
+        await db.execute(sql.raw(`SELECT setval(pg_get_serial_sequence('"${tableName}"', 'id'), COALESCE((SELECT MAX(id) FROM "${tableName}"), 1))`));
       } catch {}
     }
 
-    console.log(`Database seeded with ${totalInserted} records from db-seed.json`);
+    console.log(`Database seeded with ${totalInserted} records (${errors} errors) from db-seed.json`);
   } catch (error) {
     console.error("Seeding error:", error);
   }
