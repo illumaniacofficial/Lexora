@@ -22,10 +22,11 @@ A production-grade AI publishing platform capable of generating complete books, 
 4. **Trend Intelligence** — Market analysis by vertical with demand/competition scoring
 5. **Marketing Suite** — View assets across all projects
 6. **Autopilot Mode** — Configure autonomous publishing with budget/quality controls
+7. **Book Export** — Download completed books as .txt or .html (with author name, TOC, title page)
 
 ## Database Schema
 
-- `projects` — Book projects with status, metrics, and settings
+- `projects` — Book projects with status, metrics, settings, and `authorName` field
 - `book_dna` — Core promise, reader avatar, tone rules, transformation arc
 - `trend_reports` — Market analysis with demand/greenlight scores
 - `chapters` — Individual chapters with content and quality scores
@@ -47,16 +48,23 @@ money, fitness, spirituality, career, education, relationships, health, mindset,
 
 english, spanish, portuguese, french, german
 
-## Design System
+## Design System — Futuristic Abstract Artist Aesthetic
 
-- **Primary palette**: Violet/indigo (`--primary: 252 85% 60%` light, `255 80% 68%` dark)
-- **Font**: Inter with OpenType features cv02/03/04/11, tight letter-spacing on headings
-- **Gradients**: `premium-gradient` (violet→purple→pink) for icon backgrounds, `premium-gradient-subtle` for card accents
-- **Glass effect**: `glass-card` class with backdrop-blur for header
-- **Status dots**: Colored circles (`bg-emerald-500`, `bg-amber-500`, etc.) paired with text labels
-- **Vertical color system**: `VERTICAL_LABELS`, `VERTICAL_BG`, `VERTICAL_ACCENT` maps in `client/src/lib/utils.ts`
-- **Shadows**: CSS custom properties `--shadow-sm` through `--shadow-2xl` with dark mode variants
-- **Cards**: `border-border/50 shadow-sm` base, `hover:shadow-md hover:border-primary/20` on interactive cards
+- **Dark-first palette**: Deep cosmos background (`--background: 240 15% 5%`), never uses light mode
+- **Primary**: Electric purple (`--primary: 270 100% 72%`)
+- **Font stack**: Space Grotesk (headings/body), JetBrains Mono (mono/labels), Playfair Display (serif)
+- **Neon gradients**: `.neon-glow` (purple→indigo→cyan), `.neon-glow-warm` (pink→purple→indigo), `.neon-glow-cool` (cyan→blue→purple), `.neon-glow-fire` (amber→red→pink), `.neon-glow-nature` (emerald→cyan→indigo)
+- **Aurora backgrounds**: `.aurora-bg` (multi-radial gradient overlay on main content), `.aurora-card` (card-level variant)
+- **Glassmorphism**: `.glass-panel` (frosted blur + border for header), `.glass-card` (lighter blur for cards)
+- **Glow borders**: `.glow-border` (purple), `.glow-border-cyan`, `.glow-border-pink` — subtle box-shadow + border effects
+- **Glow text**: `.glow-text`, `.glow-text-cyan`, `.glow-text-pink` — text-shadow effects
+- **Mesh backgrounds**: `.mesh-bg` — multi-radial abstract gradient overlay
+- **Animations**: `.animate-pulse-glow` (breathing opacity), `.animate-float` (levitation), `.shimmer-text` (gradient text animation)
+- **Utility classes**: `.line-glow` (horizontal separator), `.dot-grid` (background pattern), `.stat-orb` (radial glow on stat cards), `.holographic` (multi-color gradient)
+- **Status dots**: Neon glow shadows on active statuses (blue, purple, amber, pink, emerald)
+- **Mono labels**: 9-10px font-mono uppercase tracking-[0.2em] for section headers
+- **Card style**: `border-border/20 bg-card/30` base, hover transitions to purple/pink/cyan borders
+- **Interactive surfaces**: `bg-white/[0.02]` hover states, very subtle transparency
 
 ## File Structure
 
@@ -71,16 +79,16 @@ server/
 client/src/
   App.tsx                    — Root app with sidebar layout and routing
   components/
-    app-sidebar.tsx          — Navigation sidebar
-    theme-toggle.tsx         — Dark/light mode toggle
+    app-sidebar.tsx          — Navigation sidebar with neon glow branding
+    theme-toggle.tsx         — Minimal (dark-first design)
   pages/
-    Dashboard.tsx            — Main dashboard with stats
-    Projects.tsx             — Project list with filters
-    NewProject.tsx           — Create project form
-    ProjectDetail.tsx        — Full pipeline view per project
-    TrendIntelligence.tsx    — Market analysis dashboard
-    Marketing.tsx            — Marketing assets overview
-    Autopilot.tsx            — Autopilot configuration
+    Dashboard.tsx            — Main dashboard with stat orbs, shimmer headings
+    Projects.tsx             — Project grid with glow status dots
+    NewProject.tsx           — Create project form with vertical selector
+    ProjectDetail.tsx        — Full pipeline view with neon step buttons
+    TrendIntelligence.tsx    — Market analysis with cyan accent theme
+    Marketing.tsx            — Marketing overview with pink accent theme
+    Autopilot.tsx            — Autopilot config with mesh backgrounds
 shared/
   schema.ts      — All Drizzle schemas and TypeScript types
 ```

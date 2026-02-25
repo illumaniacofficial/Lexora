@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
 import Dashboard from "@/pages/Dashboard";
 import Projects from "@/pages/Projects";
 import NewProject from "@/pages/NewProject";
@@ -31,7 +30,7 @@ function Router() {
 }
 
 const sidebarStyle = {
-  "--sidebar-width": "15.5rem",
+  "--sidebar-width": "15rem",
   "--sidebar-width-icon": "3.5rem",
 };
 
@@ -43,11 +42,14 @@ function App() {
           <div className="flex h-screen w-full overflow-hidden">
             <AppSidebar />
             <div className="flex flex-col flex-1 overflow-hidden">
-              <header className="flex items-center justify-between px-5 h-14 border-b border-border/60 bg-background/80 glass-card shrink-0">
-                <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-foreground" />
-                <ThemeToggle />
+              <header className="flex items-center justify-between px-6 h-12 border-b border-border/30 glass-panel shrink-0">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-purple-400 transition-colors" />
+                <div className="flex items-center gap-3">
+                  <div className="h-1 w-8 rounded-full neon-glow opacity-60" />
+                  <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
+                </div>
               </header>
-              <main className="flex-1 overflow-hidden bg-background">
+              <main className="flex-1 overflow-hidden aurora-bg">
                 <Router />
               </main>
             </div>

@@ -7,46 +7,42 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3 } from "lucide-react";
-import { formatScore, VERTICAL_LABELS, VERTICAL_BG, VERTICAL_ACCENT } from "@/lib/utils";
+import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon } from "lucide-react";
+import { formatScore, VERTICAL_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VERTICALS } from "@shared/schema";
 import type { TrendReport } from "@shared/schema";
 
-function ScoreBar({ label, score, colorClass }: { label: string; score: number | null | undefined; colorClass: string }) {
+function ScoreBar({ label, score }: { label: string; score: number | null | undefined }) {
   const pct = score != null ? (score / 10) * 100 : 0;
+  const color = score != null && score >= 7 ? "text-emerald-400" : score != null && score >= 5 ? "text-amber-400" : "text-red-400";
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-medium text-muted-foreground">{label}</span>
-        <span className={`text-xs font-bold ${colorClass}`}>{formatScore(score)}/10</span>
+        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">{label}</span>
+        <span className={`text-[11px] font-mono font-bold ${color}`}>{formatScore(score)}/10</span>
       </div>
-      <div className="relative">
-        <Progress value={pct} className="h-2" />
-      </div>
+      <Progress value={pct} className="h-[3px]" />
     </div>
   );
 }
 
 function TrendReportCard({ report }: { report: TrendReport }) {
   const gl = report.greenlightScore || 0;
-  const glColor = gl >= 8 ? "text-emerald-600 dark:text-emerald-400" : gl >= 6 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
-  const glBg = gl >= 8 ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800" : gl >= 6 ? "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800" : "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800";
-  const bgClass = VERTICAL_BG[report.vertical] || "bg-muted";
-  const accentClass = VERTICAL_ACCENT[report.vertical] || "text-muted-foreground";
+  const glColor = gl >= 8 ? "text-emerald-400 glow-text" : gl >= 6 ? "text-amber-400" : "text-red-400";
 
   return (
-    <Card className="overflow-hidden border-border/50 shadow-sm hover:shadow-md transition-shadow" data-testid={`trend-report-${report.id}`}>
-      <div className={`px-5 py-3.5 border-b ${bgClass}`}>
+    <Card className="overflow-hidden border-border/20 bg-card/30 hover:border-purple-500/15 transition-all duration-300" data-testid={`trend-report-${report.id}`}>
+      <div className="px-5 py-3.5 border-b border-border/15 aurora-card">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
-            <p className={`text-sm font-bold ${accentClass}`}>{VERTICAL_LABELS[report.vertical] || report.vertical}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
+            <p className="text-[11px] font-mono font-bold text-purple-300/80 uppercase tracking-wider">{VERTICAL_LABELS[report.vertical] || report.vertical}</p>
+            <p className="text-[9px] font-mono text-muted-foreground/30 mt-0.5">
               {new Date(report.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </p>
           </div>
-          <Badge variant="outline" className={`text-sm font-bold px-3 py-0.5 ${glColor} ${glBg}`}>
+          <Badge variant="outline" className={`text-sm font-mono font-bold px-3 py-0.5 border-border/30 ${glColor}`}>
             GL {formatScore(report.greenlightScore)}
           </Badge>
         </div>
@@ -54,27 +50,25 @@ function TrendReportCard({ report }: { report: TrendReport }) {
 
       <CardContent className="pt-5 pb-5 space-y-5">
         {report.summary && (
-          <p className="text-sm text-muted-foreground leading-relaxed">{report.summary}</p>
+          <p className="text-[12px] text-muted-foreground/60 leading-relaxed">{report.summary}</p>
         )}
 
         <div className="space-y-3">
-          <ScoreBar label="Demand Score" score={report.demandScore}
-            colorClass={report.demandScore && report.demandScore >= 7 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"} />
-          <ScoreBar label="Competition (lower = easier)" score={report.competitionScore}
-            colorClass={report.competitionScore && report.competitionScore <= 5 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"} />
+          <ScoreBar label="Demand" score={report.demandScore} />
+          <ScoreBar label="Competition" score={report.competitionScore} />
         </div>
 
         {report.painPoints && report.painPoints.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-2.5">
-              <Target className="h-3.5 w-3.5 text-red-500" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Pain Points</p>
+              <Target className="h-3 w-3 text-red-400/60" />
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Pain Points</p>
             </div>
             <div className="space-y-1.5">
               {report.painPoints.slice(0, 4).map((p, i) => (
-                <div key={i} className="flex items-start gap-2.5 text-sm">
-                  <span className="shrink-0 flex h-5 w-5 mt-0.5 items-center justify-center rounded-md bg-red-100 dark:bg-red-900/30 text-[10px] font-bold text-red-600 dark:text-red-400">{i + 1}</span>
-                  <span className="text-muted-foreground leading-snug">{p}</span>
+                <div key={i} className="flex items-start gap-2.5 text-[11px]">
+                  <span className="shrink-0 flex h-4 w-4 mt-0.5 items-center justify-center rounded bg-red-500/10 border border-red-500/20 text-[8px] font-mono font-bold text-red-400">{i + 1}</span>
+                  <span className="text-muted-foreground/60 leading-snug">{p}</span>
                 </div>
               ))}
             </div>
@@ -84,12 +78,12 @@ function TrendReportCard({ report }: { report: TrendReport }) {
         {report.titleAngles && report.titleAngles.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-2.5">
-              <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Title Angles</p>
+              <Lightbulb className="h-3 w-3 text-amber-400/60" />
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Title Angles</p>
             </div>
             <div className="space-y-1.5">
               {report.titleAngles.slice(0, 4).map((t, i) => (
-                <div key={i} className="text-xs bg-muted/50 rounded-lg px-3 py-2 text-foreground font-medium">{t}</div>
+                <div key={i} className="text-[11px] bg-white/[0.02] border border-border/15 rounded-lg px-3 py-2 font-mono text-muted-foreground/70">{t}</div>
               ))}
             </div>
           </div>
@@ -98,12 +92,12 @@ function TrendReportCard({ report }: { report: TrendReport }) {
         {report.nicheTopics && report.nicheTopics.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-2.5">
-              <Zap className="h-3.5 w-3.5 text-primary" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Niche Opportunities</p>
+              <Zap className="h-3 w-3 text-purple-400/60" />
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Niche Ops</p>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {report.nicheTopics.map((t, i) => (
-                <Badge key={i} variant="secondary" className="text-[11px] font-medium">{t}</Badge>
+                <Badge key={i} variant="secondary" className="text-[10px] font-mono border-border/20 bg-purple-500/5 text-purple-300/70">{t}</Badge>
               ))}
             </div>
           </div>
@@ -112,12 +106,12 @@ function TrendReportCard({ report }: { report: TrendReport }) {
         {report.keywords && report.keywords.length > 0 && (
           <div>
             <div className="flex items-center gap-1.5 mb-2.5">
-              <Hash className="h-3.5 w-3.5 text-blue-500" />
-              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Keywords</p>
+              <Hash className="h-3 w-3 text-cyan-400/60" />
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Keywords</p>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {report.keywords.map((k, i) => (
-                <span key={i} className="text-[11px] bg-primary/10 text-primary rounded-full px-2.5 py-1 font-semibold">{k}</span>
+                <span key={i} className="text-[10px] bg-cyan-500/5 border border-cyan-500/15 text-cyan-300/70 rounded-full px-2.5 py-1 font-mono">{k}</span>
               ))}
             </div>
           </div>
@@ -147,76 +141,58 @@ export default function TrendIntelligence() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
-      toast({ title: "Trend analysis complete!", description: `Market intelligence for ${VERTICAL_LABELS[analyzeVertical] || analyzeVertical} is ready.` });
+      toast({ title: "Analysis complete" });
     },
     onError: (err: any) => toast({ title: "Analysis failed", description: err.message, variant: "destructive" }),
   });
 
   return (
     <div className="p-8 space-y-7 overflow-y-auto h-full">
-      <div className="flex items-center gap-3.5">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-md">
-          <TrendingUp className="h-5 w-5 text-white" />
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Hexagon className="h-3 w-3 text-cyan-500/50" />
+          <span className="text-[9px] font-mono font-bold text-cyan-400/60 tracking-[0.2em] uppercase">INTELLIGENCE</span>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Trend Intelligence</h1>
-          <p className="text-muted-foreground text-sm">AI-powered market analysis for your publishing verticals</p>
-        </div>
+        <h1 className="text-3xl font-bold tracking-tighter">Trend <span className="shimmer-text">Analysis</span></h1>
+        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">AI-powered market intelligence for publishing verticals</p>
       </div>
 
-      <Card className="border-primary/15 premium-gradient-subtle shadow-sm overflow-hidden relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent pointer-events-none" />
+      <div className="line-glow" />
+
+      <Card className="border-border/20 bg-card/30 glow-border-cyan overflow-hidden relative">
+        <div className="absolute inset-0 mesh-bg opacity-30 pointer-events-none" />
         <CardHeader className="pb-3 relative">
-          <CardTitle className="text-base font-bold flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-primary" />
+          <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-cyan-400/70" />
             Run Market Analysis
           </CardTitle>
-          <CardDescription>Generate AI-powered demand scores, pain point clusters, and greenlight scores</CardDescription>
+          <CardDescription className="text-[11px] font-mono text-muted-foreground/40">Generate demand scores, pain points, and greenlight scores</CardDescription>
         </CardHeader>
         <CardContent className="relative">
           <div className="flex items-end gap-3 flex-wrap">
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Vertical</label>
+              <label className="text-[9px] font-mono font-bold text-muted-foreground/40 uppercase tracking-[0.15em]">Vertical</label>
               <Select value={analyzeVertical} onValueChange={setAnalyzeVertical}>
-                <SelectTrigger className="w-52 h-10 bg-background/80 border-border/60" data-testid="select-analyze-vertical">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {VERTICALS.map(v => (
-                    <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>
-                  ))}
-                </SelectContent>
+                <SelectTrigger className="w-52 h-10 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="select-analyze-vertical"><SelectValue /></SelectTrigger>
+                <SelectContent>{VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5 flex-1 min-w-48">
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Focus Keywords (optional)</label>
-              <Input
-                placeholder="e.g., passive income, side hustle, financial freedom"
-                value={keywords}
-                onChange={e => setKeywords(e.target.value)}
-                data-testid="input-keywords"
-                className="h-10 bg-background/80 border-border/60"
-              />
+              <label className="text-[9px] font-mono font-bold text-muted-foreground/40 uppercase tracking-[0.15em]">Keywords (optional)</label>
+              <Input placeholder="e.g., passive income, side hustle" value={keywords} onChange={e => setKeywords(e.target.value)} data-testid="input-keywords" className="h-10 bg-card/30 border-border/30 font-mono text-[12px] focus:border-cyan-500/40" />
             </div>
-            <Button
-              onClick={() => analyzeMutation.mutate()}
-              disabled={analyzeMutation.isPending}
-              data-testid="button-analyze"
-              className="h-10 shadow-sm"
-            >
+            <Button onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending} data-testid="button-analyze" className="h-10 neon-glow-cool text-white border-0 shadow-[0_0_20px_-5px_rgba(6,182,212,0.4)] font-mono text-[12px]">
               {analyzeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
-              {analyzeMutation.isPending ? "Analyzing..." : "Run Analysis"}
+              {analyzeMutation.isPending ? "ANALYZING..." : "RUN ANALYSIS"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-bold text-lg tracking-tight">Analysis Reports ({reports.length})</h2>
+        <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">Reports ({reports.length})</h2>
         <Select value={selectedVertical} onValueChange={setSelectedVertical}>
-          <SelectTrigger className="w-44 h-10 bg-card border-border/60" data-testid="select-filter-vertical">
-            <SelectValue placeholder="All Verticals" />
-          </SelectTrigger>
+          <SelectTrigger className="w-44 h-9 bg-card/30 border-border/30 font-mono text-[11px]" data-testid="select-filter-vertical"><SelectValue placeholder="All Verticals" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Verticals</SelectItem>
             {VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}
@@ -225,15 +201,13 @@ export default function TrendIntelligence() {
       </div>
 
       {analyzeMutation.isPending && (
-        <Card className="border-primary/20 premium-gradient-subtle shadow-sm">
+        <Card className="border-cyan-500/20 bg-card/30">
           <CardContent className="pt-6 pb-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                <Loader2 className="h-5 w-5 text-primary animate-spin" />
-              </div>
+              <Loader2 className="h-6 w-6 text-cyan-400 animate-spin" />
               <div>
-                <p className="font-semibold text-sm">Running AI market analysis...</p>
-                <p className="text-xs text-muted-foreground">Analyzing trends, pain points, and opportunities for {VERTICAL_LABELS[analyzeVertical]}</p>
+                <p className="font-bold text-sm tracking-tight">Running AI analysis...</p>
+                <p className="text-[10px] font-mono text-muted-foreground/40">Scanning {VERTICAL_LABELS[analyzeVertical]}</p>
               </div>
             </div>
           </CardContent>
@@ -242,16 +216,17 @@ export default function TrendIntelligence() {
 
       {isLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-96 rounded-xl" />)}
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-96 rounded-xl bg-muted/20" />)}
         </div>
       ) : reports.length === 0 ? (
-        <Card className="border-border/50 shadow-sm">
+        <Card className="border-border/20 bg-card/30">
           <CardContent className="flex flex-col items-center justify-center py-20">
-            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900/30 dark:to-cyan-900/30 flex items-center justify-center mb-5">
-              <TrendingUp className="h-7 w-7 text-blue-500" />
+            <div className="relative">
+              <div className="absolute inset-0 neon-glow-cool opacity-20 blur-2xl rounded-full" />
+              <TrendingUp className="h-12 w-12 text-cyan-500/30 relative" />
             </div>
-            <p className="font-semibold text-lg">No trend reports yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Run your first market analysis above to get started</p>
+            <p className="font-bold text-lg mt-5 tracking-tight">No reports yet</p>
+            <p className="text-[11px] text-muted-foreground/40 font-mono mt-1">Run your first analysis above</p>
           </CardContent>
         </Card>
       ) : (
