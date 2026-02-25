@@ -764,8 +764,8 @@ Return JSON with:
       const imageUrl = await runStep(id, "Cover Generation", IMAGE_MODEL, async () => {
         const completion = await openai.images.generate({
           model: IMAGE_MODEL,
-          prompt: `Create a professional book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. The cover should have the title text prominently displayed and the author name "${project.authorName || "Unknown Author"}" clearly visible at the bottom. It should look like a bestselling non-fiction book, have thumbnail readability, and be visually striking. No real people. High quality book cover design.`,
-          size: "1024x1024",
+          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling non-fiction book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).`,
+          size: "1024x1792",
           n: 1,
         });
 

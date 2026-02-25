@@ -89,6 +89,11 @@ async function findIncompleteProject(vertical: string): Promise<{ id: number; ti
   return incomplete || null;
 }
 
+async function hasCompletedBookInVertical(vertical: string): Promise<boolean> {
+  const allProjects = await storage.getProjects();
+  return allProjects.some(p => p.vertical === vertical && p.status === "complete");
+}
+
 function getResumeStep(status: string, hasTrend: boolean, hasChapters: boolean, allChaptersComplete: boolean, hasMarketing: boolean): string {
   if (!hasTrend) return "trend_analysis";
   if (!hasChapters) return "outlining";
@@ -351,6 +356,16 @@ export async function executeAutopilotRun(runId: number, vertical: string, langu
         currentStep: `Resuming: "${bookTitle}"`,
       });
     } else {
+      const alreadyCompleted = await hasCompletedBookInVertical(vertical);
+      if (alreadyCompleted) {
+        await storage.updateAutopilotRun(runId, {
+          status: "complete",
+          currentStep: "Skipped — a completed book already exists in this vertical",
+          completedAt: new Date(),
+        });
+        return;
+      }
+
       await storage.updateAutopilotRun(runId, { status: "running", currentStep: "Generating topic" });
 
       const topicCompletion = await openai.chat.completions.create({

@@ -34,7 +34,7 @@ function TrendReportCard({ report }: { report: TrendReport }) {
   const glColor = gl >= 8 ? "text-emerald-400 glow-text" : gl >= 6 ? "text-amber-400" : "text-red-400";
 
   return (
-    <Card className="overflow-hidden border-border/20 bg-card/30 hover:border-purple-500/15 transition-all duration-300" data-testid={`trend-report-${report.id}`}>
+    <Card className="border-border/20 bg-card/30 hover:border-purple-500/15 transition-all duration-300" data-testid={`trend-report-${report.id}`}>
       <div className="px-5 py-3.5 border-b border-border/15 aurora-card">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2.5">

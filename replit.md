@@ -44,7 +44,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 
 - `gpt-5.1` — High quality drafting and revisions
 - `gpt-5-mini` — Fast tasks (trend analysis, marketing, outlines)
-- `gpt-image-1` — Book cover generation
+- `gpt-image-1` — Book cover generation (1024x1792 portrait format, hyper-realistic prompt)
 
 ## Supported Verticals
 
@@ -73,6 +73,7 @@ english, spanish, portuguese, french, german
 - Export endpoint validates `format` query param (only `txt`/`html` allowed)
 - Pipeline failures revert project status to `prevStatus` (trend analysis, outline, marketing, cover generation) and chapter status to `pending` on generation failure
 - Cancel chapter generation: `PATCH /api/projects/:id/chapters/:chapterId/cancel` resets stuck chapters with project ownership validation
+- Autopilot duplicate prevention: checks for completed books in vertical before generating new ones
 - Book reader persists theme and font size preferences in localStorage with validation/fallback
 - `ErrorBoundary` component wraps entire app for React render error recovery
 - All pages with `useQuery` have error state UI (AlertCircle + message), including ProjectDetail
@@ -117,7 +118,7 @@ client/src/
     app-sidebar.tsx          — Navigation sidebar with neon glow branding, "Now Playing" narration indicator, "Share & Invites" quick link
     error-boundary.tsx       — Global React error boundary with recovery UI
     markdown-renderer.tsx    — Shared markdown rendering (MarkdownRenderer for light/reader, MarkdownRendererDark for dark UI, stripMarkdown utility)
-    book-reader.tsx          — Full-screen immersive book reader with page flip animations, font size, themes, and AI narrator
+    book-reader.tsx          — Full-screen immersive book reader with page flip animations, font size, themes, AI narrator, touch swipe navigation, mobile-optimized toolbar, and close buttons on all dropdown panels
     audio-mini-player.tsx    — Floating narration mini-player (persists after closing reader) with play/pause/replay/next
     theme-toggle.tsx         — Minimal (dark-first design)
   pages/

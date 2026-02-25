@@ -253,14 +253,14 @@ function DarkMarkdownRenderer({ content, theme }: { content: string; theme: Page
         if (trimmed.startsWith("### ") || trimmed.startsWith("#### ")) return <h4 key={i} className={cn("font-serif text-base font-bold mt-3 mb-2", t.heading)}>{trimmed.replace(/^#+\s*/, "")}</h4>;
         if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
           const items = trimmed.split(/\n/).filter(l => l.trim());
-          return <ul key={i} className="list-disc pl-5 mb-3 space-y-1">{items.map((item, j) => <li key={j} className={cn("font-serif text-sm leading-relaxed", t.text)}>{item.replace(/^[-*]\s*/, "")}</li>)}</ul>;
+          return <ul key={i} className="list-disc pl-5 mb-3 space-y-1">{items.map((item, j) => <li key={j} className={cn("font-serif leading-relaxed", t.text)}>{item.replace(/^[-*]\s*/, "")}</li>)}</ul>;
         }
         if (trimmed.startsWith(">")) {
           const quoteText = trimmed.split("\n").map(l => l.replace(/^>\s*/, "")).join(" ");
-          return <blockquote key={i} className={cn("border-l-2 pl-4 my-3 italic font-serif text-sm leading-relaxed", t.accent, t.divider.replace("bg-", "border-"))}>{quoteText}</blockquote>;
+          return <blockquote key={i} className={cn("border-l-2 pl-4 my-3 italic font-serif leading-relaxed", t.accent, t.divider.replace("bg-", "border-"))}>{quoteText}</blockquote>;
         }
         if (/^[-*]{3,}$/.test(trimmed)) return <div key={i} className={cn("w-12 h-[1px] mx-auto my-4", t.divider)} />;
-        return <p key={i} className={cn("font-serif text-sm leading-[1.9] mb-3 text-justify indent-6", t.text)}>{trimmed.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*([^*]+?)\*/g, "$1")}</p>;
+        return <p key={i} className={cn("font-serif leading-[1.9] mb-3 text-justify indent-6", t.text)}>{trimmed.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*([^*]+?)\*/g, "$1")}</p>;
       })}
     </div>
   );
@@ -337,6 +337,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const narrationAnimRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoNarRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const isLandscape = useIsLandscape();
   const showDual = isLandscape && dualPage;
 
@@ -559,6 +560,24 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     return () => window.removeEventListener("keydown", handler);
   }, [next, prev, handleClose, adjustFontSize]);
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const dt = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+    if (dt > 500 || Math.abs(dy) > Math.abs(dx)) return;
+    const minSwipe = 50;
+    if (dx < -minSwipe) next();
+    else if (dx > minSwipe) prev();
+  }, [next, prev]);
+
   const page = pages[currentPage];
   const rightPage = showDual && currentPage + 1 < pages.length ? pages[currentPage + 1] : null;
   const t = THEMES[theme];
@@ -569,18 +588,19 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const closeAllPanels = () => { setShowToc(false); setShowSettings(false); setShowNarrator(false); };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center select-none" ref={containerRef}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center select-none" ref={containerRef}
+      onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
       <div className={cn("absolute inset-0 backdrop-blur-xl", isDark ? "bg-black/95" : "bg-stone-900/95")} onClick={handleClose} />
 
-      <div className={cn("relative mx-4 h-[92vh] flex flex-col", showDual ? "w-full max-w-6xl" : "w-full max-w-3xl")}>
+      <div className={cn("relative mx-2 sm:mx-4 h-[92vh] flex flex-col", showDual ? "w-full max-w-6xl" : "w-full max-w-3xl")}>
         <div className="flex items-center justify-between mb-2 px-2 relative z-10">
           <div className="flex items-center gap-1.5 flex-wrap">
             <Button size="sm" variant="ghost"
               onClick={() => { closeAllPanels(); setShowToc(!showToc); }}
-              className={cn("h-8 text-xs font-mono", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
+              className={cn("h-8 text-xs font-mono px-2 sm:px-3", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
               data-testid="button-reader-toc" aria-label="Table of contents"
             >
-              <List className="h-3.5 w-3.5 mr-1" /> TOC
+              <List className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">TOC</span>
             </Button>
 
             <div className={cn("flex items-center gap-0.5 rounded-lg border px-1", isDark ? "border-stone-700 bg-stone-800/50" : "border-stone-600 bg-stone-800/50")}>
@@ -595,18 +615,18 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
             <Button size="sm" variant="ghost"
               onClick={() => { closeAllPanels(); setShowSettings(!showSettings); }}
-              className={cn("h-8 text-xs font-mono", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
+              className={cn("h-8 text-xs font-mono px-2 sm:px-3", isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
               data-testid="button-reader-theme" aria-label="Change page theme"
             >
-              <Palette className="h-3.5 w-3.5 mr-1" /> Theme
+              <Palette className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">Theme</span>
             </Button>
 
             <Button size="sm" variant="ghost"
               onClick={() => { closeAllPanels(); setShowNarrator(!showNarrator); }}
-              className={cn("h-8 text-xs font-mono", isNarrating ? "text-purple-300" : isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
+              className={cn("h-8 text-xs font-mono px-2 sm:px-3", isNarrating ? "text-purple-300" : isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
               data-testid="button-reader-narrator" aria-label="AI Narrator"
             >
-              <Volume2 className={cn("h-3.5 w-3.5 mr-1", isNarrating && "animate-pulse")} /> Narrator
+              <Volume2 className={cn("h-3.5 w-3.5 sm:mr-1", isNarrating && "animate-pulse")} /> <span className="hidden sm:inline">Narrator</span>
             </Button>
 
             {isLandscape && (
@@ -646,7 +666,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
         {showSettings && (
           <div className={cn("absolute left-0 top-11 z-20 w-64 rounded-xl shadow-2xl p-4", "bg-stone-800 border border-stone-700")}>
-            <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider mb-3">Page Theme</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider">Page Theme</p>
+              <button onClick={() => setShowSettings(false)} className="h-5 w-5 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close theme panel" data-testid="button-close-theme"><X className="h-3 w-3" /></button>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               {(Object.keys(THEMES) as PageTheme[]).map(key => {
                 const th = THEMES[key]; const active = key === theme;
@@ -677,9 +700,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
         {showNarrator && (
           <div className={cn("absolute left-0 top-11 z-20 w-72 rounded-xl shadow-2xl p-4", "bg-stone-800 border border-stone-700")}>
-            <div className="flex items-center gap-1.5 mb-3">
-              <Volume2 className="h-3 w-3 text-purple-400" />
-              <p className="text-[10px] font-mono text-purple-400/80 uppercase tracking-wider">AI Narrator</p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <Volume2 className="h-3 w-3 text-purple-400" />
+                <p className="text-[10px] font-mono text-purple-400/80 uppercase tracking-wider">AI Narrator</p>
+              </div>
+              <button onClick={() => setShowNarrator(false)} className="h-5 w-5 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close narrator panel" data-testid="button-close-narrator"><X className="h-3 w-3" /></button>
             </div>
             <p className="text-[10px] text-stone-400 mb-3">Choose a voice, then hit play. Narrator auto-turns pages when done.</p>
             <div className="space-y-1.5 mb-3">
@@ -722,7 +748,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
         {showToc && (
           <div className={cn("absolute left-0 top-11 z-20 w-72 rounded-xl shadow-2xl p-4 max-h-[60vh] overflow-y-auto", "bg-stone-800 border border-stone-700")}>
-            <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider mb-3">Jump to</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider">Jump to</p>
+              <button onClick={() => setShowToc(false)} className="h-5 w-5 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close table of contents" data-testid="button-close-toc"><X className="h-3 w-3" /></button>
+            </div>
             {pages.map((p, i) => {
               let label = "";
               if (p.type === "cover") label = "Cover";
@@ -741,9 +770,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
         <div className="flex-1 flex items-stretch relative min-h-0">
           <button onClick={prev} disabled={currentPage === 0}
-            className={cn("absolute left-0 top-0 bottom-0 w-12 sm:w-16 z-10 flex items-center justify-center disabled:opacity-0 transition-all duration-200 -ml-12 sm:-ml-14",
-              isDark ? "text-stone-500 hover:text-stone-200" : "text-stone-500 hover:text-white")}
-            aria-label="Previous page" data-testid="button-reader-prev"><ChevronLeft className="h-8 w-8" /></button>
+            className={cn("absolute left-0 top-0 bottom-0 w-10 sm:w-14 z-10 flex items-center justify-center disabled:opacity-0 transition-all duration-200",
+              isDark ? "text-stone-500 hover:text-stone-200" : "text-stone-500 hover:text-white",
+              "bg-gradient-to-r from-black/20 to-transparent sm:from-transparent")}
+            aria-label="Previous page" data-testid="button-reader-prev"><ChevronLeft className="h-6 w-6 sm:h-8 sm:w-8" /></button>
 
           <div className="flex-1 relative min-h-0">
             {showDual ? (
@@ -779,9 +809,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           </div>
 
           <button onClick={next} disabled={showDual ? currentPage + 2 >= pages.length : currentPage === pages.length - 1}
-            className={cn("absolute right-0 top-0 bottom-0 w-12 sm:w-16 z-10 flex items-center justify-center disabled:opacity-0 transition-all duration-200 -mr-12 sm:-mr-14",
-              isDark ? "text-stone-500 hover:text-stone-200" : "text-stone-500 hover:text-white")}
-            aria-label="Next page" data-testid="button-reader-next"><ChevronRight className="h-8 w-8" /></button>
+            className={cn("absolute right-0 top-0 bottom-0 w-10 sm:w-14 z-10 flex items-center justify-center disabled:opacity-0 transition-all duration-200",
+              isDark ? "text-stone-500 hover:text-stone-200" : "text-stone-500 hover:text-white",
+              "bg-gradient-to-l from-black/20 to-transparent sm:from-transparent")}
+            aria-label="Next page" data-testid="button-reader-next"><ChevronRight className="h-6 w-6 sm:h-8 sm:w-8" /></button>
         </div>
 
         <div className="flex justify-center gap-1 mt-2 px-2">
