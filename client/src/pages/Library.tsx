@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,9 +39,15 @@ export default function Library() {
   const [search, setSearch] = useState("");
   const [verticalFilter, setVerticalFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortKey>("rank");
-  const [showInvites, setShowInvites] = useState(false);
+  const [showInvites, setShowInvites] = useState(() => window.location.hash === "#invites");
   const [inviteLabel, setInviteLabel] = useState("");
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (window.location.hash === "#invites") {
+      setShowInvites(true);
+    }
+  }, []);
 
   const { data: books = [], isLoading, error } = useQuery<LibraryBook[]>({ queryKey: ["/api/library"] });
   const { data: invites = [] } = useQuery<InviteToken[]>({ queryKey: ["/api/invites"] });

@@ -1,4 +1,4 @@
-import { useState, createContext, useContext, useCallback } from "react";
+import { useState, createContext, useContext, useCallback, lazy, Suspense } from "react";
 import { Switch, Route, useRoute } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,16 +9,18 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import AudioMiniPlayer, { type NarrationState } from "@/components/audio-mini-player";
-import Dashboard from "@/pages/Dashboard";
-import Projects from "@/pages/Projects";
-import NewProject from "@/pages/NewProject";
-import ProjectDetail from "@/pages/ProjectDetail";
-import TrendIntelligence from "@/pages/TrendIntelligence";
-import Marketing from "@/pages/Marketing";
-import Autopilot from "@/pages/Autopilot";
-import Library from "@/pages/Library";
-import Storefront from "@/pages/Storefront";
-import NotFound from "@/pages/not-found";
+import { Loader2 } from "lucide-react";
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Projects = lazy(() => import("@/pages/Projects"));
+const NewProject = lazy(() => import("@/pages/NewProject"));
+const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
+const TrendIntelligence = lazy(() => import("@/pages/TrendIntelligence"));
+const Marketing = lazy(() => import("@/pages/Marketing"));
+const Autopilot = lazy(() => import("@/pages/Autopilot"));
+const Library = lazy(() => import("@/pages/Library"));
+const Storefront = lazy(() => import("@/pages/Storefront"));
+const NotFound = lazy(() => import("@/pages/not-found"));
 
 interface NarrationContextType {
   narrationState: NarrationState | null;
@@ -36,19 +38,29 @@ export function useNarration() {
   return useContext(NarrationContext);
 }
 
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <Loader2 className="h-8 w-8 animate-spin text-purple-400/50" />
+    </div>
+  );
+}
+
 function AdminRouter() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/projects" component={Projects} />
-      <Route path="/projects/new" component={NewProject} />
-      <Route path="/projects/:id" component={ProjectDetail} />
-      <Route path="/trends" component={TrendIntelligence} />
-      <Route path="/marketing" component={Marketing} />
-      <Route path="/autopilot" component={Autopilot} />
-      <Route path="/library" component={Library} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/projects" component={Projects} />
+        <Route path="/projects/new" component={NewProject} />
+        <Route path="/projects/:id" component={ProjectDetail} />
+        <Route path="/trends" component={TrendIntelligence} />
+        <Route path="/marketing" component={Marketing} />
+        <Route path="/autopilot" component={Autopilot} />
+        <Route path="/library" component={Library} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
@@ -83,7 +95,11 @@ function AppRouter() {
   const [isStore] = useRoute("/store/:token");
 
   if (isStore) {
-    return <Storefront />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <Storefront />
+      </Suspense>
+    );
   }
 
   return <AdminLayout />;

@@ -4,8 +4,10 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, BookOpen, Zap, Hexagon, Library,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, BookOpen, Zap, Hexagon, Library, Share2, Volume2, Pause,
 } from "lucide-react";
+import { useNarration } from "@/App";
+import { VOICE_OPTIONS } from "@/components/audio-mini-player";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -18,6 +20,7 @@ const navItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const { narrationState } = useNarration();
 
   return (
     <Sidebar>
@@ -73,13 +76,45 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {narrationState && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-[9px] uppercase tracking-[0.2em] font-mono font-bold text-purple-400/50 px-3 mb-2">
+              <Volume2 className="h-2.5 w-2.5 mr-1.5 inline" />
+              NOW PLAYING
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div className="mx-2 p-3 rounded-xl border border-purple-500/20 bg-purple-500/5" data-testid="sidebar-now-playing">
+                <p className="text-[11px] font-medium truncate text-purple-200">{narrationState.bookTitle}</p>
+                <p className="text-[9px] font-mono text-muted-foreground/40 truncate mt-0.5">
+                  Ch {narrationState.chapterNumber} · pg {narrationState.pageInChapter}/{narrationState.totalPagesInChapter}
+                </p>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
+                  <span className="text-[8px] font-mono text-purple-400/50 uppercase tracking-widest">
+                    {VOICE_OPTIONS.find(v => v.value === narrationState.voice)?.label}
+                  </span>
+                </div>
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/30 px-5 py-4">
-        <div className="flex items-center gap-2.5">
-          <Zap className="h-3.5 w-3.5 text-cyan-400 drop-shadow-[0_0_6px_rgba(6,182,212,0.5)]" />
-          <span className="text-[10px] font-mono text-muted-foreground/60 tracking-wider uppercase">
-            AI · PUBLISHING · 2026
+      <SidebarFooter className="border-t border-border/30 px-4 py-3 space-y-2">
+        <Link href="/library#invites">
+          <button
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[11px] font-mono text-muted-foreground/50 hover:text-purple-300 hover:bg-purple-500/5 transition-all border border-transparent hover:border-purple-500/15"
+            data-testid="button-sidebar-invites"
+          >
+            <Share2 className="h-3.5 w-3.5 text-purple-400/50" />
+            <span className="tracking-wider uppercase">Share & Invites</span>
+          </button>
+        </Link>
+        <div className="flex items-center gap-2.5 px-3">
+          <Zap className="h-3 w-3 text-cyan-400/50" />
+          <span className="text-[9px] font-mono text-muted-foreground/40 tracking-wider uppercase">
+            v3.0
           </span>
         </div>
       </SidebarFooter>

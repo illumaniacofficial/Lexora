@@ -25,7 +25,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
 8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
 9. **Full-Screen Book Reader** — Immersive book experience with paper textures, spine shadows, page edge effects, page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), progress tracking, and landscape two-page spread mode with a book spine
-10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, next-page controls, and auto-advance to next page on completion
+10. **AI Narrator** — Text-to-speech narration with 5 voices (Alloy, Echo, Fable, Onyx, Nova); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, next-page controls, and auto-advance to next page on completion; client-side audio cache + next-page prefetching for seamless transitions; server-side TTS cache (50 entries, 10min TTL) for instant replays
 11. **Cancel Generation** — Cancel button on chapters stuck in "generating" status, resets to "pending" via PATCH endpoint with project ownership validation
 
 ## Database Schema
@@ -110,10 +110,10 @@ server/
   openai.ts            — OpenAI client setup
   seed.ts              — Database seeding with demo projects
 client/src/
-  App.tsx                    — Root app with sidebar layout and routing
+  App.tsx                    — Root app with sidebar layout, routing, React.lazy code-splitting for all pages
   lib/utils.ts               — Centralized constants and helpers
   components/
-    app-sidebar.tsx          — Navigation sidebar with neon glow branding
+    app-sidebar.tsx          — Navigation sidebar with neon glow branding, "Now Playing" narration indicator, "Share & Invites" quick link
     error-boundary.tsx       — Global React error boundary with recovery UI
     markdown-renderer.tsx    — Shared markdown rendering (MarkdownRenderer for light/reader, MarkdownRendererDark for dark UI, stripMarkdown utility)
     book-reader.tsx          — Full-screen immersive book reader with page flip animations, font size, themes, and AI narrator

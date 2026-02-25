@@ -35,6 +35,27 @@ interface AudioMiniPlayerProps {
 
 export type { NarrationState };
 
+const audioCache = new Map<string, string>();
+function cacheKey(text: string, voice: string): string {
+  return `${voice}:${text.slice(0, 100)}:${text.length}`;
+}
+
+async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<string> {
+  const key = cacheKey(text, voice);
+  const cached = audioCache.get(key);
+  if (cached) return cached;
+  const cleanText = stripMarkdown(text).slice(0, 4000);
+  const response = await apiRequest("POST", "/api/tts", { text: cleanText, voice });
+  const data = await response.json();
+  const dataUrl = `data:audio/mp3;base64,${data.audio}`;
+  audioCache.set(key, dataUrl);
+  if (audioCache.size > 20) {
+    const firstKey = audioCache.keys().next().value;
+    if (firstKey) audioCache.delete(firstKey);
+  }
+  return dataUrl;
+}
+
 export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration }: AudioMiniPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -47,6 +68,13 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
   useEffect(() => { narrationRef.current = narration; }, [narration]);
   useEffect(() => { onUpdateRef.current = onUpdateNarration; }, [onUpdateNarration]);
 
+  const prefetchNext = useCallback((currentIdx: number, voice: NarratorVoice, allPages: NarrationState["allPages"]) => {
+    const nextIdx = currentIdx + 1;
+    if (nextIdx < allPages.length) {
+      fetchAudioCached(allPages[nextIdx].text, voice).catch(() => {});
+    }
+  }, []);
+
   const generateAndPlay = useCallback(async (text: string, voice: NarratorVoice) => {
     try {
       setIsLoading(true);
@@ -58,13 +86,12 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
         audioRef.current = null;
       }
 
-      const cleanText = stripMarkdown(text).slice(0, 4000);
-      const response = await apiRequest("POST", "/api/tts", { text: cleanText, voice });
-      const data = await response.json();
-
-      const audioData = `data:audio/mp3;base64,${data.audio}`;
+      const audioData = await fetchAudioCached(text, voice);
       const audio = new Audio(audioData);
       audioRef.current = audio;
+
+      const latest = narrationRef.current;
+      prefetchNext(latest.currentPageIndex, voice, latest.allPages);
 
       const expectedIdx = narration.currentPageIndex;
       audio.onended = () => {
@@ -87,7 +114,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
               currentPageIndex: nextIdx,
             });
           }
-        }, 600);
+        }, 400);
       };
 
       const updateProgress = () => {
@@ -107,7 +134,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
       console.error("TTS playback error:", err);
       setIsLoading(false);
     }
-  }, []);
+  }, [prefetchNext]);
 
   useEffect(() => {
     generateAndPlay(narration.text, narration.voice);

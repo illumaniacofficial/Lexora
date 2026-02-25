@@ -408,16 +408,63 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     setNarrationProgress(0);
   }, []);
 
-  const playPage = useCallback(async (pageIdx: number) => {
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
+
+  const getPageText = useCallback((pageIdx: number): { text: string; lastIdx: number } | null => {
     let pg = pages[pageIdx];
     if (pg.type !== "text") {
       let nextIdx = pageIdx + 1;
       while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
-      if (nextIdx >= pages.length) return;
-      goToImmediate(nextIdx);
+      if (nextIdx >= pages.length) return null;
       pageIdx = nextIdx;
       pg = pages[pageIdx];
     }
+    let textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
+    let lastIdx = pageIdx;
+    if (showDual && pageIdx + 1 < pages.length && pages[pageIdx + 1].type === "text") {
+      textToRead += "\n\n" + (pages[pageIdx + 1] as Extract<PageContent, { type: "text" }>).text;
+      lastIdx = pageIdx + 1;
+    }
+    return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx };
+  }, [pages, showDual]);
+
+  const fetchAudio = useCallback(async (text: string, voice: NarratorVoice): Promise<string> => {
+    const cacheKey = `${voice}:${text.slice(0, 100)}:${text.length}`;
+    const cached = audioCacheRef.current.get(cacheKey);
+    if (cached) return cached;
+    const response = await apiRequest("POST", "/api/tts", { text, voice });
+    const data = await response.json();
+    const dataUrl = `data:audio/mp3;base64,${data.audio}`;
+    audioCacheRef.current.set(cacheKey, dataUrl);
+    if (audioCacheRef.current.size > 20) {
+      const firstKey = audioCacheRef.current.keys().next().value;
+      if (firstKey) audioCacheRef.current.delete(firstKey);
+    }
+    return dataUrl;
+  }, []);
+
+  const prefetchNext = useCallback((afterIdx: number) => {
+    let nextIdx = afterIdx + 1;
+    while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
+    if (nextIdx >= pages.length) return;
+    const nextData = getPageText(nextIdx);
+    if (nextData) {
+      fetchAudio(nextData.text, selectedVoice).catch(() => {});
+    }
+  }, [pages, getPageText, fetchAudio, selectedVoice]);
+
+  const playPage = useCallback(async (pageIdx: number) => {
+    const pageData = getPageText(pageIdx);
+    if (!pageData) return;
+    if (pages[pageIdx].type !== "text") {
+      let nextIdx = pageIdx + 1;
+      while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
+      if (nextIdx < pages.length) {
+        goToImmediate(nextIdx);
+        pageIdx = nextIdx;
+      }
+    }
+    const { text: cleanText, lastIdx: lastPageIdx } = pageData;
     try {
       setNarrationLoading(true);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
@@ -425,18 +472,11 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       setIsNarrating(false);
       setNarrationProgress(0);
 
-      let textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
-      let lastPageIdx = pageIdx;
-      if (showDual && pageIdx + 1 < pages.length && pages[pageIdx + 1].type === "text") {
-        textToRead += "\n\n" + (pages[pageIdx + 1] as Extract<PageContent, { type: "text" }>).text;
-        lastPageIdx = pageIdx + 1;
-      }
-
-      const cleanText = stripMarkdown(textToRead).slice(0, 4000);
-      const response = await apiRequest("POST", "/api/tts", { text: cleanText, voice: selectedVoice });
-      const data = await response.json();
-      const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+      const audioDataUrl = await fetchAudio(cleanText, selectedVoice);
+      const audio = new Audio(audioDataUrl);
       audioRef.current = audio;
+
+      prefetchNext(lastPageIdx);
 
       audio.onended = () => {
         setIsNarrating(false);
@@ -447,7 +487,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           while (nextTextIdx < pages.length && pages[nextTextIdx].type !== "text") nextTextIdx++;
           if (nextTextIdx < pages.length) {
             goToImmediate(nextTextIdx);
-            setTimeout(() => playPage(nextTextIdx), 600);
+            setTimeout(() => playPage(nextTextIdx), 400);
           }
         }
       };
@@ -465,7 +505,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       console.error("TTS error:", err);
       setNarrationLoading(false);
     }
-  }, [pages, selectedVoice, goToImmediate, showDual]);
+  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext]);
 
   const playCurrentPage = useCallback(() => playPage(currentPage), [playPage, currentPage]);
 

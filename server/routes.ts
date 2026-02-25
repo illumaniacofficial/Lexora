@@ -909,6 +909,22 @@ Return JSON with:
   const ttsVoices = ["alloy", "echo", "fable", "onyx", "nova"] as const;
   type TTSVoice = typeof ttsVoices[number];
 
+  const ttsCache = new Map<string, { audio: string; ts: number }>();
+  const TTS_CACHE_MAX = 50;
+  const TTS_CACHE_TTL = 10 * 60 * 1000;
+
+  function ttsCacheKey(text: string, voice: string): string {
+    const crypto = require("crypto");
+    return crypto.createHash("md5").update(`${voice}:${text}`).digest("hex");
+  }
+
+  function cleanTtsCache() {
+    if (ttsCache.size <= TTS_CACHE_MAX) return;
+    const entries = [...ttsCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    const toRemove = entries.slice(0, entries.length - TTS_CACHE_MAX);
+    for (const [key] of toRemove) ttsCache.delete(key);
+  }
+
   app.post("/api/tts", async (req, res) => {
     try {
       const { text, voice } = req.body;
@@ -919,8 +935,20 @@ Return JSON with:
         return res.status(400).json({ error: "Text too long (max 4000 characters)" });
       }
       const selectedVoice: TTSVoice = ttsVoices.includes(voice) ? voice : "alloy";
-      const audioBuffer = await textToSpeech(text.slice(0, 4000), selectedVoice, "mp3");
+      const trimmed = text.slice(0, 4000);
+      const cacheKey = ttsCacheKey(trimmed, selectedVoice);
+
+      const cached = ttsCache.get(cacheKey);
+      if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
+        return res.json({ audio: cached.audio, format: "mp3" });
+      }
+
+      const audioBuffer = await textToSpeech(trimmed, selectedVoice, "mp3");
       const base64Audio = audioBuffer.toString("base64");
+
+      ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+      cleanTtsCache();
+
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
       console.error("TTS error:", err.message);
