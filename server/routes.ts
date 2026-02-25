@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
-import { textToSpeech } from "./replit_integrations/audio/client";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
@@ -1006,7 +1005,14 @@ Return JSON with:
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      const audioBuffer = await textToSpeech(trimmed, selectedVoice, "mp3");
+      const mp3Response = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: selectedVoice,
+        input: trimmed,
+        response_format: "mp3",
+      });
+      const arrayBuffer = await mp3Response.arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
       const base64Audio = audioBuffer.toString("base64");
 
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
@@ -1014,7 +1020,7 @@ Return JSON with:
 
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
-      console.error("TTS error:", err.message);
+      console.error("TTS error:", err.message, err.stack);
       res.status(500).json({ error: "Failed to generate speech" });
     }
   });
