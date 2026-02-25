@@ -100,7 +100,7 @@ export default function ChatStudio() {
     queryKey: ["/api/chat/conversations"],
   });
 
-  const { data: messages = [], isLoading: msgsLoading } = useQuery<ChatMessage[]>({
+  const { data: messages = [], isLoading: msgsLoading, error: msgsError } = useQuery<ChatMessage[]>({
     queryKey: ["/api/chat/conversations", activeConvId, "messages"],
     enabled: !!activeConvId,
     queryFn: async () => {
@@ -288,6 +288,11 @@ export default function ChatStudio() {
               {msgsLoading && (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-purple-400/50" />
+                </div>
+              )}
+              {msgsError && (
+                <div className="flex items-center justify-center py-12 text-center" data-testid="error-messages">
+                  <p className="text-sm text-red-400/70">Failed to load messages. Try selecting the conversation again.</p>
                 </div>
               )}
               {messages.map((msg) => (

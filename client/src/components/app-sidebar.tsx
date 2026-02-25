@@ -4,12 +4,15 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Pause, Settings, MessageSquare,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Settings, MessageSquare,
+  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic,
 } from "lucide-react";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useNarration } from "@/App";
 import { VOICE_OPTIONS } from "@/components/audio-mini-player";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import logoPath from "@assets/image_1772031076380.png";
 
 const navItems = [
@@ -23,11 +26,70 @@ const navItems = [
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
+function WaveformBars({ isPlaying }: { isPlaying: boolean }) {
+  return (
+    <div className="flex items-end gap-[2px] h-5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div
+          key={i}
+          className={cn(
+            "w-[3px] rounded-full bg-gradient-to-t from-purple-500 to-cyan-400 transition-all",
+            isPlaying ? `waveform-bar-${i}` : "h-[4px] opacity-40"
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ProgressRing({ progress, size = 36 }: { progress: number; size?: number }) {
+  const strokeWidth = 2.5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (progress / 100) * circumference;
+
+  return (
+    <svg width={size} height={size} className="absolute inset-0 -rotate-90">
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="hsl(270 50% 40% / 0.15)"
+        strokeWidth={strokeWidth}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke="url(#sidebar-progress-gradient)"
+        strokeWidth={strokeWidth}
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        className="transition-all duration-200"
+      />
+      <defs>
+        <linearGradient id="sidebar-progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="hsl(270 100% 65%)" />
+          <stop offset="100%" stopColor="hsl(190 100% 55%)" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export function AppSidebar() {
   const [location] = useLocation();
-  const { narrationState } = useNarration();
+  const { narrationState, playbackState, playbackControls } = useNarration();
   const { state: sidebarState } = useSidebar();
   const isCollapsed = sidebarState === "collapsed";
+
+  const voiceLabel = narrationState ? VOICE_OPTIONS.find(v => v.value === narrationState.voice)?.label : "";
+  const hasNextPage = narrationState ? narrationState.currentPageIndex < narrationState.allPages.length - 1 : false;
+  const totalPages = narrationState?.allPages.length || 0;
+  const currentPage = narrationState ? narrationState.currentPageIndex + 1 : 0;
 
   return (
     <Sidebar>
@@ -89,16 +151,94 @@ export function AppSidebar() {
               NOW PLAYING
             </SidebarGroupLabel>
             <SidebarGroupContent>
-              <div className="mx-2 p-3 rounded-xl border border-purple-500/20 bg-purple-500/5" data-testid="sidebar-now-playing">
-                <p className="text-[11px] font-medium truncate text-purple-200">{narrationState.bookTitle}</p>
-                <p className="text-[9px] font-mono text-muted-foreground/40 truncate mt-0.5">
-                  Ch {narrationState.chapterNumber} · pg {narrationState.pageInChapter}/{narrationState.totalPagesInChapter}
-                </p>
-                <div className="flex items-center gap-1.5 mt-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
-                  <span className="text-[8px] font-mono text-purple-400/50 uppercase tracking-widest">
-                    {VOICE_OPTIONS.find(v => v.value === narrationState.voice)?.label}
-                  </span>
+              <div className="mx-2 rounded-xl border border-purple-500/20 bg-gradient-to-b from-purple-500/[0.08] to-transparent overflow-hidden" data-testid="sidebar-now-playing">
+                <div className="h-0.5 bg-border/10 relative">
+                  <div
+                    className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300"
+                    style={{ width: `${playbackState.progress}%` }}
+                  />
+                </div>
+
+                <div className="p-3 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="relative flex items-center justify-center h-9 w-9 shrink-0 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                      <ProgressRing progress={playbackState.progress} size={36} />
+                      <Mic className="h-3.5 w-3.5 text-purple-400 relative z-10" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-semibold truncate text-purple-200 leading-tight">{narrationState.bookTitle}</p>
+                      <p className="text-[9px] font-mono text-muted-foreground/50 truncate mt-0.5">
+                        Ch {narrationState.chapterNumber}: {narrationState.chapterTitle}
+                      </p>
+                    </div>
+                    <Button
+                      size="icon" variant="ghost"
+                      onClick={() => playbackControls?.close()}
+                      className="h-5 w-5 text-muted-foreground/30 hover:text-red-400 shrink-0 -mt-0.5 -mr-1"
+                      data-testid="button-sidebar-player-close" aria-label="Stop narration"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <WaveformBars isPlaying={playbackState.isPlaying} />
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="icon" variant="ghost"
+                        onClick={() => playbackControls?.replay()}
+                        disabled={playbackState.isLoading}
+                        className="h-7 w-7 text-muted-foreground/50 hover:text-purple-300 disabled:opacity-20"
+                        data-testid="button-sidebar-replay" aria-label="Replay"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </Button>
+
+                      <Button
+                        size="icon"
+                        onClick={() => playbackControls?.togglePlay()}
+                        disabled={playbackState.isLoading}
+                        className={cn(
+                          "h-8 w-8 rounded-full transition-all",
+                          playbackState.isPlaying
+                            ? "bg-purple-500 hover:bg-purple-600 text-white shadow-[0_0_16px_rgba(147,51,234,0.4)]"
+                            : "bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30"
+                        )}
+                        data-testid="button-sidebar-play" aria-label={playbackState.isPlaying ? "Pause" : "Play"}
+                      >
+                        {playbackState.isLoading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : playbackState.isPlaying ? (
+                          <Pause className="h-3.5 w-3.5" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5 ml-0.5" />
+                        )}
+                      </Button>
+
+                      <Button
+                        size="icon" variant="ghost"
+                        onClick={() => playbackControls?.nextPage()}
+                        disabled={!hasNextPage || playbackState.isLoading}
+                        className="h-7 w-7 text-muted-foreground/50 hover:text-purple-300 disabled:opacity-20"
+                        data-testid="button-sidebar-next" aria-label="Next page"
+                      >
+                        <SkipForward className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Volume2 className="h-2.5 w-2.5 text-purple-400/40" />
+                      <span className="text-[8px] font-mono text-purple-400/40 uppercase tracking-widest">{voiceLabel}</span>
+                    </div>
+                    <span className="text-[8px] font-mono text-muted-foreground/30">
+                      {currentPage}/{totalPages}
+                    </span>
+                  </div>
                 </div>
               </div>
             </SidebarGroupContent>
@@ -106,14 +246,29 @@ export function AppSidebar() {
               <div className="flex justify-center py-2">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="relative flex items-center justify-center h-8 w-8 rounded-lg border border-purple-500/30 bg-purple-500/10 cursor-default" data-testid="sidebar-now-playing-icon">
-                      <Volume2 className="h-4 w-4 text-purple-400" />
-                      <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)] border-2 border-background" />
-                    </div>
+                    <button
+                      onClick={() => playbackControls?.togglePlay()}
+                      className="relative flex items-center justify-center h-9 w-9 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-colors"
+                      data-testid="sidebar-now-playing-icon"
+                      aria-label={playbackState.isPlaying ? "Pause narration" : "Play narration"}
+                    >
+                      <ProgressRing progress={playbackState.progress} size={36} />
+                      {playbackState.isLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 text-purple-400 animate-spin relative z-10" />
+                      ) : playbackState.isPlaying ? (
+                        <Pause className="h-3.5 w-3.5 text-purple-400 relative z-10" />
+                      ) : (
+                        <Play className="h-3.5 w-3.5 text-purple-400 ml-0.5 relative z-10" />
+                      )}
+                      {playbackState.isPlaying && (
+                        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)] border border-background" />
+                      )}
+                    </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="text-xs">
-                    <p className="font-medium">{narrationState.bookTitle}</p>
+                  <TooltipContent side="right" className="text-xs max-w-[180px]">
+                    <p className="font-medium truncate">{narrationState.bookTitle}</p>
                     <p className="text-muted-foreground">Ch {narrationState.chapterNumber} · pg {narrationState.pageInChapter}/{narrationState.totalPagesInChapter}</p>
+                    <p className="text-muted-foreground/60 text-[10px] mt-0.5">{voiceLabel} · {Math.round(playbackState.progress)}%</p>
                   </TooltipContent>
                 </Tooltip>
               </div>

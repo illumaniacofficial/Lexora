@@ -8,7 +8,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { HelmetProvider, Helmet } from "react-helmet-async";
-import AudioMiniPlayer, { type NarrationState } from "@/components/audio-mini-player";
+import AudioMiniPlayer, { type NarrationState, type PlaybackState } from "@/components/audio-mini-player";
 import { Loader2 } from "lucide-react";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
@@ -24,16 +24,33 @@ const ChatStudio = lazy(() => import("@/pages/ChatStudio"));
 const Storefront = lazy(() => import("@/pages/Storefront"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
+interface PlaybackControls {
+  togglePlay: () => void;
+  nextPage: () => void;
+  replay: () => void;
+  close: () => void;
+}
+
 interface NarrationContextType {
   narrationState: NarrationState | null;
   setNarrationState: (state: NarrationState | null) => void;
   startNarration: (state: NarrationState) => void;
+  playbackState: PlaybackState;
+  playbackControls: PlaybackControls | null;
+  setPlaybackState: (state: PlaybackState) => void;
+  setPlaybackControls: (controls: PlaybackControls | null) => void;
 }
+
+const defaultPlayback: PlaybackState = { isPlaying: false, isLoading: false, progress: 0 };
 
 const NarrationContext = createContext<NarrationContextType>({
   narrationState: null,
   setNarrationState: () => {},
   startNarration: () => {},
+  playbackState: defaultPlayback,
+  playbackControls: null,
+  setPlaybackState: () => {},
+  setPlaybackControls: () => {},
 });
 
 export function useNarration() {
@@ -111,6 +128,8 @@ function AppRouter() {
 
 function App() {
   const [narrationState, setNarrationState] = useState<NarrationState | null>(null);
+  const [playbackState, setPlaybackState] = useState<PlaybackState>(defaultPlayback);
+  const [playbackControls, setPlaybackControls] = useState<PlaybackControls | null>(null);
 
   const startNarration = useCallback((state: NarrationState) => {
     setNarrationState(state);
@@ -121,7 +140,7 @@ function App() {
       <HelmetProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration }}>
+            <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration, playbackState, playbackControls, setPlaybackState, setPlaybackControls }}>
               <Helmet>
                 <title>Lexora</title>
               </Helmet>
@@ -129,8 +148,10 @@ function App() {
               {narrationState && (
                 <AudioMiniPlayer
                   narration={narrationState}
-                  onClose={() => setNarrationState(null)}
+                  onClose={() => { setNarrationState(null); setPlaybackControls(null); setPlaybackState(defaultPlayback); }}
                   onUpdateNarration={(updated) => setNarrationState(updated)}
+                  onPlaybackStateChange={setPlaybackState}
+                  onControlsReady={setPlaybackControls}
                 />
               )}
               <Toaster />

@@ -5,6 +5,12 @@ import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { stripMarkdown } from "@/components/markdown-renderer";
 
+export interface PlaybackState {
+  isPlaying: boolean;
+  isLoading: boolean;
+  progress: number;
+}
+
 export type NarratorVoice = "alloy" | "echo" | "fable" | "onyx" | "nova";
 
 export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string }[] = [
@@ -31,6 +37,8 @@ interface AudioMiniPlayerProps {
   narration: NarrationState;
   onClose: () => void;
   onUpdateNarration: (narration: NarrationState) => void;
+  onPlaybackStateChange?: (state: PlaybackState) => void;
+  onControlsReady?: (controls: { togglePlay: () => void; nextPage: () => void; replay: () => void; close: () => void }) => void;
 }
 
 export type { NarrationState };
@@ -56,7 +64,7 @@ async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<str
   return dataUrl;
 }
 
-export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration }: AudioMiniPlayerProps) {
+export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady }: AudioMiniPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -64,6 +72,10 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
   const animationRef = useRef<number | null>(null);
   const narrationRef = useRef(narration);
   const onUpdateRef = useRef(onUpdateNarration);
+
+  useEffect(() => {
+    onPlaybackStateChange?.({ isPlaying, isLoading, progress });
+  }, [isPlaying, isLoading, progress]);
 
   useEffect(() => { narrationRef.current = narration; }, [narration]);
   useEffect(() => { onUpdateRef.current = onUpdateNarration; }, [onUpdateNarration]);
@@ -202,6 +214,10 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration 
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     onClose();
   }, [onClose]);
+
+  useEffect(() => {
+    onControlsReady?.({ togglePlay, nextPage, replay, close: handleClose });
+  }, [togglePlay, nextPage, replay, handleClose]);
 
   const hasNextPage = narration.currentPageIndex < narration.allPages.length - 1;
 
