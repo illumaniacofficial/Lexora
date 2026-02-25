@@ -38,6 +38,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 - `marketing_assets` — Complete marketing suite (indexed on projectId)
 - `autopilot_config` — Autonomous publishing configuration
 - `autopilot_runs` — Run history with status, current step, tokens, cost, error tracking
+- `app_settings` — Platform settings (author defaults, AI model, chapter word target, auto-cover/marketing, TTS voice, storefront title, export format)
 
 ## AI Models Used
 
@@ -128,6 +129,7 @@ client/src/
     Marketing.tsx            — Marketing suite with expandable per-project content (hooks, emails, pricing, blurbs)
     Library.tsx              — Completed books library with search, filters, sorting, top-5 featured cards, ranked link list
     Autopilot.tsx            — Autopilot config with mesh backgrounds
+    Settings.tsx             — App settings (10 configurable preferences)
 shared/
   schema.ts      — All Drizzle schemas, TypeScript types, DB indexes
 ```

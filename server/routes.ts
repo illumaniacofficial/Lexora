@@ -906,6 +906,25 @@ Return JSON with:
     }
   });
 
+  app.get("/api/settings", async (_req, res) => {
+    try {
+      const settings = await storage.getAppSettings();
+      res.json(settings || null);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/settings", async (req, res) => {
+    try {
+      const data = req.body;
+      const settings = await storage.upsertAppSettings(data);
+      res.json(settings);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const ttsVoices = ["alloy", "echo", "fable", "onyx", "nova"] as const;
   type TTSVoice = typeof ttsVoices[number];
 

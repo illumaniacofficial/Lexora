@@ -1,12 +1,13 @@
 import { db } from "./db";
 import {
-  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens,
+  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings,
   type User, type InsertUser, type Project, type InsertProject, type BookDna, type InsertBookDna,
   type TrendReport, type InsertTrendReport, type Chapter, type InsertChapter,
   type RunStep, type InsertRunStep, type MarketingAsset, type InsertMarketingAsset,
   type AutopilotConfig, type InsertAutopilotConfig,
   type AutopilotRun, type InsertAutopilotRun,
   type InviteToken, type InsertInviteToken,
+  type AppSettings, type InsertAppSettings,
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
@@ -53,6 +54,9 @@ export interface IStorage {
   createInviteToken(data: InsertInviteToken): Promise<InviteToken>;
   deleteInviteToken(id: number): Promise<void>;
   incrementInviteViewCount(id: number): Promise<void>;
+
+  getAppSettings(): Promise<AppSettings | undefined>;
+  upsertAppSettings(data: InsertAppSettings): Promise<AppSettings>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -238,6 +242,21 @@ export class DatabaseStorage implements IStorage {
 
   async incrementInviteViewCount(id: number) {
     await db.update(inviteTokens).set({ viewCount: sql`${inviteTokens.viewCount} + 1` }).where(eq(inviteTokens.id, id));
+  }
+
+  async getAppSettings() {
+    const [settings] = await db.select().from(appSettings);
+    return settings;
+  }
+
+  async upsertAppSettings(data: InsertAppSettings) {
+    const existing = await this.getAppSettings();
+    if (existing) {
+      const [updated] = await db.update(appSettings).set({ ...data, updatedAt: new Date() }).where(eq(appSettings.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(appSettings).values(data).returning();
+    return created;
   }
 
   async getDashboardStats() {

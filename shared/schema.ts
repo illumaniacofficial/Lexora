@@ -159,6 +159,25 @@ export const inviteTokens = pgTable("invite_tokens", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+export const appSettings = pgTable("app_settings", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  defaultAuthorName: text("default_author_name").notNull().default("Sergio A. Delgado"),
+  defaultVertical: text("default_vertical").notNull().default("money"),
+  defaultLanguage: text("default_language").notNull().default("english"),
+  aiModel: text("ai_model").notNull().default("high"),
+  chapterWordTarget: integer("chapter_word_target").notNull().default(3000),
+  autoGenerateCover: boolean("auto_generate_cover").notNull().default(true),
+  autoGenerateMarketing: boolean("auto_generate_marketing").notNull().default(true),
+  ttsDefaultVoice: text("tts_default_voice").notNull().default("alloy"),
+  storefrontTitle: text("storefront_title").notNull().default("Lexora Book Collection"),
+  exportFormat: text("export_format").notNull().default("html"),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertAppSettingsSchema = createInsertSchema(appSettings).omit({ id: true, updatedAt: true });
+export type AppSettings = typeof appSettings.$inferSelect;
+export type InsertAppSettings = z.infer<typeof insertAppSettingsSchema>;
+
 export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({ id: true, startedAt: true, completedAt: true });
 export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ id: true, createdAt: true, viewCount: true });
 

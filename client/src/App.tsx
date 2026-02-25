@@ -19,6 +19,7 @@ const TrendIntelligence = lazy(() => import("@/pages/TrendIntelligence"));
 const Marketing = lazy(() => import("@/pages/Marketing"));
 const Autopilot = lazy(() => import("@/pages/Autopilot"));
 const Library = lazy(() => import("@/pages/Library"));
+const Settings = lazy(() => import("@/pages/Settings"));
 const Storefront = lazy(() => import("@/pages/Storefront"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
@@ -57,6 +58,7 @@ function AdminRouter() {
         <Route path="/trends" component={TrendIntelligence} />
         <Route path="/marketing" component={Marketing} />
         <Route path="/autopilot" component={Autopilot} />
+        <Route path="/settings" component={Settings} />
         <Route path="/library" component={Library} />
         <Route component={NotFound} />
       </Switch>
