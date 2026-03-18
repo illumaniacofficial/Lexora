@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BookOpen, Star, ShoppingBag, ArrowLeft, Volume2, AlertCircle, Sparkles, Send, CheckCircle2, Lightbulb } from "lucide-react";
+import { BookOpen, Star, ShoppingBag, ArrowLeft, Volume2, AlertCircle, Sparkles, Send, CheckCircle2, Lightbulb, Lock, Mail, User, Loader2, LogOut } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
 import { VERTICALS } from "@shared/schema";
@@ -17,6 +17,7 @@ import BookReader from "@/components/book-reader";
 import type { NarrationState } from "@/components/audio-mini-player";
 import AudioMiniPlayer from "@/components/audio-mini-player";
 import { useNarration } from "@/App";
+import { apiRequest } from "@/lib/queryClient";
 
 interface StoreBook {
   id: number;
@@ -36,9 +37,171 @@ interface StoreBookDetail extends StoreBook {
   chapters: { id: number; chapterNumber: number; title: string; content: string | null; wordCount: number; status: string }[];
 }
 
+function ReaderAuthGate({ children, token }: { children: React.ReactNode; token: string }) {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/storefront-auth/me", { credentials: "include" })
+      .then(res => {
+        setIsAuthenticated(res.ok);
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+      });
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const endpoint = mode === "login" ? "/api/storefront-auth/login" : "/api/storefront-auth/register";
+      const body = mode === "login"
+        ? { email, password }
+        : { email, password, displayName: displayName || "Reader" };
+      await apiRequest("POST", endpoint, body);
+      setIsAuthenticated(true);
+    } catch (err: any) {
+      if (err.message?.includes("409")) {
+        setError("An account with this email already exists. Try logging in.");
+      } else if (err.message?.includes("401")) {
+        setError("Invalid email or password.");
+      } else {
+        setError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-stone-950 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-400/50" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-stone-950 flex items-center justify-center px-4" data-testid="reader-auth-page">
+        <Helmet><title>Sign In — Lexora Reader</title></Helmet>
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <Sparkles className="h-5 w-5 text-purple-400" />
+              <h1 className="text-xl font-mono font-bold tracking-tight text-white">Lexora Reader</h1>
+              <Sparkles className="h-5 w-5 text-purple-400" />
+            </div>
+            <p className="text-xs font-mono text-stone-500 uppercase tracking-[0.2em]">
+              {mode === "login" ? "Sign in to read" : "Create your reader account"}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="bg-stone-900/80 backdrop-blur rounded-xl border border-stone-800/50 p-6 space-y-4">
+            {error && (
+              <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 rounded-lg px-3 py-2 border border-red-500/20" data-testid="text-reader-auth-error">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {mode === "register" && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-mono text-stone-400 uppercase tracking-wider">Display Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+                  <Input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="pl-10 bg-stone-800/50 border-stone-700/50 text-white placeholder:text-stone-600"
+                    placeholder="Your name"
+                    data-testid="input-reader-name"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono text-stone-400 uppercase tracking-wider">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-10 bg-stone-800/50 border-stone-700/50 text-white placeholder:text-stone-600"
+                  placeholder="reader@email.com"
+                  data-testid="input-reader-email"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono text-stone-400 uppercase tracking-wider">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10 bg-stone-800/50 border-stone-700/50 text-white placeholder:text-stone-600"
+                  placeholder="Enter password"
+                  data-testid="input-reader-password"
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={loading || !email || !password}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-mono text-sm"
+              data-testid="button-reader-auth-submit"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Lock className="h-4 w-4 mr-2" />}
+              {mode === "login" ? "Sign In" : "Create Account"}
+            </Button>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
+                className="text-xs font-mono text-purple-400 hover:text-purple-300 transition-colors"
+                data-testid="button-reader-auth-toggle"
+              >
+                {mode === "login" ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export default function Storefront() {
   const params = useParams<{ token: string }>();
   const token = params.token || "";
+  return (
+    <ReaderAuthGate token={token}>
+      <StorefrontContent token={token} />
+    </ReaderAuthGate>
+  );
+}
+
+function StorefrontContent({ token }: { token: string }) {
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [showReader, setShowReader] = useState(false);
   const [narrationState, setNarrationState] = useState<NarrationState | null>(null);

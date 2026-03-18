@@ -1,7 +1,7 @@
-import { useState, createContext, useContext, useCallback, lazy, Suspense } from "react";
+import { useState, useEffect, createContext, useContext, useCallback, lazy, Suspense } from "react";
 import { Switch, Route, useRoute } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -10,6 +10,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import AudioMiniPlayer, { type NarrationState, type PlaybackState } from "@/components/audio-mini-player";
 import { Loader2 } from "lucide-react";
+import Login from "@/pages/Login";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -122,6 +123,37 @@ function AdminLayout() {
   );
 }
 
+function AuthGatedAdmin() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(res => {
+        setIsAuthenticated(res.ok);
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+      });
+  }, []);
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center aurora-bg">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-400/50" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLogin={() => setIsAuthenticated(true)} />;
+  }
+
+  return <AdminLayout />;
+}
+
 function AppRouter() {
   const [isStore] = useRoute("/store/:token");
 
@@ -133,7 +165,7 @@ function AppRouter() {
     );
   }
 
-  return <AdminLayout />;
+  return <AuthGatedAdmin />;
 }
 
 function App() {

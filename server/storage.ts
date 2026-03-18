@@ -1,6 +1,6 @@
 import { db } from "./db";
 import {
-  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings, chatConversations, chatMessages, bookRequests,
+  users, projects, bookDna, trendReports, chapters, runSteps, marketingAssets, autopilotConfig, autopilotRuns, inviteTokens, appSettings, chatConversations, chatMessages, bookRequests, storefrontReaders,
   type User, type InsertUser, type Project, type InsertProject, type BookDna, type InsertBookDna,
   type TrendReport, type InsertTrendReport, type Chapter, type InsertChapter,
   type RunStep, type InsertRunStep, type MarketingAsset, type InsertMarketingAsset,
@@ -11,6 +11,7 @@ import {
   type ChatConversation, type InsertChatConversation,
   type ChatMessage, type InsertChatMessage,
   type BookRequest, type InsertBookRequest,
+  type StorefrontReader, type InsertStorefrontReader,
 } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
@@ -33,6 +34,7 @@ export interface IStorage {
   createTrendReport(data: InsertTrendReport): Promise<TrendReport>;
 
   deleteChaptersByProject(projectId: number): Promise<void>;
+  replaceOutlineChapters(projectId: number, newChapters: InsertChapter[]): Promise<Chapter[]>;
   getChapters(projectId: number): Promise<Chapter[]>;
   getChapter(id: number): Promise<Chapter | undefined>;
   createChapter(data: InsertChapter): Promise<Chapter>;
@@ -73,6 +75,10 @@ export interface IStorage {
   createBookRequest(data: InsertBookRequest): Promise<BookRequest>;
   markBookRequestRead(id: number): Promise<void>;
   deleteBookRequest(id: number): Promise<void>;
+
+  getStorefrontReader(id: number): Promise<StorefrontReader | undefined>;
+  getStorefrontReaderByEmail(email: string): Promise<StorefrontReader | undefined>;
+  createStorefrontReader(data: InsertStorefrontReader): Promise<StorefrontReader>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -131,13 +137,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertBookDna(data: InsertBookDna) {
-    const existing = await this.getBookDna(data.projectId);
-    if (existing) {
-      const [updated] = await db.update(bookDna).set(data).where(eq(bookDna.id, existing.id)).returning();
-      return updated;
-    }
-    const [created] = await db.insert(bookDna).values(data).returning();
-    return created;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(bookDna).where(eq(bookDna.projectId, data.projectId));
+      if (existing) {
+        const [updated] = await tx.update(bookDna).set(data).where(eq(bookDna.id, existing.id)).returning();
+        return updated;
+      }
+      const [created] = await tx.insert(bookDna).values(data).returning();
+      return created;
+    });
   }
 
   async getTrendReports(vertical?: string) {
@@ -159,6 +167,18 @@ export class DatabaseStorage implements IStorage {
 
   async deleteChaptersByProject(projectId: number) {
     await db.delete(chapters).where(eq(chapters.projectId, projectId));
+  }
+
+  async replaceOutlineChapters(projectId: number, newChapters: InsertChapter[]): Promise<Chapter[]> {
+    return db.transaction(async (tx) => {
+      await tx.delete(chapters).where(eq(chapters.projectId, projectId));
+      const created: Chapter[] = [];
+      for (const ch of newChapters) {
+        const [row] = await tx.insert(chapters).values(ch).returning();
+        created.push(row);
+      }
+      return created;
+    });
   }
 
   async getChapters(projectId: number) {
@@ -200,13 +220,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertMarketingAsset(data: InsertMarketingAsset) {
-    const existing = await this.getMarketingAsset(data.projectId);
-    if (existing) {
-      const [updated] = await db.update(marketingAssets).set(data).where(eq(marketingAssets.id, existing.id)).returning();
-      return updated;
-    }
-    const [created] = await db.insert(marketingAssets).values(data).returning();
-    return created;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(marketingAssets).where(eq(marketingAssets.projectId, data.projectId));
+      if (existing) {
+        const [updated] = await tx.update(marketingAssets).set(data).where(eq(marketingAssets.id, existing.id)).returning();
+        return updated;
+      }
+      const [created] = await tx.insert(marketingAssets).values(data).returning();
+      return created;
+    });
   }
 
   async getAutopilotConfig() {
@@ -215,13 +237,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertAutopilotConfig(data: InsertAutopilotConfig) {
-    const existing = await this.getAutopilotConfig();
-    if (existing) {
-      const [updated] = await db.update(autopilotConfig).set({ ...data, updatedAt: new Date() }).where(eq(autopilotConfig.id, existing.id)).returning();
-      return updated;
-    }
-    const [created] = await db.insert(autopilotConfig).values(data).returning();
-    return created;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(autopilotConfig);
+      if (existing) {
+        const [updated] = await tx.update(autopilotConfig).set({ ...data, updatedAt: new Date() }).where(eq(autopilotConfig.id, existing.id)).returning();
+        return updated;
+      }
+      const [created] = await tx.insert(autopilotConfig).values(data).returning();
+      return created;
+    });
   }
 
   async getAutopilotRuns() {
@@ -266,13 +290,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertAppSettings(data: InsertAppSettings) {
-    const existing = await this.getAppSettings();
-    if (existing) {
-      const [updated] = await db.update(appSettings).set({ ...data, updatedAt: new Date() }).where(eq(appSettings.id, existing.id)).returning();
-      return updated;
-    }
-    const [created] = await db.insert(appSettings).values(data).returning();
-    return created;
+    return db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(appSettings);
+      if (existing) {
+        const [updated] = await tx.update(appSettings).set({ ...data, updatedAt: new Date() }).where(eq(appSettings.id, existing.id)).returning();
+        return updated;
+      }
+      const [created] = await tx.insert(appSettings).values(data).returning();
+      return created;
+    });
   }
 
   async getChatConversations() {
@@ -322,6 +348,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteBookRequest(id: number) {
     await db.delete(bookRequests).where(eq(bookRequests.id, id));
+  }
+
+  async getStorefrontReader(id: number) {
+    const [reader] = await db.select().from(storefrontReaders).where(eq(storefrontReaders.id, id));
+    return reader;
+  }
+
+  async getStorefrontReaderByEmail(email: string) {
+    const [reader] = await db.select().from(storefrontReaders).where(eq(storefrontReaders.email, email));
+    return reader;
+  }
+
+  async createStorefrontReader(data: InsertStorefrontReader) {
+    const [created] = await db.insert(storefrontReaders).values(data).returning();
+    return created;
   }
 
   async getDashboardStats() {

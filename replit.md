@@ -48,6 +48,16 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Editing Stage**: Provides an inline chapter editor with save/cancel, timestamps, and status management. REGEN blocked when project is complete.
 - **Chat Studio**: A conversational AI interface for planning and writing books.
 
+**Security & Auth**:
+- Admin authentication via express-session + connect-pg-simple. Seeded admin user (username: `admin`, password: `lexora2026`). Login page at `/login`, all `/api/*` routes (except `/api/auth/*`, `/api/storefront-auth/*`, `/api/store/*`) require admin session.
+- Storefront reader accounts: separate login system under `/api/storefront-auth/*`. Readers can browse/read books but cannot trigger new ElevenLabs audio generation — only cached audio is served, with browser TTS as fallback.
+- Helmet security headers applied globally.
+- AI rate limiting: 20 requests/minute on generation endpoints (`/api/generate-outline`, `/api/generate-chapter`, `/api/generate-image`, `/api/tts`, `/api/autopilot/run`).
+- DB transactions on all upsert operations (bookDna, marketingAssets, autopilotConfig, appSettings) and outline chapter replacement.
+- Confirmation dialogs for destructive actions: project deletion, outline regeneration.
+- Unified cost estimation in `server/cost.ts` with model-specific rates.
+- Logout button in admin sidebar footer.
+
 **Technical Implementations**:
 - Input Validation: Uses Zod schemas for all POST/PATCH routes and validates route parameters.
 - Error Handling: Includes pipeline failure recovery, generation cancellation, `ErrorBoundary` for React errors, and error state UI for data fetching.
@@ -67,3 +77,7 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Express**: Web application framework for Node.js.
 - **Zod**: TypeScript-first schema declaration and validation library.
 - **react-helmet-async**: For managing document head tags.
+- **bcryptjs**: Password hashing for admin and reader accounts.
+- **express-session + connect-pg-simple**: Session management backed by PostgreSQL.
+- **helmet**: Security headers middleware.
+- **express-rate-limit**: Rate limiting for AI generation endpoints.

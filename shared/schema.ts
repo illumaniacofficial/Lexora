@@ -200,6 +200,18 @@ export const appSettings = pgTable("app_settings", {
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
+export const storefrontReaders = pgTable("storefront_readers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  displayName: text("display_name").notNull().default("Reader"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertStorefrontReaderSchema = createInsertSchema(storefrontReaders).omit({ id: true, createdAt: true });
+export type StorefrontReader = typeof storefrontReaders.$inferSelect;
+export type InsertStorefrontReader = z.infer<typeof insertStorefrontReaderSchema>;
+
 export const chatConversations = pgTable("chat_conversations", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   title: text("title").notNull().default("New Conversation"),

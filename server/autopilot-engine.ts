@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL } from "./openai";
+import { estimateCost } from "./cost";
 
 let isRunning = false;
 let shouldStop = false;
@@ -22,7 +23,7 @@ async function runPipelineStep(
   const start = Date.now();
   try {
     const { result, tokens } = await fn();
-    const cost = tokens * 0.00001;
+    const cost = estimateCost(tokens, model);
     const durationMs = Date.now() - start;
 
     await storage.updateRunStep(step.id, {
@@ -176,18 +177,14 @@ Generate 8-12 chapters.`,
     frameworkSummary: outlineResult.frameworkSummary,
   });
 
-  await storage.deleteChaptersByProject(projectId);
-
-  const chapterPromises = (outlineResult.chapters || []).map((ch: any) =>
-    storage.createChapter({
-      projectId,
-      chapterNumber: ch.chapterNumber,
-      title: ch.title,
-      blueprint: ch.blueprint,
-      status: "pending",
-    })
-  );
-  await Promise.all(chapterPromises);
+  const newChapters = (outlineResult.chapters || []).map((ch: any) => ({
+    projectId,
+    chapterNumber: ch.chapterNumber,
+    title: ch.title,
+    blueprint: ch.blueprint,
+    status: "pending" as const,
+  }));
+  await storage.replaceOutlineChapters(projectId, newChapters);
   await storage.updateProject(projectId, { chapterCount: outlineResult.chapters?.length || 0, status: "writing" });
 }
 

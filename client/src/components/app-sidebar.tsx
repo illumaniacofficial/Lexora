@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Settings, MessageSquare,
-  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic,
+  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut,
 } from "lucide-react";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useNarration } from "@/App";
@@ -293,11 +293,22 @@ export function AppSidebar() {
             <span className="tracking-wider uppercase">Share & Invites</span>
           </button>
         </Link>
-        <div className="flex items-center gap-2.5 px-3">
-          <Zap className="h-3 w-3 text-cyan-400/50" />
-          <span className="text-[9px] font-mono text-muted-foreground/40 tracking-wider uppercase">
-            v3.0
-          </span>
+        <div className="flex items-center justify-between px-3">
+          <div className="flex items-center gap-2.5">
+            <Zap className="h-3 w-3 text-cyan-400/50" />
+            <span className="text-[9px] font-mono text-muted-foreground/40 tracking-wider uppercase">v3.0</span>
+          </div>
+          <button
+            onClick={async () => {
+              await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+              window.location.reload();
+            }}
+            className="flex items-center gap-1.5 text-[9px] font-mono text-muted-foreground/40 hover:text-red-400 transition-colors"
+            data-testid="button-logout"
+          >
+            <LogOut className="h-3 w-3" />
+            <span className="tracking-wider uppercase">Logout</span>
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>

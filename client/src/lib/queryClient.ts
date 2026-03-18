@@ -55,3 +55,9 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+export function handleAuthError(error: any) {
+  if (error?.message?.includes("401")) {
+    window.location.reload();
+  }
+}

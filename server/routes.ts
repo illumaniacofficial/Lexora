@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -9,6 +9,9 @@ import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from ".
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import { estimateCost } from "./cost";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -69,15 +72,6 @@ function buildHtmlExport(title: string, authorName: string, chapters: { chapterN
 
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function estimateCost(tokens: number, model: string): number {
-  const rates: Record<string, number> = {
-    "gpt-5-mini": 0.0000003,
-    "gpt-5.1": 0.000003,
-    "gpt-image-1": 0.04,
-  };
-  return tokens * (rates[model] || 0.000003);
 }
 
 async function runStep(projectId: number, stepName: string, model: string, fn: () => Promise<{ result: any; tokens: number }>) {
@@ -168,8 +162,179 @@ function parseId(raw: string): number | null {
   return isNaN(id) || id < 1 ? null : id;
 }
 
+const aiRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { error: "Too many AI requests. Please wait a moment." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+async function ensureAdminUser() {
+  const existing = await storage.getUserByUsername("admin");
+  if (!existing) {
+    const hashed = await bcrypt.hash("lexora2026", 12);
+    await storage.createUser({ username: "admin", password: hashed });
+    console.log("Admin user created (username: admin)");
+  }
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.session?.role === "admin" && req.session?.adminId) {
+    return next();
+  }
+  return res.status(401).json({ error: "Authentication required" });
+}
+
+function requireStoreAuth(req: Request, res: Response, next: NextFunction) {
+  if ((req.session?.role === "admin" && req.session?.adminId) ||
+      (req.session?.role === "reader" && req.session?.readerId)) {
+    return next();
+  }
+  return res.status(401).json({ error: "Store login required" });
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  await ensureAdminUser();
+
   app.use("/uploads", express.static(path.resolve("uploads")));
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username and password required" });
+      }
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const valid = await bcrypt.compare(password, user.password);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      req.session.adminId = user.id;
+      req.session.role = "admin";
+      res.json({ ok: true, username: user.username });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if (req.session?.role === "admin" && req.session?.adminId) {
+      return res.json({ authenticated: true, role: "admin" });
+    }
+    return res.status(401).json({ authenticated: false });
+  });
+
+  app.post("/api/storefront-auth/register", async (req, res) => {
+    try {
+      const { email, password, displayName } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password required" });
+      }
+      const existing = await storage.getStorefrontReaderByEmail(email);
+      if (existing) {
+        return res.status(409).json({ error: "An account with this email already exists" });
+      }
+      const hashed = await bcrypt.hash(password, 12);
+      const reader = await storage.createStorefrontReader({
+        email,
+        password: hashed,
+        displayName: displayName || "Reader",
+      });
+      req.session.readerId = reader.id;
+      req.session.role = "reader";
+      res.json({ ok: true, displayName: reader.displayName, email: reader.email });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/storefront-auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password required" });
+      }
+      const reader = await storage.getStorefrontReaderByEmail(email);
+      if (!reader) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      const valid = await bcrypt.compare(password, reader.password);
+      if (!valid) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      req.session.readerId = reader.id;
+      req.session.role = "reader";
+      res.json({ ok: true, displayName: reader.displayName, email: reader.email });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/storefront-auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ ok: true });
+    });
+  });
+
+  app.get("/api/storefront-auth/me", (req, res) => {
+    if (req.session?.role === "reader" && req.session?.readerId) {
+      return res.json({ authenticated: true, role: "reader" });
+    }
+    if (req.session?.role === "admin" && req.session?.adminId) {
+      return res.json({ authenticated: true, role: "admin" });
+    }
+    return res.status(401).json({ authenticated: false });
+  });
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const aiPaths = [
+      /\/api\/projects\/\d+\/generate-outline/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/generate/,
+      /\/api\/projects\/\d+\/generate-cover/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/generate-audio/,
+      /\/api\/projects\/\d+\/generate-audiobook/,
+    ];
+    if (
+      req.path === "/api/tts" ||
+      req.path === "/api/autopilot/run" ||
+      aiPaths.some(p => p.test(req.path))
+    ) {
+      return aiRateLimit(req, res, next);
+    }
+    return next();
+  });
+
+  const adminApiPaths = [
+    "/api/dashboard", "/api/library", "/api/invites", "/api/projects",
+    "/api/trends", "/api/autopilot", "/api/settings", "/api/book-requests",
+    "/api/conversations", "/api/elevenlabs",
+  ];
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/storefront-auth/")) {
+      return next();
+    }
+    if (req.path.startsWith("/api/store/")) {
+      if (req.session?.role === "reader" || req.session?.role === "admin") {
+        return next();
+      }
+      return res.status(401).json({ error: "Reader login required" });
+    }
+    if (req.path.startsWith("/api/")) {
+      return requireAdmin(req, res, next);
+    }
+    return next();
+  });
 
   app.get("/api/dashboard", async (_req, res) => {
     try {
@@ -602,7 +767,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       prevStatus = project.status;
 
       await storage.updateProject(id, { status: "outlining" });
-      await storage.deleteChaptersByProject(id);
 
       const result = await runStep(id, "Book Outline + DNA", HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
@@ -654,16 +818,14 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         frameworkSummary: result.frameworkSummary,
       });
 
-      const chapterPromises = (result.chapters || []).map((ch: any) =>
-        storage.createChapter({
-          projectId: id,
-          chapterNumber: ch.chapterNumber,
-          title: ch.title,
-          blueprint: ch.blueprint,
-          status: "pending",
-        })
-      );
-      await Promise.all(chapterPromises);
+      const newChapters = (result.chapters || []).map((ch: any) => ({
+        projectId: id,
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        blueprint: ch.blueprint,
+        status: "pending" as const,
+      }));
+      await storage.replaceOutlineChapters(id, newChapters);
 
       await storage.updateProject(id, {
         chapterCount: result.chapters?.length || 0,

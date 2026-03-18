@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
@@ -263,6 +264,7 @@ export default function ProjectDetail() {
   const [audiobookLoading, setAudiobookLoading] = useState(false);
   const [coverText, setCoverText] = useState("");
   const [coverAvoid, setCoverAvoid] = useState("");
+  const [showOutlineConfirm, setShowOutlineConfirm] = useState(false);
   const { startNarration } = useNarration();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery<ProjectDetailData>({
@@ -660,7 +662,7 @@ export default function ProjectDetail() {
 
   const pipelineActions = [
     { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp, glow: "neon-glow-cool" },
-    { label: "Gen Outline", step: "2", done: chapters.length > 0, action: () => outlineMutation.mutate(), loading: outlineMutation.isPending, icon: List, glow: "neon-glow" },
+    { label: "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending, icon: List, glow: "neon-glow" },
     { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image, glow: "neon-glow-warm" },
     { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool, glow: "neon-glow-fire" },
     { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone, glow: "neon-glow-nature" },
@@ -1232,6 +1234,27 @@ export default function ProjectDetail() {
           onStartNarration={startNarration}
         />
       )}
+
+      <AlertDialog open={showOutlineConfirm} onOpenChange={setShowOutlineConfirm}>
+        <AlertDialogContent className="glass-panel border-stone-800/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Regenerate Outline?</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground/60">
+              This will delete all {chapters.length} existing chapters and their content. Generated audio will also be lost. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-stone-700 text-stone-300" data-testid="button-cancel-outline-regen">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              data-testid="button-confirm-outline-regen"
+              onClick={() => { setShowOutlineConfirm(false); outlineMutation.mutate(); }}
+            >
+              Delete Chapters & Regenerate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
