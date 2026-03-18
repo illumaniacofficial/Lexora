@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
 import { VOICE_OPTIONS, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
-import { apiRequest } from "@/lib/queryClient";
 import { useNarration } from "@/App";
+import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
 
 interface BookReaderProps {
@@ -434,6 +434,7 @@ function BookPage({ page, theme, fontSize, side, pageNum, totalPages, isFlipping
 }
 
 export default function BookReader({ title, authorName, chapters, coverImageUrl, onClose, onStartNarration }: BookReaderProps) {
+  const { toast } = useToast();
   const completedChapters = chapters.filter(c => c.status === "complete" && c.content);
   const [currentPage, setCurrentPage] = useState(0);
   const [isFlipping, setIsFlipping] = useState(false);
@@ -602,8 +603,19 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     const cacheKey = `${voice}:${text.slice(0, 100)}:${text.length}`;
     const cached = audioCacheRef.current.get(cacheKey);
     if (cached) return cached;
-    const response = await apiRequest("POST", "/api/tts", { text, voice });
+    const response = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+    });
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => "Unknown error");
+      throw new Error(`TTS request failed (${response.status}): ${errBody}`);
+    }
     const data = await response.json();
+    if (!data.audio || typeof data.audio !== "string" || data.audio.length < 100) {
+      throw new Error("Received empty or invalid audio data from server");
+    }
     const dataUrl = `data:audio/mp3;base64,${data.audio}`;
     audioCacheRef.current.set(cacheKey, dataUrl);
     if (audioCacheRef.current.size > 20) {
@@ -625,9 +637,14 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     }
   }, [pages, getPageText, fetchAudio, selectedVoice, isNarratablePage]);
 
+  const playPageRef = useRef<(pageIdx: number) => Promise<void>>();
+
   const playPage = useCallback(async (pageIdx: number) => {
     const pageData = getPageText(pageIdx);
-    if (!pageData) return;
+    if (!pageData) {
+      toast({ title: "Cannot narrate this page", description: "No readable text found on this page.", variant: "destructive" });
+      return;
+    }
     if (!isNarratablePage(pages[pageIdx])) {
       let nextIdx = pageIdx + 1;
       while (nextIdx < pages.length && !isNarratablePage(pages[nextIdx])) nextIdx++;
@@ -650,11 +667,25 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       const wordCount = strippedText.split(/\s+/).filter(Boolean).length;
       readerWordCountRef.current = wordCount;
 
+      if (wordCount === 0) {
+        setNarrationLoading(false);
+        toast({ title: "Nothing to narrate", description: "This page has no readable text content." });
+        return;
+      }
+
       const audioDataUrl = await fetchAudio(cleanText, selectedVoice);
       const audio = new Audio(audioDataUrl);
       audioRef.current = audio;
 
       prefetchNext(lastPageIdx);
+
+      audio.onerror = () => {
+        console.error("Audio playback error");
+        setIsNarrating(false);
+        setNarrationLoading(false);
+        setNarrationProgress(0);
+        toast({ title: "Playback error", description: "Failed to play the generated audio. Try again.", variant: "destructive" });
+      };
 
       audio.onended = () => {
         setIsNarrating(false);
@@ -667,7 +698,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
             goToImmediate(nextTextIdx);
-            setTimeout(() => playPage(nextTextIdx), 400);
+            setTimeout(() => {
+              if (playPageRef.current) playPageRef.current(nextTextIdx);
+            }, 400);
           }
         }
       };
@@ -686,11 +719,16 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       setIsNarrating(true);
       setNarrationLoading(false);
       narrationAnimRef.current = requestAnimationFrame(updateProgress);
-    } catch (err) {
+    } catch (err: any) {
       console.error("TTS error:", err);
+      setIsNarrating(false);
       setNarrationLoading(false);
+      setNarrationProgress(0);
+      toast({ title: "Narration failed", description: err?.message || "Could not generate or play audio. Please try again.", variant: "destructive" });
     }
-  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext, isNarratablePage]);
+  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext, isNarratablePage, toast]);
+
+  useEffect(() => { playPageRef.current = playPage; }, [playPage]);
 
   const playCurrentPage = useCallback(() => playPage(currentPage), [playPage, currentPage]);
 

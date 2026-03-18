@@ -3,7 +3,6 @@ import { X, Play, Pause, SkipForward, SkipBack, RotateCcw, Volume2, VolumeX, Loa
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import { apiRequest } from "@/lib/queryClient";
 import { stripMarkdown } from "@/components/markdown-renderer";
 
 export interface PlaybackState {
@@ -63,8 +62,19 @@ async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<str
   const cached = audioCache.get(key);
   if (cached) return cached;
   const cleanText = stripMarkdown(text).slice(0, 4000);
-  const response = await apiRequest("POST", "/api/tts", { text: cleanText, voice });
+  const response = await fetch("/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: cleanText, voice }),
+  });
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => "Unknown error");
+    throw new Error(`TTS request failed (${response.status}): ${errBody}`);
+  }
   const data = await response.json();
+  if (!data.audio || typeof data.audio !== "string" || data.audio.length < 100) {
+    throw new Error("Received empty or invalid audio data from server");
+  }
   const dataUrl = `data:audio/mp3;base64,${data.audio}`;
   audioCache.set(key, dataUrl);
   if (audioCache.size > 20) {
@@ -189,9 +199,11 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       setIsPlaying(true);
       setIsLoading(false);
       animationRef.current = requestAnimationFrame(updateProgress);
-    } catch (err) {
+    } catch (err: any) {
       console.error("TTS playback error:", err);
+      setIsPlaying(false);
       setIsLoading(false);
+      setProgress(0);
     }
   }, [prefetchNext, volume, isMuted, speed]);
 
