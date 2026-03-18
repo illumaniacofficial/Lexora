@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Play, Pause, SkipForward, SkipBack, RotateCcw, Volume2, VolumeX, Loader2, Gauge } from "lucide-react";
+import { X, Play, Pause, SkipForward, SkipBack, RotateCcw, Volume2, VolumeX, Loader2, Gauge, ChevronDown, ChevronUp, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -37,7 +37,7 @@ interface NarrationState {
   totalPagesInChapter: number;
   text: string;
   voice: NarratorVoice;
-  allPages: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string }[];
+  allPages: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string; globalPageIndex?: number }[];
   currentPageIndex: number;
 }
 
@@ -47,6 +47,7 @@ interface AudioMiniPlayerProps {
   onUpdateNarration: (narration: NarrationState) => void;
   onPlaybackStateChange?: (state: PlaybackState) => void;
   onControlsReady?: (controls: { togglePlay: () => void; nextPage: () => void; replay: () => void; close: () => void }) => void;
+  onTitleClick?: (globalPageIndex: number | undefined) => void;
 }
 
 export type { NarrationState };
@@ -79,7 +80,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady }: AudioMiniPlayerProps) {
+export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady, onTitleClick }: AudioMiniPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -89,6 +90,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const [isMuted, setIsMuted] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationRef = useRef<number | null>(null);
   const narrationRef = useRef(narration);
@@ -294,6 +296,69 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const totalPages = narration.allPages.length;
   const currentPageNum = narration.currentPageIndex + 1;
 
+  const currentGlobalIdx = narration.allPages[narration.currentPageIndex]?.globalPageIndex;
+  const isTitleClickable = !!onTitleClick && currentGlobalIdx !== undefined;
+
+  const handleTitleClick = useCallback(() => {
+    if (onTitleClick && currentGlobalIdx !== undefined) {
+      onTitleClick(currentGlobalIdx);
+    }
+  }, [onTitleClick, currentGlobalIdx]);
+
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-6 right-6 z-[200] rounded-full border border-purple-500/30 bg-card/95 backdrop-blur-xl shadow-[0_0_30px_rgba(147,51,234,0.15)] animate-in slide-in-from-bottom-3 duration-200" data-testid="audio-mini-player-minimized">
+        <div className="flex items-center gap-1 pl-3 pr-1 py-1">
+          <div className="relative w-2 h-2 mr-1 shrink-0">
+            {isPlaying && <span className="absolute inset-0 rounded-full bg-purple-400 animate-ping opacity-40" />}
+            <span className={cn("block w-2 h-2 rounded-full", isPlaying ? "bg-purple-400" : "bg-muted-foreground/30")} />
+          </div>
+          <button
+            onClick={handleTitleClick}
+            className={cn(
+              "text-[11px] font-medium truncate max-w-[140px]",
+              isTitleClickable ? "text-foreground hover:text-purple-300 cursor-pointer transition-colors" : "text-foreground cursor-default"
+            )}
+            data-testid="mini-player-minimized-title"
+          >
+            {narration.bookTitle}
+          </button>
+          <span className="text-[8px] font-mono text-muted-foreground/30 mx-1">{currentPageNum}/{totalPages}</span>
+          <Button
+            size="icon"
+            onClick={isLoading ? undefined : togglePlay}
+            disabled={isLoading}
+            className={cn(
+              "h-8 w-8 rounded-full transition-all shrink-0",
+              isPlaying
+                ? "bg-purple-500 hover:bg-purple-600 text-white shadow-[0_0_12px_rgba(147,51,234,0.3)]"
+                : "bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30"
+            )}
+            data-testid="button-mini-player-play-minimized"
+          >
+            {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
+          </Button>
+          <Button
+            size="icon" variant="ghost"
+            onClick={() => setIsMinimized(false)}
+            className="h-7 w-7 text-muted-foreground/40 hover:text-foreground shrink-0"
+            data-testid="button-mini-player-expand" aria-label="Expand player"
+          >
+            <ChevronUp className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            size="icon" variant="ghost"
+            onClick={handleClose}
+            className="h-7 w-7 text-muted-foreground/40 hover:text-foreground shrink-0"
+            data-testid="button-mini-player-close-minimized" aria-label="Close"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed bottom-6 right-6 z-[200] w-[340px] rounded-2xl border border-purple-500/30 bg-card/95 backdrop-blur-xl shadow-[0_0_40px_rgba(147,51,234,0.15)] overflow-hidden animate-in slide-in-from-bottom-5 duration-300" data-testid="audio-mini-player">
       <div className="px-4 pt-3 pb-1">
@@ -304,19 +369,38 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
               <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-[0.2em]">AI Narrator</span>
               <span className="text-[8px] font-mono text-muted-foreground/25 ml-auto">{currentPageNum}/{totalPages}</span>
             </div>
-            <p className="text-[12px] font-medium text-foreground truncate" data-testid="mini-player-title">{narration.bookTitle}</p>
+            <button
+              onClick={handleTitleClick}
+              className={cn(
+                "text-[12px] font-medium truncate block w-full text-left",
+                isTitleClickable ? "text-foreground hover:text-purple-300 cursor-pointer transition-colors" : "text-foreground cursor-default"
+              )}
+              data-testid="mini-player-title"
+            >
+              {narration.bookTitle}
+            </button>
             <p className="text-[10px] text-muted-foreground/50 font-mono truncate">
               Ch {narration.chapterNumber}: {narration.chapterTitle} — pg {narration.pageInChapter}/{narration.totalPagesInChapter}
             </p>
           </div>
-          <Button
-            size="icon" variant="ghost"
-            onClick={handleClose}
-            className="h-6 w-6 text-muted-foreground/40 hover:text-foreground shrink-0"
-            data-testid="button-mini-player-close" aria-label="Close mini player"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <Button
+              size="icon" variant="ghost"
+              onClick={() => setIsMinimized(true)}
+              className="h-6 w-6 text-muted-foreground/40 hover:text-foreground"
+              data-testid="button-mini-player-minimize" aria-label="Minimize player"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon" variant="ghost"
+              onClick={handleClose}
+              className="h-6 w-6 text-muted-foreground/40 hover:text-foreground"
+              data-testid="button-mini-player-close" aria-label="Close mini player"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
 import { VOICE_OPTIONS, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
 import { apiRequest } from "@/lib/queryClient";
+import { useNarration } from "@/App";
 import type { Chapter } from "@shared/schema";
 
 interface BookReaderProps {
@@ -378,23 +379,27 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const isLandscape = useIsLandscape();
   const showDual = isLandscape && dualPage;
+  const { navigateToPageRequest, clearNavigateRequest } = useNarration();
 
   const pages = useMemo(
     () => buildPages(title, authorName, completedChapters, coverImageUrl, fontSize),
     [title, authorName, completedChapters, coverImageUrl, fontSize]
   );
 
-  const textPages = useMemo(() =>
-    pages
-      .filter((p) => p.type === "text" || p.type === "intro" || p.type === "outro")
-      .map(p => {
-        if (p.type === "intro") return { chapterNumber: 0, chapterTitle: "Introduction", pageInChapter: 1, totalPagesInChapter: 1, text: `${p.title}. Written by ${p.author}. ${p.chapterCount} ${p.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.` };
-        if (p.type === "outro") return { chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.` };
+  const textPages = useMemo(() => {
+    const result: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string; globalPageIndex: number }[] = [];
+    pages.forEach((p, idx) => {
+      if (p.type === "intro") {
+        result.push({ chapterNumber: 0, chapterTitle: "Introduction", pageInChapter: 1, totalPagesInChapter: 1, text: `${p.title}. Written by ${p.author}. ${p.chapterCount} ${p.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`, globalPageIndex: idx });
+      } else if (p.type === "outro") {
+        result.push({ chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`, globalPageIndex: idx });
+      } else if (p.type === "text") {
         const tp = p as Extract<PageContent, { type: "text" }>;
-        return { chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text };
-      }),
-    [pages]
-  );
+        result.push({ chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text, globalPageIndex: idx });
+      }
+    });
+    return result;
+  }, [pages]);
 
   useEffect(() => { autoNarRef.current = autoNarrate; }, [autoNarrate]);
 
@@ -409,6 +414,15 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   useEffect(() => {
     if (currentPage >= pages.length) setCurrentPage(Math.max(0, pages.length - 1));
   }, [pages.length, currentPage]);
+
+  useEffect(() => {
+    if (navigateToPageRequest !== null) {
+      if (navigateToPageRequest >= 0 && navigateToPageRequest < pages.length) {
+        setCurrentPage(navigateToPageRequest);
+      }
+      clearNavigateRequest();
+    }
+  }, [navigateToPageRequest, pages.length, clearNavigateRequest]);
 
   const goToImmediate = useCallback((pageNum: number) => {
     if (pageNum >= 0 && pageNum < pages.length) {

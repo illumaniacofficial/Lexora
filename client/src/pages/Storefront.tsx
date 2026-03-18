@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import type { NarrationState } from "@/components/audio-mini-player";
 import AudioMiniPlayer from "@/components/audio-mini-player";
+import { useNarration } from "@/App";
 
 interface StoreBook {
   id: number;
@@ -41,6 +42,7 @@ export default function Storefront() {
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [showReader, setShowReader] = useState(false);
   const [narrationState, setNarrationState] = useState<NarrationState | null>(null);
+  const { requestNavigateToPage } = useNarration();
   const [requestName, setRequestName] = useState("");
   const [requestGenre, setRequestGenre] = useState("");
   const [requestDescription, setRequestDescription] = useState("");
@@ -208,6 +210,10 @@ export default function Storefront() {
             narration={narrationState}
             onClose={() => setNarrationState(null)}
             onUpdateNarration={(updated) => setNarrationState(updated)}
+            onTitleClick={(globalIdx) => {
+              if (globalIdx !== undefined) requestNavigateToPage(globalIdx);
+              setShowReader(true);
+            }}
           />
         )}
       </div>

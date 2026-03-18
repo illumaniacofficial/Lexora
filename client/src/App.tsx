@@ -39,6 +39,9 @@ interface NarrationContextType {
   playbackControls: PlaybackControls | null;
   setPlaybackState: (state: PlaybackState) => void;
   setPlaybackControls: (controls: PlaybackControls | null) => void;
+  navigateToPageRequest: number | null;
+  clearNavigateRequest: () => void;
+  requestNavigateToPage: (globalPageIndex: number) => void;
 }
 
 const defaultPlayback: PlaybackState = { isPlaying: false, isLoading: false, progress: 0 };
@@ -51,6 +54,9 @@ const NarrationContext = createContext<NarrationContextType>({
   playbackControls: null,
   setPlaybackState: () => {},
   setPlaybackControls: () => {},
+  navigateToPageRequest: null,
+  clearNavigateRequest: () => {},
+  requestNavigateToPage: () => {},
 });
 
 export function useNarration() {
@@ -130,9 +136,24 @@ function App() {
   const [narrationState, setNarrationState] = useState<NarrationState | null>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState>(defaultPlayback);
   const [playbackControls, setPlaybackControls] = useState<PlaybackControls | null>(null);
+  const [navigateToPageRequest, setNavigateToPageRequest] = useState<number | null>(null);
 
   const startNarration = useCallback((state: NarrationState) => {
     setNarrationState(state);
+  }, []);
+
+  const clearNavigateRequest = useCallback(() => {
+    setNavigateToPageRequest(null);
+  }, []);
+
+  const requestNavigateToPage = useCallback((globalPageIndex: number) => {
+    setNavigateToPageRequest(globalPageIndex);
+  }, []);
+
+  const handleTitleClick = useCallback((globalPageIndex: number | undefined) => {
+    if (globalPageIndex !== undefined) {
+      setNavigateToPageRequest(globalPageIndex);
+    }
   }, []);
 
   return (
@@ -140,7 +161,7 @@ function App() {
       <HelmetProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration, playbackState, playbackControls, setPlaybackState, setPlaybackControls }}>
+            <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration, playbackState, playbackControls, setPlaybackState, setPlaybackControls, navigateToPageRequest, clearNavigateRequest, requestNavigateToPage }}>
               <Helmet>
                 <title>Lexora</title>
               </Helmet>
@@ -152,6 +173,7 @@ function App() {
                   onUpdateNarration={(updated) => setNarrationState(updated)}
                   onPlaybackStateChange={setPlaybackState}
                   onControlsReady={setPlaybackControls}
+                  onTitleClick={handleTitleClick}
                 />
               )}
               <Toaster />
