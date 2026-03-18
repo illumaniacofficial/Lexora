@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/components/markdown-renderer";
+import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getDefaultBrowserVoice } from "@/lib/browser-tts";
 
 export interface PlaybackState {
   isPlaying: boolean;
@@ -15,7 +16,7 @@ export type NarratorVoice = string;
 
 export const DEFAULT_VOICE_ID = "qJemC2CfKzP2DljOYBYj";
 
-export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string }[] = [
+export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string; isFree?: boolean }[] = [
   { value: "qJemC2CfKzP2DljOYBYj", label: "Sergio", description: "Professional author voice" },
   { value: "4MnJDVdLqUeSlssQcssu", label: "Sergio Instant", description: "Cloned author voice" },
   { value: "JBFqnCBsd6RMkjVDRZzb", label: "George", description: "Warm, captivating storyteller" },
@@ -108,6 +109,8 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const onUpdateRef = useRef(onUpdateNarration);
   const onWordIndexChangeRef = useRef(onWordIndexChange);
   const wordCountRef = useRef(0);
+  const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     onPlaybackStateChange?.({ isPlaying, isLoading, progress });
@@ -124,6 +127,66 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     }
   }, []);
 
+  const stopBrowserTTS = useCallback(() => {
+    if (browserTTSRef.current) {
+      browserTTSRef.current.stop();
+      browserTTSRef.current = null;
+    }
+  }, []);
+
+  const advanceToNextPage = useCallback((expectedIdx: number) => {
+    setTimeout(() => {
+      const latest = narrationRef.current;
+      if (latest.currentPageIndex !== expectedIdx) return;
+      const nextIdx = latest.currentPageIndex + 1;
+      if (nextIdx < latest.allPages.length) {
+        const nextP = latest.allPages[nextIdx];
+        onUpdateRef.current({
+          ...latest,
+          chapterNumber: nextP.chapterNumber,
+          chapterTitle: nextP.chapterTitle,
+          pageInChapter: nextP.pageInChapter,
+          totalPagesInChapter: nextP.totalPagesInChapter,
+          text: nextP.text,
+          currentPageIndex: nextIdx,
+        });
+      }
+    }, 400);
+  }, []);
+
+  const playWithBrowserTTS = useCallback((text: string, voice: string, expectedIdx: number) => {
+    const cleanText = stripMarkdown(text).slice(0, 4000);
+    const words = cleanText.split(/\s+/).filter(Boolean);
+    wordCountRef.current = words.length;
+    onWordIndexChangeRef.current?.(-1);
+
+    setIsLoading(false);
+    setIsPlaying(true);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+
+    const controls = browserTTSSpeak(cleanText, voice, speed, {
+      onWordIndex: (idx) => onWordIndexChangeRef.current?.(idx),
+      onProgress: (pct) => setProgress(pct),
+      onEnd: () => {
+        setIsPlaying(false);
+        setProgress(100);
+        onWordIndexChangeRef.current?.(words.length - 1);
+        browserTTSRef.current = null;
+        advanceToNextPage(expectedIdx);
+      },
+      onError: (err) => {
+        console.error("Browser TTS error:", err);
+        setIsPlaying(false);
+        setIsLoading(false);
+        setProgress(0);
+        browserTTSRef.current = null;
+      },
+    });
+    browserTTSRef.current = controls;
+  }, [speed, advanceToNextPage]);
+
   const generateAndPlay = useCallback(async (text: string, voice: NarratorVoice) => {
     try {
       setIsLoading(true);
@@ -131,18 +194,40 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       setProgress(0);
       setCurrentTime(0);
       setDuration(0);
+      setUsingFallback(false);
 
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
+      stopBrowserTTS();
 
       const cleanText = stripMarkdown(text).slice(0, 4000);
       const words = cleanText.split(/\s+/).filter(Boolean);
       wordCountRef.current = words.length;
       onWordIndexChangeRef.current?.(-1);
 
-      const audioData = await fetchAudioCached(text, voice);
+      const expectedIdx = narration.currentPageIndex;
+
+      if (isBrowserVoice(voice)) {
+        playWithBrowserTTS(text, voice, expectedIdx);
+        return;
+      }
+
+      let audioData: string;
+      try {
+        audioData = await fetchAudioCached(text, voice);
+      } catch (fetchErr: any) {
+        console.warn("ElevenLabs TTS failed, falling back to browser voice:", fetchErr.message);
+        const fallbackVoice = getDefaultBrowserVoice();
+        if (fallbackVoice) {
+          setUsingFallback(true);
+          playWithBrowserTTS(text, fallbackVoice.id, expectedIdx);
+          return;
+        }
+        throw fetchErr;
+      }
+
       const audio = new Audio(audioData);
       audio.volume = isMuted ? 0 : volume;
       audio.playbackRate = speed;
@@ -151,29 +236,12 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       const latest = narrationRef.current;
       prefetchNext(latest.currentPageIndex, voice, latest.allPages);
 
-      const expectedIdx = narration.currentPageIndex;
       audio.onended = () => {
         setIsPlaying(false);
         setProgress(100);
         onWordIndexChangeRef.current?.(words.length - 1);
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
-        setTimeout(() => {
-          const latest = narrationRef.current;
-          if (latest.currentPageIndex !== expectedIdx) return;
-          const nextIdx = latest.currentPageIndex + 1;
-          if (nextIdx < latest.allPages.length) {
-            const nextP = latest.allPages[nextIdx];
-            onUpdateRef.current({
-              ...latest,
-              chapterNumber: nextP.chapterNumber,
-              chapterTitle: nextP.chapterTitle,
-              pageInChapter: nextP.pageInChapter,
-              totalPagesInChapter: nextP.totalPagesInChapter,
-              text: nextP.text,
-              currentPageIndex: nextIdx,
-            });
-          }
-        }, 400);
+        advanceToNextPage(expectedIdx);
       };
 
       audio.onloadedmetadata = () => {
@@ -205,7 +273,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       setIsLoading(false);
       setProgress(0);
     }
-  }, [prefetchNext, volume, isMuted, speed]);
+  }, [prefetchNext, volume, isMuted, speed, stopBrowserTTS, playWithBrowserTTS]);
 
   useEffect(() => {
     generateAndPlay(narration.text, narration.voice);
@@ -214,6 +282,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         audioRef.current.pause();
         audioRef.current = null;
       }
+      stopBrowserTTS();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [narration.text, narration.currentPageIndex]);
@@ -231,6 +300,16 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   }, [speed]);
 
   const togglePlay = useCallback(() => {
+    if (browserTTSRef.current) {
+      if (isPlaying) {
+        browserTTSRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        browserTTSRef.current.resume();
+        setIsPlaying(true);
+      }
+      return;
+    }
     if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
@@ -256,6 +335,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   }, [isPlaying]);
 
   const replay = useCallback(() => {
+    stopBrowserTTS();
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
       audioRef.current.play();
@@ -265,7 +345,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     } else {
       generateAndPlay(narration.text, narration.voice);
     }
-  }, [narration.text, narration.voice, generateAndPlay]);
+  }, [narration.text, narration.voice, generateAndPlay, stopBrowserTTS]);
 
   const nextPage = useCallback(() => {
     const nextIdx = narration.currentPageIndex + 1;
@@ -304,9 +384,10 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       audioRef.current.pause();
       audioRef.current = null;
     }
+    stopBrowserTTS();
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     onClose();
-  }, [onClose]);
+  }, [onClose, stopBrowserTTS]);
 
   useEffect(() => {
     onControlsReady?.({ togglePlay, nextPage, replay, close: handleClose });
@@ -550,8 +631,8 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
             className="flex-1 h-4 [&_[role=slider]]:h-2.5 [&_[role=slider]]:w-2.5 [&_[role=slider]]:border-purple-400/50 [&_[role=slider]]:bg-purple-400/50"
             data-testid="mini-player-volume"
           />
-          <span className="text-[8px] font-mono text-muted-foreground/25 w-5 text-right shrink-0">
-            {VOICE_OPTIONS.find(v => v.value === narration.voice)?.label?.slice(0, 3) || "?"}
+          <span className={cn("text-[8px] font-mono text-right shrink-0", usingFallback ? "text-amber-400/50 w-8" : "text-muted-foreground/25 w-5")}>
+            {usingFallback ? "Free" : isBrowserVoice(narration.voice) ? "Free" : VOICE_OPTIONS.find(v => v.value === narration.voice)?.label?.slice(0, 3) || "?"}
           </span>
         </div>
       </div>

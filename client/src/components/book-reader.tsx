@@ -7,6 +7,7 @@ import { VOICE_OPTIONS, type NarratorVoice, type NarrationState } from "@/compon
 import { useNarration } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
+import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getBrowserVoices, getDefaultBrowserVoice, type BrowserVoiceOption } from "@/lib/browser-tts";
 
 interface BookReaderProps {
   title: string;
@@ -469,6 +470,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const autoNarRef = useRef(false);
   const readerWordCountRef = useRef(0);
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
+  const [browserVoiceList, setBrowserVoiceList] = useState<BrowserVoiceOption[]>([]);
+  const [readerUsingFallback, setReaderUsingFallback] = useState(false);
   const isLandscape = useIsLandscape();
   const showDual = isLandscape && dualPage;
   const { navigateToPageRequest, clearNavigateRequest, currentWordIndex: miniPlayerWordIndex, narrationState: miniNarration } = useNarration();
@@ -494,6 +498,19 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   }, [pages]);
 
   useEffect(() => { autoNarRef.current = autoNarrate; }, [autoNarrate]);
+
+  useEffect(() => {
+    const loadVoices = () => setBrowserVoiceList(getBrowserVoices());
+    loadVoices();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem("bookforge-reader-theme", theme); } catch {}
@@ -553,11 +570,14 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const stopNarration = useCallback(() => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (browserTTSRef.current) { browserTTSRef.current.stop(); browserTTSRef.current = null; }
+    browserTTSStop();
     if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
     setIsNarrating(false);
     setNarrationProgress(0);
     setReaderWordIndex(-1);
     setNarratedPageIdx(-1);
+    setReaderUsingFallback(false);
   }, []);
 
   const audioCacheRef = useRef<Map<string, string>>(new Map());
@@ -639,6 +659,40 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const playPageRef = useRef<(pageIdx: number) => Promise<void>>();
 
+  const startBrowserNarration = useCallback((text: string, wordCount: number, lastPageIdx: number, pageIdx: number) => {
+    const controls = browserTTSSpeak(text, selectedVoice, 1, {
+      onWordIndex: (idx) => setReaderWordIndex(idx),
+      onProgress: (pct) => setNarrationProgress(pct),
+      onEnd: () => {
+        setIsNarrating(false);
+        setNarrationProgress(100);
+        setReaderWordIndex(wordCount - 1);
+        browserTTSRef.current = null;
+        if (autoNarRef.current) {
+          setReaderWordIndex(-1);
+          let nextTextIdx = lastPageIdx + 1;
+          while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
+          if (nextTextIdx < pages.length) {
+            goToImmediate(nextTextIdx);
+            setTimeout(() => {
+              if (playPageRef.current) playPageRef.current(nextTextIdx);
+            }, 400);
+          }
+        }
+      },
+      onError: (err) => {
+        console.error("Browser TTS error:", err);
+        setIsNarrating(false);
+        setNarrationLoading(false);
+        setNarrationProgress(0);
+        browserTTSRef.current = null;
+      },
+    });
+    browserTTSRef.current = controls;
+    setIsNarrating(true);
+    setNarrationLoading(false);
+  }, [selectedVoice, pages, goToImmediate, isNarratablePage]);
+
   const playPage = useCallback(async (pageIdx: number) => {
     const pageData = getPageText(pageIdx);
     if (!pageData) {
@@ -656,7 +710,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     const { text: cleanText, lastIdx: lastPageIdx } = pageData;
     try {
       setNarrationLoading(true);
+      setReaderUsingFallback(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (browserTTSRef.current) { browserTTSRef.current.stop(); browserTTSRef.current = null; }
+      browserTTSStop();
       if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
       setIsNarrating(false);
       setNarrationProgress(0);
@@ -673,7 +730,26 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         return;
       }
 
-      const audioDataUrl = await fetchAudio(cleanText, selectedVoice);
+      if (isBrowserVoice(selectedVoice)) {
+        startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx);
+        return;
+      }
+
+      let audioDataUrl: string;
+      try {
+        audioDataUrl = await fetchAudio(cleanText, selectedVoice);
+      } catch (fetchErr: any) {
+        console.warn("ElevenLabs TTS failed in reader, falling back to browser voice:", fetchErr.message);
+        const fallbackVoice = getDefaultBrowserVoice();
+        if (fallbackVoice) {
+          setReaderUsingFallback(true);
+          toast({ title: "Using free voice", description: "Premium voice unavailable — switched to a free browser voice automatically." });
+          startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx);
+          return;
+        }
+        throw fetchErr;
+      }
+
       const audio = new Audio(audioDataUrl);
       audioRef.current = audio;
 
@@ -726,7 +802,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       setNarrationProgress(0);
       toast({ title: "Narration failed", description: err?.message || "Could not generate or play audio. Please try again.", variant: "destructive" });
     }
-  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext, isNarratablePage, toast]);
+  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext, isNarratablePage, toast, startBrowserNarration]);
 
   useEffect(() => { playPageRef.current = playPage; }, [playPage]);
 
