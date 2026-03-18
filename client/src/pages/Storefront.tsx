@@ -302,7 +302,7 @@ function StorefrontContent({ token }: { token: string }) {
             {bookDetail.coverImageUrl && (
               <div className="shrink-0 flex justify-center md:justify-start">
                 <div className="w-40 h-60 md:w-56 md:h-80 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(147,51,234,0.15)] border border-purple-500/10">
-                  <img src={bookDetail.coverImageUrl} alt={bookDetail.title} className="w-full h-full object-cover" data-testid="img-book-cover" />
+                  <img src={`/api/store/${token}/cover/${bookDetail.id}`} alt={bookDetail.title} className="w-full h-full object-cover" data-testid="img-book-cover" />
                 </div>
               </div>
             )}
@@ -373,7 +373,7 @@ function StorefrontContent({ token }: { token: string }) {
             title={bookDetail.title}
             authorName={bookDetail.authorName || "Unknown Author"}
             chapters={bookDetail.chapters as any}
-            coverImageUrl={bookDetail.coverImageUrl}
+            coverImageUrl={bookDetail.coverImageUrl ? `/api/store/${token}/cover/${bookDetail.id}` : null}
             onClose={() => setShowReader(false)}
             onStartNarration={(narration) => setNarrationState(narration)}
           />
@@ -478,7 +478,7 @@ function StorefrontContent({ token }: { token: string }) {
                   {book.hasCover && (
                     <div className="relative w-full aspect-[3/4] overflow-hidden">
                       <img
-                        src={`/api/projects/${book.id}/cover-image`}
+                        src={`/api/store/${token}/cover/${book.id}`}
                         alt={book.title}
                         loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"

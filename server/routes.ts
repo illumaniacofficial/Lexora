@@ -447,6 +447,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/store/:token/cover/:bookId", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) {
+        return res.status(404).json({ error: "Invalid invite" });
+      }
+      const bookId = parseId(req.params.bookId);
+      if (!bookId) return res.status(400).json({ error: "Invalid book ID" });
+      const project = await storage.getProject(bookId);
+      if (!project || !project.publishedToStore || !project.coverImageUrl) {
+        return res.status(404).send();
+      }
+      const match = project.coverImageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+      if (!match) {
+        return res.redirect(project.coverImageUrl);
+      }
+      const ext = match[1];
+      const buf = Buffer.from(match[2], "base64");
+      res.set("Content-Type", `image/${ext}`);
+      res.set("Cache-Control", "public, max-age=86400");
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/store/:token/book/:bookId", async (req, res) => {
     try {
       const invite = await storage.getInviteByToken(req.params.token);

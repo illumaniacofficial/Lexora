@@ -22,6 +22,7 @@ const Autopilot = lazy(() => import("@/pages/Autopilot"));
 const Library = lazy(() => import("@/pages/Library"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const ChatStudio = lazy(() => import("@/pages/ChatStudio"));
+const Requests = lazy(() => import("@/pages/Requests"));
 const Storefront = lazy(() => import("@/pages/Storefront"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 
@@ -90,6 +91,7 @@ function AdminRouter() {
         <Route path="/chat" component={ChatStudio} />
         <Route path="/settings" component={Settings} />
         <Route path="/library" component={Library} />
+        <Route path="/requests" component={Requests} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
