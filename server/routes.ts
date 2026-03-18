@@ -830,6 +830,17 @@ Write the full chapter content only, no meta-commentary.`;
   const AUDIO_DIR = path.resolve("uploads/audio");
   fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
+  function voiceAudioDir(voiceId: string): string {
+    const safeVoice = voiceId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const dir = path.join(AUDIO_DIR, safeVoice);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  function chapterAudioFilename(projectId: number, chapterId: number): string {
+    return `project-${projectId}-chapter-${chapterId}.mp3`;
+  }
+
   app.post("/api/projects/:id/chapters/:chapterId/generate-audio", async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
@@ -841,6 +852,17 @@ Write the full chapter content only, no meta-commentary.`;
 
       const { voice } = req.body || {};
       const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const dir = voiceAudioDir(voiceId);
+      const filename = chapterAudioFilename(projectId, chapterId);
+      const filePath = path.join(dir, filename);
+
+      const safeVoice = voiceId.replace(/[^a-zA-Z0-9_-]/g, "");
+      if (fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        const audioUrl = `/uploads/audio/${safeVoice}/${filename}`;
+        return res.json({ audioUrl, chapterId, size: stat.size, cached: true });
+      }
+
       const cleanText = (chapter.content || "").replace(/[#*_`~>\[\]()]/g, "");
       if (!cleanText.trim()) return res.status(400).json({ error: "Chapter has no narrable content" });
 
@@ -853,11 +875,9 @@ Write the full chapter content only, no meta-commentary.`;
       if (audioChunks.length === 0) return res.status(400).json({ error: "No audio generated" });
 
       const combined = Buffer.concat(audioChunks);
-      const filename = `project-${projectId}-chapter-${chapterId}.mp3`;
-      const filePath = path.join(AUDIO_DIR, filename);
       fs.writeFileSync(filePath, combined);
 
-      const audioUrl = `/uploads/audio/${filename}`;
+      const audioUrl = `/uploads/audio/${safeVoice}/${filename}`;
       await storage.updateChapter(chapterId, { audioUrl });
 
       res.json({ audioUrl, chapterId, size: combined.length });
@@ -874,15 +894,32 @@ Write the full chapter content only, no meta-commentary.`;
       if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
       const chapter = await storage.getChapter(chapterId);
       if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
-      if (!chapter.audioUrl) return res.status(404).json({ error: "No audio generated for this chapter" });
 
-      const filePath = path.resolve("." + chapter.audioUrl);
-      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Audio file not found on disk" });
+      const voiceId = (req.query.voice as string) || "qJemC2CfKzP2DljOYBYj";
+      const dir = voiceAudioDir(voiceId);
+      const filename = chapterAudioFilename(projectId, chapterId);
+      const filePath = path.join(dir, filename);
+
+      if (!fs.existsSync(filePath)) {
+        const isDefaultVoice = voiceId === "qJemC2CfKzP2DljOYBYj";
+        const isLegacyPath = chapter.audioUrl && chapter.audioUrl.startsWith("/uploads/audio/project-");
+        if (isDefaultVoice && isLegacyPath) {
+          const legacyPath = path.resolve("." + chapter.audioUrl);
+          if (fs.existsSync(legacyPath)) {
+            const project = await storage.getProject(projectId);
+            const dlName = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
+            res.setHeader("Content-Type", "audio/mpeg");
+            res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
+            return fs.createReadStream(legacyPath).pipe(res);
+          }
+        }
+        return res.status(404).json({ error: "No audio generated for this chapter with this voice" });
+      }
 
       const project = await storage.getProject(projectId);
-      const filename = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
+      const dlName = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
       res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
       fs.createReadStream(filePath).pipe(res);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -1278,6 +1315,16 @@ Return JSON with:
     }
   });
 
+  const TTS_DISK_DIR = path.resolve("uploads/audio/tts-cache");
+  fs.mkdirSync(TTS_DISK_DIR, { recursive: true });
+
+  function ttsDiskPath(voiceId: string, textHash: string): string {
+    const safeVoice = voiceId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const dir = path.join(TTS_DISK_DIR, safeVoice);
+    fs.mkdirSync(dir, { recursive: true });
+    return path.join(dir, `${textHash}.mp3`);
+  }
+
   app.post("/api/tts", async (req, res) => {
     try {
       const { text, voice } = req.body;
@@ -1296,9 +1343,17 @@ Return JSON with:
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
+      const diskFile = ttsDiskPath(voiceId, cacheKey);
+      if (fs.existsSync(diskFile)) {
+        const base64Audio = fs.readFileSync(diskFile).toString("base64");
+        ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+        return res.json({ audio: base64Audio, format: "mp3" });
+      }
+
       const audioBuffer = await elevenLabsTTS(trimmed, voiceId);
       const base64Audio = audioBuffer.toString("base64");
 
+      fs.writeFileSync(diskFile, audioBuffer);
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
       cleanTtsCache();
 

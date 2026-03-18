@@ -19,8 +19,10 @@ interface BookReaderProps {
 type PageContent =
   | { type: "cover"; title: string; author: string; coverUrl?: string | null }
   | { type: "toc"; chapters: { number: number; title: string }[] }
+  | { type: "intro"; title: string; author: string; chapterCount: number }
   | { type: "chapter-title"; chapterNumber: number; chapterTitle: string }
-  | { type: "text"; chapterNumber: number; chapterTitle: string; text: string; pageInChapter: number; totalPagesInChapter: number };
+  | { type: "text"; chapterNumber: number; chapterTitle: string; text: string; pageInChapter: number; totalPagesInChapter: number }
+  | { type: "outro"; title: string; author: string };
 
 type PageTheme = "parchment" | "cream" | "white" | "sepia" | "dark" | "midnight";
 
@@ -98,6 +100,7 @@ function buildPages(title: string, authorName: string, chapters: Chapter[], cove
   const pages: PageContent[] = [];
   pages.push({ type: "cover", title, author: authorName, coverUrl });
   pages.push({ type: "toc", chapters: chapters.map(c => ({ number: c.chapterNumber, title: c.title })) });
+  pages.push({ type: "intro", title, author: authorName, chapterCount: chapters.length });
   const linesPerPage = linesForFontSize(fontSize);
   const charsPerLine = Math.max(40, Math.round(80 * (16 / fontSize)));
   for (const ch of chapters) {
@@ -109,6 +112,7 @@ function buildPages(title: string, authorName: string, chapters: Chapter[], cove
       });
     }
   }
+  pages.push({ type: "outro", title, author: authorName });
   return pages;
 }
 
@@ -213,6 +217,38 @@ function TocPage({ page, theme, fontSize }: { page: Extract<PageContent, { type:
   );
 }
 
+function IntroPage({ page, theme }: { page: Extract<PageContent, { type: "intro" }>; theme: PageTheme }) {
+  const t = THEMES[theme];
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center px-8">
+      <div className={cn("w-20 h-[2px] mb-6 rounded-full", t.divider)} />
+      <h1 className={cn("font-serif text-2xl md:text-3xl font-bold leading-tight mb-4", t.heading)}>{page.title}</h1>
+      <div className={cn("w-12 h-[1px] mb-4 rounded-full", t.divider)} />
+      <p className={cn("font-serif text-base italic mb-6", t.accent)}>Written by {page.author}</p>
+      <p className={cn("font-serif text-sm mb-2", t.text)}>{page.chapterCount} {page.chapterCount === 1 ? "Chapter" : "Chapters"}</p>
+      <div className={cn("w-8 h-[1px] my-6 rounded-full", t.divider)} />
+      <p className={cn("font-mono text-[10px] uppercase tracking-[0.25em]", t.accent)}>Narrated on Lexora</p>
+    </div>
+  );
+}
+
+function OutroPage({ page, theme }: { page: Extract<PageContent, { type: "outro" }>; theme: PageTheme }) {
+  const t = THEMES[theme];
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center px-8">
+      <div className={cn("w-20 h-[2px] mb-8 rounded-full", t.divider)} />
+      <p className={cn("font-serif text-lg italic mb-4", t.text)}>Thank you for listening.</p>
+      <div className={cn("w-12 h-[1px] mb-6 rounded-full", t.divider)} />
+      <h2 className={cn("font-serif text-xl font-bold mb-2", t.heading)}>{page.title}</h2>
+      <p className={cn("font-serif text-sm italic mb-6", t.accent)}>by {page.author}</p>
+      <div className={cn("w-8 h-[1px] my-4 rounded-full", t.divider)} />
+      <p className={cn("font-mono text-[10px] uppercase tracking-[0.25em] mb-1", t.accent)}>Produced &amp; narrated on</p>
+      <p className={cn("font-serif text-lg font-bold tracking-wide", t.heading)}>Lexora</p>
+      <p className={cn("font-mono text-[9px] uppercase tracking-[0.3em] mt-4", t.accent)}>AI Publishing Platform</p>
+    </div>
+  );
+}
+
 function ChapterTitlePage({ page, theme }: { page: Extract<PageContent, { type: "chapter-title" }>; theme: PageTheme }) {
   const t = THEMES[theme];
   return (
@@ -269,8 +305,10 @@ function DarkMarkdownRenderer({ content, theme }: { content: string; theme: Page
 function renderPage(page: PageContent, theme: PageTheme, fontSize: number) {
   if (page.type === "cover") return <CoverPage page={page} theme={theme} />;
   if (page.type === "toc") return <TocPage page={page} theme={theme} fontSize={fontSize} />;
+  if (page.type === "intro") return <IntroPage page={page} theme={theme} />;
   if (page.type === "chapter-title") return <ChapterTitlePage page={page} theme={theme} />;
   if (page.type === "text") return <TextPage page={page} theme={theme} fontSize={fontSize} />;
+  if (page.type === "outro") return <OutroPage page={page} theme={theme} />;
   return null;
 }
 
@@ -348,8 +386,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const textPages = useMemo(() =>
     pages
-      .filter((p): p is Extract<PageContent, { type: "text" }> => p.type === "text")
-      .map(p => ({ chapterNumber: p.chapterNumber, chapterTitle: p.chapterTitle, pageInChapter: p.pageInChapter, totalPagesInChapter: p.totalPagesInChapter, text: p.text })),
+      .filter((p) => p.type === "text" || p.type === "intro" || p.type === "outro")
+      .map(p => {
+        if (p.type === "intro") return { chapterNumber: 0, chapterTitle: "Introduction", pageInChapter: 1, totalPagesInChapter: 1, text: `${p.title}. Written by ${p.author}. ${p.chapterCount} ${p.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.` };
+        if (p.type === "outro") return { chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.` };
+        const tp = p as Extract<PageContent, { type: "text" }>;
+        return { chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text };
+      }),
     [pages]
   );
 
@@ -411,14 +454,33 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const audioCacheRef = useRef<Map<string, string>>(new Map());
 
+  const getPageNarrationText = useCallback((pg: PageContent): string | null => {
+    if (pg.type === "intro") {
+      return `${pg.title}. Written by ${pg.author}. ${pg.chapterCount} ${pg.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`;
+    }
+    if (pg.type === "outro") {
+      return `Thank you for listening to ${pg.title}, by ${pg.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`;
+    }
+    if (pg.type === "text") return stripMarkdown(pg.text).slice(0, 4000);
+    return null;
+  }, []);
+
   const getPageText = useCallback((pageIdx: number): { text: string; lastIdx: number } | null => {
     let pg = pages[pageIdx];
+    if (pg.type === "intro" || pg.type === "outro") {
+      const narration = getPageNarrationText(pg);
+      return narration ? { text: narration, lastIdx: pageIdx } : null;
+    }
     if (pg.type !== "text") {
       let nextIdx = pageIdx + 1;
-      while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
+      while (nextIdx < pages.length && pages[nextIdx].type !== "text" && pages[nextIdx].type !== "intro" && pages[nextIdx].type !== "outro") nextIdx++;
       if (nextIdx >= pages.length) return null;
+      pg = pages[nextIdx];
       pageIdx = nextIdx;
-      pg = pages[pageIdx];
+      if (pg.type === "intro" || pg.type === "outro") {
+        const narration = getPageNarrationText(pg);
+        return narration ? { text: narration, lastIdx: pageIdx } : null;
+      }
     }
     let textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
     let lastIdx = pageIdx;
@@ -427,7 +489,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       lastIdx = pageIdx + 1;
     }
     return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx };
-  }, [pages, showDual]);
+  }, [pages, showDual, getPageNarrationText]);
 
   const fetchAudio = useCallback(async (text: string, voice: NarratorVoice): Promise<string> => {
     const cacheKey = `${voice}:${text.slice(0, 100)}:${text.length}`;
@@ -444,22 +506,24 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     return dataUrl;
   }, []);
 
+  const isNarratablePage = useCallback((pg: PageContent) => pg.type === "text" || pg.type === "intro" || pg.type === "outro", []);
+
   const prefetchNext = useCallback((afterIdx: number) => {
     let nextIdx = afterIdx + 1;
-    while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
+    while (nextIdx < pages.length && !isNarratablePage(pages[nextIdx])) nextIdx++;
     if (nextIdx >= pages.length) return;
     const nextData = getPageText(nextIdx);
     if (nextData) {
       fetchAudio(nextData.text, selectedVoice).catch(() => {});
     }
-  }, [pages, getPageText, fetchAudio, selectedVoice]);
+  }, [pages, getPageText, fetchAudio, selectedVoice, isNarratablePage]);
 
   const playPage = useCallback(async (pageIdx: number) => {
     const pageData = getPageText(pageIdx);
     if (!pageData) return;
-    if (pages[pageIdx].type !== "text") {
+    if (!isNarratablePage(pages[pageIdx])) {
       let nextIdx = pageIdx + 1;
-      while (nextIdx < pages.length && pages[nextIdx].type !== "text") nextIdx++;
+      while (nextIdx < pages.length && !isNarratablePage(pages[nextIdx])) nextIdx++;
       if (nextIdx < pages.length) {
         goToImmediate(nextIdx);
         pageIdx = nextIdx;
@@ -485,7 +549,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
         if (autoNarRef.current) {
           let nextTextIdx = lastPageIdx + 1;
-          while (nextTextIdx < pages.length && pages[nextTextIdx].type !== "text") nextTextIdx++;
+          while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
             goToImmediate(nextTextIdx);
             setTimeout(() => playPage(nextTextIdx), 400);
@@ -506,7 +570,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       console.error("TTS error:", err);
       setNarrationLoading(false);
     }
-  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext]);
+  }, [pages, selectedVoice, goToImmediate, showDual, getPageText, fetchAudio, prefetchNext, isNarratablePage]);
 
   const playCurrentPage = useCallback(() => playPage(currentPage), [playPage, currentPage]);
 
@@ -529,7 +593,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const handleClose = useCallback(() => {
     const page = pages[currentPage];
-    if ((isNarrating || narrationProgress > 0) && page.type === "text" && onStartNarration && textPages.length > 0) {
+    if ((isNarrating || narrationProgress > 0) && (page.type === "text" || page.type === "intro" || page.type === "outro") && onStartNarration && textPages.length > 0) {
       const firstPage = textPages[0];
       onStartNarration({
         bookTitle: title, chapterTitle: firstPage.chapterTitle, chapterNumber: firstPage.chapterNumber,
@@ -584,7 +648,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const isDark = theme === "dark" || theme === "midnight";
   const currentSizeIdx = FONT_SIZES.findIndex(s => s.value === fontSize);
   const sizeLabel = FONT_SIZES[currentSizeIdx]?.label || "M";
-  const isTextPage = page.type === "text";
+  const isNarratableCurrentPage = page.type === "text" || page.type === "intro" || page.type === "outro";
   const closeAllPanels = () => { setShowToc(false); setShowSettings(false); setShowNarrator(false); };
 
   return (
@@ -642,7 +706,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           </div>
 
           <div className="flex items-center gap-2">
-            {isTextPage && (isNarrating || narrationLoading) && (
+            {isNarratableCurrentPage && (isNarrating || narrationLoading) && (
               <div className="flex items-center gap-1.5">
                 <button onClick={toggleNarration} disabled={narrationLoading}
                   className="h-7 w-7 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300 hover:bg-purple-500/30 transition-all disabled:opacity-50"
@@ -726,7 +790,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 className="accent-purple-500 w-3.5 h-3.5" data-testid="checkbox-auto-narrate" />
               <span className="text-[10px] text-stone-400 group-hover:text-stone-300 transition-colors">Auto-read next page</span>
             </label>
-            {isTextPage ? (
+            {isNarratableCurrentPage ? (
               <div className="flex gap-2">
                 <Button size="sm" onClick={playCurrentPage} disabled={narrationLoading}
                   className="flex-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/30 text-[11px] font-mono h-8"
@@ -756,7 +820,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               let label = "";
               if (p.type === "cover") label = "Cover";
               else if (p.type === "toc") label = "Table of Contents";
+              else if (p.type === "intro") label = "Introduction";
               else if (p.type === "chapter-title") label = `Ch ${p.chapterNumber}: ${p.chapterTitle}`;
+              else if (p.type === "outro") label = "Thank You";
               else return null;
               return (
                 <button key={i} onClick={() => { goTo(i); setShowToc(false); }}
