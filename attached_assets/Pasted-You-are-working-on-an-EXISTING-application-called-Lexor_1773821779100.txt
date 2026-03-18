@@ -1,0 +1,116 @@
+You are working on an EXISTING application called **Lexora**.
+
+Your job is NOT to rebuild from scratch.
+
+Your job is to:
+- analyze the current codebase
+- improve architecture
+- extend features
+- fill missing functionality
+- refine UX/UI
+- upgrade performance and reliability
+
+You must PRESERVE what already works and EVOLVE the system into a premium, production-ready AI publishing platform.
+
+--------------------------------------------------
+1. PRIMARY OBJECTIVE
+--------------------------------------------------
+
+Transform Lexora into a high-end AI publishing system that includes:
+
+- advanced writing intelligence
+- full book generation workflows
+- persistent memory (Book DNA)
+- market analysis tools
+- monetization and marketing systems
+- cover/design generation
+- multilingual capabilities
+- automation (autopilot)
+- quality scoring + validation
+
+Do NOT delete working features unless necessary.
+Improve and extend them.
+
+--------------------------------------------------
+2. FIRST STEP — CODEBASE ANALYSIS
+--------------------------------------------------
+
+Before making changes:
+
+- Review all existing folders and files
+- Identify:
+  - current architecture
+  - existing features
+  - missing components
+  - weak areas (UI, logic, structure)
+  - duplicated logic
+  - incomplete flows
+
+Then:
+- summarize findings briefly
+- propose improvements
+- THEN begin implementing
+
+--------------------------------------------------
+3. UPGRADE: AI WRITING CORE
+--------------------------------------------------
+
+Improve or add:
+
+- Multi-style writing modes:
+  - educational
+  - persuasive
+  - storytelling
+
+- Adjustable reading level:
+  - 5th grade → expert
+
+- Story continuity tracker:
+  - preserve flow between chapters
+  - avoid contradictions
+  - maintain narrative consistency
+
+Ensure:
+- writing settings are stored per project
+- settings influence ALL generated content
+
+--------------------------------------------------
+4. UPGRADE: BOOK GENERATION ENGINE
+--------------------------------------------------
+
+Improve existing generation flow:
+
+- Add full book auto-completion pipeline
+- Ensure generation is step-based and resumable
+- Improve chapter regeneration:
+  - regenerate without breaking entire book
+- Add:
+  - chapter expansion
+  - chapter compression
+
+Ensure:
+- context from previous chapters is preserved
+- structure remains consistent
+
+--------------------------------------------------
+5. UPGRADE: BOOK DNA + MEMORY SYSTEM
+--------------------------------------------------
+
+Add or enhance a persistent Book DNA system:
+
+Features to implement or improve:
+- persistent writing identity
+- terminology consistency
+- character/idea tracking
+- “never repeat this” memory rules
+- style lock
+- concept evolution tracking
+- cross-chapter callbacks
+- idea reinforcement
+- voice stabilization across books
+- personal knowledge embedding
+
+Ensure:
+- Book DNA is stored in DB
+- used in ALL writing steps
+- user can edit and customize rules
