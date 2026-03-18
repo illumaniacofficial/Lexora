@@ -42,6 +42,8 @@ interface NarrationContextType {
   navigateToPageRequest: number | null;
   clearNavigateRequest: () => void;
   requestNavigateToPage: (globalPageIndex: number) => void;
+  currentWordIndex: number;
+  setCurrentWordIndex: (idx: number) => void;
 }
 
 const defaultPlayback: PlaybackState = { isPlaying: false, isLoading: false, progress: 0 };
@@ -57,6 +59,8 @@ const NarrationContext = createContext<NarrationContextType>({
   navigateToPageRequest: null,
   clearNavigateRequest: () => {},
   requestNavigateToPage: () => {},
+  currentWordIndex: -1,
+  setCurrentWordIndex: () => {},
 });
 
 export function useNarration() {
@@ -137,6 +141,7 @@ function App() {
   const [playbackState, setPlaybackState] = useState<PlaybackState>(defaultPlayback);
   const [playbackControls, setPlaybackControls] = useState<PlaybackControls | null>(null);
   const [navigateToPageRequest, setNavigateToPageRequest] = useState<number | null>(null);
+  const [currentWordIndex, setCurrentWordIndex] = useState(-1);
 
   const startNarration = useCallback((state: NarrationState) => {
     setNarrationState(state);
@@ -161,7 +166,7 @@ function App() {
       <HelmetProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration, playbackState, playbackControls, setPlaybackState, setPlaybackControls, navigateToPageRequest, clearNavigateRequest, requestNavigateToPage }}>
+            <NarrationContext.Provider value={{ narrationState, setNarrationState, startNarration, playbackState, playbackControls, setPlaybackState, setPlaybackControls, navigateToPageRequest, clearNavigateRequest, requestNavigateToPage, currentWordIndex, setCurrentWordIndex }}>
               <Helmet>
                 <title>Lexora</title>
               </Helmet>
@@ -169,11 +174,12 @@ function App() {
               {narrationState && (
                 <AudioMiniPlayer
                   narration={narrationState}
-                  onClose={() => { setNarrationState(null); setPlaybackControls(null); setPlaybackState(defaultPlayback); }}
+                  onClose={() => { setNarrationState(null); setPlaybackControls(null); setPlaybackState(defaultPlayback); setCurrentWordIndex(-1); }}
                   onUpdateNarration={(updated) => setNarrationState(updated)}
                   onPlaybackStateChange={setPlaybackState}
                   onControlsReady={setPlaybackControls}
                   onTitleClick={handleTitleClick}
+                  onWordIndexChange={setCurrentWordIndex}
                 />
               )}
               <Toaster />

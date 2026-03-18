@@ -48,6 +48,7 @@ interface AudioMiniPlayerProps {
   onPlaybackStateChange?: (state: PlaybackState) => void;
   onControlsReady?: (controls: { togglePlay: () => void; nextPage: () => void; replay: () => void; close: () => void }) => void;
   onTitleClick?: (globalPageIndex: number | undefined) => void;
+  onWordIndexChange?: (wordIndex: number) => void;
 }
 
 export type { NarrationState };
@@ -80,7 +81,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady, onTitleClick }: AudioMiniPlayerProps) {
+export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady, onTitleClick, onWordIndexChange }: AudioMiniPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -95,6 +96,8 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const animationRef = useRef<number | null>(null);
   const narrationRef = useRef(narration);
   const onUpdateRef = useRef(onUpdateNarration);
+  const onWordIndexChangeRef = useRef(onWordIndexChange);
+  const wordCountRef = useRef(0);
 
   useEffect(() => {
     onPlaybackStateChange?.({ isPlaying, isLoading, progress });
@@ -102,6 +105,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
 
   useEffect(() => { narrationRef.current = narration; }, [narration]);
   useEffect(() => { onUpdateRef.current = onUpdateNarration; }, [onUpdateNarration]);
+  useEffect(() => { onWordIndexChangeRef.current = onWordIndexChange; }, [onWordIndexChange]);
 
   const prefetchNext = useCallback((currentIdx: number, voice: NarratorVoice, allPages: NarrationState["allPages"]) => {
     const nextIdx = currentIdx + 1;
@@ -123,6 +127,11 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         audioRef.current = null;
       }
 
+      const cleanText = stripMarkdown(text).slice(0, 4000);
+      const words = cleanText.split(/\s+/).filter(Boolean);
+      wordCountRef.current = words.length;
+      onWordIndexChangeRef.current?.(-1);
+
       const audioData = await fetchAudioCached(text, voice);
       const audio = new Audio(audioData);
       audio.volume = isMuted ? 0 : volume;
@@ -136,6 +145,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       audio.onended = () => {
         setIsPlaying(false);
         setProgress(100);
+        onWordIndexChangeRef.current?.(words.length - 1);
         if (animationRef.current) cancelAnimationFrame(animationRef.current);
         setTimeout(() => {
           const latest = narrationRef.current;
@@ -160,11 +170,15 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         setDuration(audio.duration);
       };
 
+      const wc = words.length;
       const updateProgress = () => {
         if (audio && audio.duration > 0) {
-          setProgress((audio.currentTime / audio.duration) * 100);
+          const pct = audio.currentTime / audio.duration;
+          setProgress(pct * 100);
           setCurrentTime(audio.currentTime);
           setDuration(audio.duration);
+          const wi = Math.min(Math.floor(pct * wc), wc - 1);
+          onWordIndexChangeRef.current?.(wi);
         }
         if (!audio.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);
@@ -212,10 +226,14 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     } else {
       audioRef.current.play();
       setIsPlaying(true);
+      const wc = wordCountRef.current;
       const updateProgress = () => {
         if (audioRef.current && audioRef.current.duration > 0) {
-          setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+          const pct = audioRef.current.currentTime / audioRef.current.duration;
+          setProgress(pct * 100);
           setCurrentTime(audioRef.current.currentTime);
+          const wi = Math.min(Math.floor(pct * wc), wc - 1);
+          onWordIndexChangeRef.current?.(wi);
         }
         if (audioRef.current && !audioRef.current.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);

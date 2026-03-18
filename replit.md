@@ -42,7 +42,7 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Library**: Stores completed books with search, filter, and sort functionalities.
 - **Autopilot Mode**: Autonomous book publishing, including topic generation and full pipeline execution with budget/quality controls.
 - **Book Export**: Supports .pdf, .txt, and .html formats.
-- **AI Narrator**: Integrates ElevenLabs TTS with multiple voice options, client-side audio caching, and server-side TTS caching for seamless narration. Per-voice disk-based caching saves audio files so switching voices doesn't waste credits.
+- **AI Narrator**: Integrates ElevenLabs TTS with multiple voice options, client-side audio caching, and server-side TTS caching for seamless narration. Per-voice disk-based caching saves audio files so switching voices doesn't waste credits. Word-level highlighting syncs with audio playback progress, with theme-aware styling (purple highlight for dark themes, light purple for light themes) and throttled auto-scroll. Continuous reading mode auto-advances pages.
 - **Book Reader Intro/Outro**: Narrates the book title, author name, and chapter count before chapter 1 (intro page). After the last chapter, narrates a thank-you outro with Lexora branding.
 - **Per-Voice Audio Caching**: Audio files stored in voice-specific folders (`uploads/audio/{voiceId}/project-{id}-chapter-{id}.mp3`). TTS page-level audio cached to disk (`uploads/audio/tts-cache/{voiceId}/`). Existing files served instantly without regenerating.
 - **Editing Stage**: Provides an inline chapter editor with save/cancel, timestamps, and status management. REGEN blocked when project is complete.

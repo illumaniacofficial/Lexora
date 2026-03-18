@@ -261,7 +261,7 @@ function ChapterTitlePage({ page, theme }: { page: Extract<PageContent, { type: 
   );
 }
 
-function TextPage({ page, theme, fontSize }: { page: Extract<PageContent, { type: "text" }>; theme: PageTheme; fontSize: number }) {
+function TextPage({ page, theme, fontSize, highlightWordIndex }: { page: Extract<PageContent, { type: "text" }>; theme: PageTheme; fontSize: number; highlightWordIndex?: number }) {
   const t = THEMES[theme];
   const isDark = theme === "dark" || theme === "midnight";
   return (
@@ -272,8 +272,96 @@ function TextPage({ page, theme, fontSize }: { page: Extract<PageContent, { type
       </div>
       <div className={cn("w-full h-[1px] mb-4", t.divider)} />
       <div className="flex-1 overflow-y-auto pr-1 reader-scroll" style={{ fontSize: `${fontSize}px`, lineHeight: `${fontSize <= 14 ? 1.7 : fontSize <= 18 ? 1.8 : 1.9}` }}>
-        {isDark ? <DarkMarkdownRenderer content={page.text} theme={theme} /> : <MarkdownRenderer content={page.text} />}
+        {highlightWordIndex !== undefined && highlightWordIndex >= 0 ? (
+          <HighlightedTextRenderer content={page.text} theme={theme} wordIndex={highlightWordIndex} />
+        ) : (
+          isDark ? <DarkMarkdownRenderer content={page.text} theme={theme} /> : <MarkdownRenderer content={page.text} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function HighlightedTextRenderer({ content, theme, wordIndex }: { content: string; theme: PageTheme; wordIndex: number }) {
+  const t = THEMES[theme];
+  const isDark = theme === "dark" || theme === "midnight";
+  const hlClass = isDark ? "bg-purple-500/30 text-purple-200 rounded px-0.5 transition-colors duration-150" : "bg-purple-200/60 text-purple-900 rounded px-0.5 transition-colors duration-150";
+  const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+  let globalWordCounter = 0;
+  const highlightRef = useRef<HTMLSpanElement>(null);
+  const lastScrollIdx = useRef(-1);
+
+  useEffect(() => {
+    if (highlightRef.current && Math.abs(wordIndex - lastScrollIdx.current) > 3) {
+      lastScrollIdx.current = wordIndex;
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [wordIndex]);
+
+  return (
+    <div>
+      {paragraphs.map((para, i) => {
+        const trimmed = para.trim();
+        if (trimmed.startsWith("# ")) {
+          const text = trimmed.replace(/^#+\s*/, "");
+          const words = text.split(/(\s+)/);
+          const el = <h2 key={i} className={cn("font-serif text-xl font-bold mt-4 mb-3", t.heading)}>{words.map((w, j) => {
+            if (/^\s+$/.test(w)) return w;
+            const idx = globalWordCounter++;
+            return <span key={j} ref={idx === wordIndex ? highlightRef : undefined} className={idx === wordIndex ? hlClass : undefined}>{w}</span>;
+          })}</h2>;
+          return el;
+        }
+        if (trimmed.startsWith("## ")) {
+          const text = trimmed.replace(/^#+\s*/, "");
+          const words = text.split(/(\s+)/);
+          const el = <h3 key={i} className={cn("font-serif text-lg font-bold mt-3 mb-2", t.heading)}>{words.map((w, j) => {
+            if (/^\s+$/.test(w)) return w;
+            const idx = globalWordCounter++;
+            return <span key={j} ref={idx === wordIndex ? highlightRef : undefined} className={idx === wordIndex ? hlClass : undefined}>{w}</span>;
+          })}</h3>;
+          return el;
+        }
+        if (trimmed.startsWith("### ") || trimmed.startsWith("#### ")) {
+          const text = trimmed.replace(/^#+\s*/, "");
+          const words = text.split(/(\s+)/);
+          const el = <h4 key={i} className={cn("font-serif text-base font-bold mt-3 mb-2", t.heading)}>{words.map((w, j) => {
+            if (/^\s+$/.test(w)) return w;
+            const idx = globalWordCounter++;
+            return <span key={j} ref={idx === wordIndex ? highlightRef : undefined} className={idx === wordIndex ? hlClass : undefined}>{w}</span>;
+          })}</h4>;
+          return el;
+        }
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+          const items = trimmed.split(/\n/).filter(l => l.trim());
+          return <ul key={i} className="list-disc pl-5 mb-3 space-y-1">{items.map((item, j) => {
+            const cleanItem = item.replace(/^[-*]\s*/, "").replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*([^*]+?)\*/g, "$1");
+            const words = cleanItem.split(/(\s+)/);
+            return <li key={j} className={cn("font-serif leading-relaxed", isDark ? t.text : "")}>{words.map((w, k) => {
+              if (/^\s+$/.test(w)) return w;
+              const idx = globalWordCounter++;
+              return <span key={k} ref={idx === wordIndex ? highlightRef : undefined} className={idx === wordIndex ? hlClass : undefined}>{w}</span>;
+            })}</li>;
+          })}</ul>;
+        }
+        if (trimmed.startsWith(">")) {
+          const quoteText = trimmed.split("\n").map(l => l.replace(/^>\s*/, "")).join(" ");
+          const words = quoteText.split(/(\s+)/);
+          return <blockquote key={i} className={cn("border-l-2 pl-4 my-3 italic font-serif leading-relaxed", t.accent, t.divider.replace("bg-", "border-"))}>{words.map((w, j) => {
+            if (/^\s+$/.test(w)) return w;
+            const idx = globalWordCounter++;
+            return <span key={j} ref={idx === wordIndex ? highlightRef : undefined} className={idx === wordIndex ? hlClass : undefined}>{w}</span>;
+          })}</blockquote>;
+        }
+        if (/^[-*]{3,}$/.test(trimmed)) return <div key={i} className={cn("w-12 h-[1px] mx-auto my-4", t.divider)} />;
+        const cleanText = trimmed.replace(/\*\*(.+?)\*\*/g, "$1").replace(/\*([^*]+?)\*/g, "$1");
+        const words = cleanText.split(/(\s+)/);
+        return <p key={i} className={cn("font-serif leading-[1.9] mb-3 text-justify indent-6", isDark ? t.text : "")}>{words.map((w, j) => {
+          if (/^\s+$/.test(w)) return w;
+          const idx = globalWordCounter++;
+          return <span key={j} ref={idx === wordIndex ? highlightRef : undefined} className={idx === wordIndex ? hlClass : undefined}>{w}</span>;
+        })}</p>;
+      })}
     </div>
   );
 }
@@ -303,18 +391,18 @@ function DarkMarkdownRenderer({ content, theme }: { content: string; theme: Page
   );
 }
 
-function renderPage(page: PageContent, theme: PageTheme, fontSize: number) {
+function renderPage(page: PageContent, theme: PageTheme, fontSize: number, highlightWordIndex?: number) {
   if (page.type === "cover") return <CoverPage page={page} theme={theme} />;
   if (page.type === "toc") return <TocPage page={page} theme={theme} fontSize={fontSize} />;
   if (page.type === "intro") return <IntroPage page={page} theme={theme} />;
   if (page.type === "chapter-title") return <ChapterTitlePage page={page} theme={theme} />;
-  if (page.type === "text") return <TextPage page={page} theme={theme} fontSize={fontSize} />;
+  if (page.type === "text") return <TextPage page={page} theme={theme} fontSize={fontSize} highlightWordIndex={highlightWordIndex} />;
   if (page.type === "outro") return <OutroPage page={page} theme={theme} />;
   return null;
 }
 
-function BookPage({ page, theme, fontSize, side, pageNum, totalPages, isFlipping, flipDir }: {
-  page: PageContent; theme: PageTheme; fontSize: number; side: "left" | "right" | "center";
+function BookPage({ page, theme, fontSize, side, pageNum, totalPages, isFlipping, flipDir, highlightWordIndex }: {
+  page: PageContent; theme: PageTheme; fontSize: number; side: "left" | "right" | "center"; highlightWordIndex?: number;
   pageNum: number; totalPages: number; isFlipping: boolean; flipDir: "left" | "right";
 }) {
   const t = THEMES[theme];
@@ -338,7 +426,7 @@ function BookPage({ page, theme, fontSize, side, pageNum, totalPages, isFlipping
       <PaperTexture isDark={isDark} />
       <PageEdges side={side === "center" ? "right" : side} theme={theme} />
       <div className="h-full overflow-hidden flex flex-col relative z-[1]">
-        {renderPage(page, theme, fontSize)}
+        {renderPage(page, theme, fontSize, highlightWordIndex)}
       </div>
       <PageNumber pageNum={pageNum} total={totalPages} theme={theme} side={side === "center" ? "center" : side} />
     </div>
@@ -372,14 +460,17 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const [narrationProgress, setNarrationProgress] = useState(0);
   const [autoNarrate, setAutoNarrate] = useState(false);
   const [dualPage, setDualPage] = useState(true);
+  const [readerWordIndex, setReaderWordIndex] = useState(-1);
+  const [narratedPageIdx, setNarratedPageIdx] = useState(-1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const narrationAnimRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const autoNarRef = useRef(false);
+  const readerWordCountRef = useRef(0);
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const isLandscape = useIsLandscape();
   const showDual = isLandscape && dualPage;
-  const { navigateToPageRequest, clearNavigateRequest } = useNarration();
+  const { navigateToPageRequest, clearNavigateRequest, currentWordIndex: miniPlayerWordIndex, narrationState: miniNarration } = useNarration();
 
   const pages = useMemo(
     () => buildPages(title, authorName, completedChapters, coverImageUrl, fontSize),
@@ -464,6 +555,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
     setIsNarrating(false);
     setNarrationProgress(0);
+    setReaderWordIndex(-1);
+    setNarratedPageIdx(-1);
   }, []);
 
   const audioCacheRef = useRef<Map<string, string>>(new Map());
@@ -550,6 +643,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
       setIsNarrating(false);
       setNarrationProgress(0);
+      setReaderWordIndex(-1);
+      setNarratedPageIdx(pageIdx);
+
+      const strippedText = stripMarkdown(cleanText).slice(0, 4000);
+      const wordCount = strippedText.split(/\s+/).filter(Boolean).length;
+      readerWordCountRef.current = wordCount;
 
       const audioDataUrl = await fetchAudio(cleanText, selectedVoice);
       const audio = new Audio(audioDataUrl);
@@ -560,8 +659,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       audio.onended = () => {
         setIsNarrating(false);
         setNarrationProgress(100);
+        setReaderWordIndex(wordCount - 1);
         if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
         if (autoNarRef.current) {
+          setReaderWordIndex(-1);
           let nextTextIdx = lastPageIdx + 1;
           while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
@@ -571,8 +672,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         }
       };
 
+      const wc = wordCount;
       const updateProgress = () => {
-        if (audio && audio.duration > 0) setNarrationProgress((audio.currentTime / audio.duration) * 100);
+        if (audio && audio.duration > 0) {
+          const pct = audio.currentTime / audio.duration;
+          setNarrationProgress(pct * 100);
+          setReaderWordIndex(Math.min(Math.floor(pct * wc), wc - 1));
+        }
         if (!audio.paused) narrationAnimRef.current = requestAnimationFrame(updateProgress);
       };
 
@@ -595,8 +701,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     } else if (audioRef.current && audioRef.current.paused && audioRef.current.currentTime > 0) {
       audioRef.current.play();
       setIsNarrating(true);
+      const wc = readerWordCountRef.current;
       const updateProgress = () => {
-        if (audioRef.current && audioRef.current.duration > 0) setNarrationProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+        if (audioRef.current && audioRef.current.duration > 0) {
+          const pct = audioRef.current.currentTime / audioRef.current.duration;
+          setNarrationProgress(pct * 100);
+          setReaderWordIndex(Math.min(Math.floor(pct * wc), wc - 1));
+        }
         if (audioRef.current && !audioRef.current.paused) narrationAnimRef.current = requestAnimationFrame(updateProgress);
       };
       narrationAnimRef.current = requestAnimationFrame(updateProgress);
@@ -663,6 +774,16 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const currentSizeIdx = FONT_SIZES.findIndex(s => s.value === fontSize);
   const sizeLabel = FONT_SIZES[currentSizeIdx]?.label || "M";
   const isNarratableCurrentPage = page.type === "text" || page.type === "intro" || page.type === "outro";
+
+  const activeHighlightIdx = useMemo(() => {
+    if (readerWordIndex >= 0 && narratedPageIdx === currentPage) return readerWordIndex;
+    if (miniNarration && miniPlayerWordIndex >= 0) {
+      const miniPage = miniNarration.allPages[miniNarration.currentPageIndex];
+      if (miniPage?.globalPageIndex === currentPage) return miniPlayerWordIndex;
+    }
+    return undefined;
+  }, [readerWordIndex, narratedPageIdx, miniNarration, miniPlayerWordIndex, currentPage]);
+
   const closeAllPanels = () => { setShowToc(false); setShowSettings(false); setShowNarrator(false); };
 
   return (
@@ -869,7 +990,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 <div className="flex-1 h-full relative">
                   <BookPage page={page} theme={theme} fontSize={fontSize} side="left"
                     pageNum={currentPage + 1} totalPages={pages.length}
-                    isFlipping={isFlipping} flipDir={flipDirection} />
+                    isFlipping={isFlipping} flipDir={flipDirection}
+                    highlightWordIndex={activeHighlightIdx} />
                 </div>
                 <div className="w-[3px] relative z-10" style={{
                   background: isDark
@@ -891,7 +1013,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               <div className="absolute inset-0">
                 <BookPage page={page} theme={theme} fontSize={fontSize} side="center"
                   pageNum={currentPage + 1} totalPages={pages.length}
-                  isFlipping={isFlipping} flipDir={flipDirection} />
+                  isFlipping={isFlipping} flipDir={flipDirection}
+                  highlightWordIndex={activeHighlightIdx} />
               </div>
             )}
           </div>
