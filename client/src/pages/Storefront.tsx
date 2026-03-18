@@ -43,6 +43,7 @@ export default function Storefront() {
   const [showReader, setShowReader] = useState(false);
   const [narrationState, setNarrationState] = useState<NarrationState | null>(null);
   const { requestNavigateToPage } = useNarration();
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [requestName, setRequestName] = useState("");
   const [requestGenre, setRequestGenre] = useState("");
   const [requestDescription, setRequestDescription] = useState("");
@@ -97,6 +98,16 @@ export default function Storefront() {
     },
     enabled: !!selectedBookId && !!token,
   });
+
+  const categories = storeData?.books
+    ? Array.from(new Set(storeData.books.map(b => b.vertical))).sort()
+    : [];
+
+  const filteredBooks = storeData?.books
+    ? activeCategory === "all"
+      ? storeData.books
+      : storeData.books.filter(b => b.vertical === activeCategory)
+    : [];
 
   if (error) {
     return (
@@ -257,8 +268,43 @@ export default function Storefront() {
             <p className="text-xs text-stone-600 mt-1">Check back later for new releases</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {storeData.books.map(book => (
+          <>
+            {categories.length > 1 && (
+              <div className="flex items-center gap-2 mb-6 flex-wrap" data-testid="store-category-filters">
+                <button
+                  onClick={() => setActiveCategory("all")}
+                  className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-all duration-200 ${
+                    activeCategory === "all"
+                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                      : "bg-stone-800/50 text-stone-400 border border-stone-700/50 hover:border-stone-600 hover:text-stone-300"
+                  }`}
+                  data-testid="filter-all"
+                >
+                  All ({storeData.books.length})
+                </button>
+                {categories.map(cat => {
+                  const count = storeData.books.filter(b => b.vertical === cat).length;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setActiveCategory(cat)}
+                      className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                        activeCategory === cat
+                          ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                          : "bg-stone-800/50 text-stone-400 border border-stone-700/50 hover:border-stone-600 hover:text-stone-300"
+                      }`}
+                      data-testid={`filter-${cat}`}
+                    >
+                      <span>{VERTICAL_ICONS[cat] || "📖"}</span>
+                      <span>{VERTICAL_LABELS[cat] || cat}</span>
+                      <span className="text-[9px] opacity-60">({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredBooks.map(book => (
               <button
                 key={book.id}
                 onClick={() => setSelectedBookId(book.id)}
@@ -306,7 +352,7 @@ export default function Storefront() {
                       <p className="text-[11px] text-stone-400 leading-relaxed line-clamp-3 mb-3">{book.shortBlurb}</p>
                     )}
                     <div className="flex items-center gap-3 text-[9px] font-mono text-stone-600 pt-2 border-t border-stone-800/50">
-                      <span>{book.wordCount.toLocaleString()} words</span>
+                      <span>{(book.wordCount || 0).toLocaleString()} words</span>
                       <span>{book.chapterCount} ch</span>
                       {book.hasCover && (
                         <span className="ml-auto text-purple-400/50 flex items-center gap-1">
@@ -319,6 +365,7 @@ export default function Storefront() {
               </button>
             ))}
           </div>
+          </>
         )}
 
         <div className="mt-20 relative">

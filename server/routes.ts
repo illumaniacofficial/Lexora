@@ -201,7 +201,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/library", async (_req, res) => {
     try {
       const allProjects = await storage.getProjects();
-      const completed = allProjects.filter(p => p.status === "complete");
+      const completed = allProjects.filter(p => p.status === "complete" || p.status === "editing");
       const library = await Promise.all(completed.map(async (project) => {
         const marketing = await storage.getMarketingAsset(project.id);
         const chapterList = await storage.getChapters(project.id);
@@ -259,7 +259,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       await storage.incrementInviteViewCount(invite.id);
       const allProjects = await storage.getProjects();
-      const completed = allProjects.filter(p => p.status === "complete");
+      const completed = allProjects.filter(p => p.status === "complete" || p.status === "editing");
       const books = await Promise.all(completed.map(async (project) => {
         const marketing = await storage.getMarketingAsset(project.id);
         const chapterList = await storage.getChapters(project.id);
@@ -291,7 +291,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const bookId = parseId(req.params.bookId);
       if (!bookId) return res.status(400).json({ error: "Invalid book ID" });
       const project = await storage.getProject(bookId);
-      if (!project || project.status !== "complete") {
+      if (!project || (project.status !== "complete" && project.status !== "editing")) {
         return res.status(404).json({ error: "Book not found" });
       }
       const chapterList = await storage.getChapters(bookId);
