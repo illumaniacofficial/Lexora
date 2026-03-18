@@ -126,19 +126,19 @@ export default function Storefront() {
     return (
       <div className="min-h-screen bg-[#0a0a0f] text-white">
         <Helmet><title>{bookDetail.title} — Lexora Store</title></Helmet>
-        <div className="max-w-4xl mx-auto p-6">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 py-4 md:py-6">
           <button
             onClick={() => { setSelectedBookId(null); setShowReader(false); }}
-            className="flex items-center gap-2 text-sm text-stone-400 hover:text-purple-300 transition-colors mb-8 group"
+            className="flex items-center gap-2 text-sm text-stone-400 hover:text-purple-300 transition-colors mb-5 md:mb-8 group"
             data-testid="button-back-to-store"
           >
             <ArrowLeft className="h-4 w-4 group-hover:-translate-x-0.5 transition-transform" /> Back to store
           </button>
 
-          <div className="flex flex-col md:flex-row gap-8">
+          <div className="flex flex-col md:flex-row gap-5 md:gap-8">
             {bookDetail.coverImageUrl && (
-              <div className="shrink-0">
-                <div className="w-56 h-80 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(147,51,234,0.15)] border border-purple-500/10">
+              <div className="shrink-0 flex justify-center md:justify-start">
+                <div className="w-40 h-60 md:w-56 md:h-80 rounded-xl overflow-hidden shadow-[0_0_40px_rgba(147,51,234,0.15)] border border-purple-500/10">
                   <img src={bookDetail.coverImageUrl} alt={bookDetail.title} className="w-full h-full object-cover" data-testid="img-book-cover" />
                 </div>
               </div>
@@ -157,7 +157,7 @@ export default function Storefront() {
                 )}
               </div>
 
-              <h1 className="text-3xl font-bold tracking-tight mb-1" data-testid="text-book-title">{bookDetail.title}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight mb-1" data-testid="text-book-title">{bookDetail.title}</h1>
               <p className="text-sm text-stone-400 font-mono mb-4">by {bookDetail.authorName || "Unknown Author"}</p>
 
               {bookDetail.mediumBlurb ? (
@@ -171,7 +171,7 @@ export default function Storefront() {
                 <span>{bookDetail.chapters.length} chapters</span>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 <Button
                   onClick={() => setShowReader(true)}
                   className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-sm px-6 shadow-[0_0_20px_rgba(147,51,234,0.3)]"
@@ -185,7 +185,7 @@ export default function Storefront() {
                   className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 font-mono text-sm"
                   data-testid="button-listen-book"
                 >
-                  <Volume2 className="h-4 w-4 mr-2" /> Listen with AI Narrator
+                  <Volume2 className="h-4 w-4 mr-2" /> Listen with AI
                 </Button>
               </div>
 
@@ -241,7 +241,7 @@ export default function Storefront() {
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-purple-900/20 via-transparent to-transparent" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-purple-500/5 rounded-full blur-[100px]" />
-        <div className="relative max-w-5xl mx-auto px-6 py-16 text-center">
+        <div className="relative max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Sparkles className="h-4 w-4 text-purple-400" />
             <span className="text-[10px] font-mono text-purple-400/60 uppercase tracking-[0.3em]">Lexora</span>
@@ -256,7 +256,7 @@ export default function Storefront() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 pb-16">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 pb-12 md:pb-16">
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-80 rounded-xl bg-stone-800/50" />)}

@@ -1,0 +1,100 @@
+Act as a senior product engineer, QA lead, security reviewer, UX strategist, and scalability architect.
+
+Your task is to perform a FULL REVISION / AUDIT of my app and return ONLY a detailed report.
+
+IMPORTANT RULES:
+- Do NOT modify, regenerate, rewrite, refactor, or touch any code yet.
+- Do NOT apply fixes.
+- Do NOT change design, database, logic, settings, or integrations.
+- Do NOT auto-correct anything.
+- Only inspect, analyze, and report.
+- Stay in review mode only until I explicitly approve changes.
+
+AUDIT GOAL:
+Review the entire app as if preparing it for real-world growth, stability, usability, and future scaling. Think critically about what could break, what is weak, what is missing, what will become a problem later, and what should be improved before launch or expansion.
+
+When analyzing, think about:
+1. Functional bugs and broken flows
+2. UX/UI confusion or friction
+3. Slow performance or heavy load risks
+4. Database structure and data integrity issues
+5. Security/privacy weaknesses
+6. Authentication and permissions risks
+7. API/integration failure points
+8. Mobile responsiveness problems
+9. Accessibility issues
+10. Edge cases and user error scenarios
+11. Scalability risks as users, features, and data grow
+12. Maintainability / messy code architecture
+13. Missing analytics, logging, error handling, and monitoring
+14. Business logic gaps
+15. Onboarding or conversion weaknesses
+16. Places where the app could be improved for growth, monetization, automation, and better retention
+
+I want you to think in a pessimistic and realistic way:
+- What could go wrong?
+- What would break first under growth?
+- What would confuse users?
+- What creates hidden technical debt?
+- What creates risk for future updates?
+- What should be fixed before adding more features?
+
+OUTPUT FORMAT:
+Return a structured report with these sections only:
+
+1. Executive Summary
+- Overall health of the app
+- Main risks
+- Main strengths
+- Readiness level
+
+2. Critical Issues
+- Problems that must be fixed first
+- Explain why each is critical
+- Include severity: Critical / High / Medium / Low
+
+3. Functional Problems
+- Broken logic, missing actions, incorrect flows, unreliable behavior
+
+4. UX/UI Problems
+- Confusing screens, bad flow, friction, poor hierarchy, weak onboarding, unclear CTAs
+
+5. Technical / Architecture Problems
+- Code organization, state management, duplication, tight coupling, maintainability issues
+
+6. Database / Backend Risks
+- Schema weaknesses, inefficient queries, missing validation, data consistency risks
+
+7. Security / Privacy Risks
+- Auth weaknesses, permissions problems, exposed data, unsafe inputs, missing protections
+
+8. Scalability Risks
+- What may fail as usage grows
+- Bottlenecks in frontend, backend, DB, APIs, file storage, background jobs, etc.
+
+9. Edge Cases / Failure Scenarios
+- Cases the app may not handle well
+
+10. Improvement Opportunities
+- Suggestions to make the app stronger, more scalable, and more valuable
+
+11. Recommended Priority Plan
+- Phase 1 = Fix now
+- Phase 2 = Improve next
+- Phase 3 = Optimize later
+
+12. Final Verdict
+- Is the app stable enough to continue building on?
+- What should happen before any new features are added?
+
+INSTRUCTIONS FOR EACH ISSUE:
+For every issue found, include:
+- Issue title
+- Severity
+- Where it appears
+- Why it matters
+- What could happen if ignored
+- Recommended fix direction (report only, do not implement)
+
+FINAL RULE:
+Do not touch the app. Do not generate code. Do not make changes. Return report only.

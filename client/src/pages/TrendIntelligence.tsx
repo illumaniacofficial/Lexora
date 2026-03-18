@@ -161,7 +161,7 @@ export default function TrendIntelligence() {
   }
 
   return (
-    <div className="p-8 space-y-7 overflow-y-auto h-full">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full">
       <Helmet>
         <title>Trend Intelligence — Lexora</title>
         <meta name="description" content="AI-powered market intelligence — analyze publishing verticals for demand, competition, and greenlight scores." />
@@ -171,8 +171,8 @@ export default function TrendIntelligence() {
           <Hexagon className="h-3 w-3 text-cyan-500/50" />
           <span className="text-[9px] font-mono font-bold text-cyan-400/60 tracking-[0.2em] uppercase">INTELLIGENCE</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tighter">Trend <span className="shimmer-text">Analysis</span></h1>
-        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">AI-powered market intelligence for publishing verticals</p>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Trend <span className="shimmer-text">Analysis</span></h1>
+        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1 hidden sm:block">AI-powered market intelligence for publishing verticals</p>
       </div>
 
       <div className="line-glow" />
@@ -187,19 +187,19 @@ export default function TrendIntelligence() {
           <CardDescription className="text-[11px] font-mono text-muted-foreground/40">Generate demand scores, pain points, and greenlight scores</CardDescription>
         </CardHeader>
         <CardContent className="relative">
-          <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 md:gap-3">
             <div className="space-y-1.5">
               <label className="text-[9px] font-mono font-bold text-muted-foreground/40 uppercase tracking-[0.15em]">Vertical</label>
               <Select value={analyzeVertical} onValueChange={setAnalyzeVertical}>
-                <SelectTrigger className="w-52 h-10 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="select-analyze-vertical"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-52 h-9 md:h-10 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="select-analyze-vertical"><SelectValue /></SelectTrigger>
                 <SelectContent>{VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5 flex-1 min-w-48">
+            <div className="space-y-1.5 flex-1 min-w-0">
               <label className="text-[9px] font-mono font-bold text-muted-foreground/40 uppercase tracking-[0.15em]">Keywords (optional)</label>
-              <Input placeholder="e.g., passive income, side hustle" value={keywords} onChange={e => setKeywords(e.target.value)} data-testid="input-keywords" className="h-10 bg-card/30 border-border/30 font-mono text-[12px] focus:border-cyan-500/40" />
+              <Input placeholder="e.g., passive income, side hustle" value={keywords} onChange={e => setKeywords(e.target.value)} data-testid="input-keywords" className="h-9 md:h-10 bg-card/30 border-border/30 font-mono text-[12px] focus:border-cyan-500/40" />
             </div>
-            <Button onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending} data-testid="button-analyze" className="h-10 neon-glow-cool text-white border-0 shadow-[0_0_20px_-5px_rgba(6,182,212,0.4)] font-mono text-[12px]">
+            <Button onClick={() => analyzeMutation.mutate()} disabled={analyzeMutation.isPending} data-testid="button-analyze" className="h-9 md:h-10 neon-glow-cool text-white border-0 shadow-[0_0_20px_-5px_rgba(6,182,212,0.4)] font-mono text-[12px] w-full sm:w-auto">
               {analyzeMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
               {analyzeMutation.isPending ? "ANALYZING..." : "RUN ANALYSIS"}
             </Button>

@@ -148,7 +148,7 @@ export default function Library() {
   }
 
   return (
-    <div className="p-8 space-y-7 overflow-y-auto h-full aurora-bg-animated">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full aurora-bg-animated">
       <Helmet>
         <title>Library — Lexora</title>
         <meta name="description" content="Your completed book library — browse, search, and explore published manuscripts ranked by quality." />
@@ -160,8 +160,8 @@ export default function Library() {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tighter">Published <span className="shimmer-text">Library</span></h1>
-            <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Your completed books, ranked by quality</p>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Published <span className="shimmer-text">Library</span></h1>
+            <p className="text-muted-foreground/50 text-[11px] font-mono mt-1 hidden sm:block">Your completed books, ranked by quality</p>
           </div>
           <Button
             variant="outline"
@@ -170,7 +170,7 @@ export default function Library() {
             className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 hover:scale-105 transition-all duration-300 font-mono text-[11px] h-8"
             data-testid="button-toggle-invites"
           >
-            <Share2 className="h-3.5 w-3.5 mr-1.5" /> {showInvites ? "Hide" : "Invites"} {invites.length > 0 && `(${invites.length})`}
+            <Share2 className="h-3.5 w-3.5 mr-1.5" /> <span className="hidden sm:inline">{showInvites ? "Hide" : "Invites"}</span> {invites.length > 0 && `(${invites.length})`}
           </Button>
         </div>
       </div>
@@ -239,21 +239,21 @@ export default function Library() {
 
       <div className="line-glow" />
 
-      <div className="flex flex-col sm:flex-row gap-3 animate-fade-in-up stagger-2">
+      <div className="flex flex-col sm:flex-row gap-2 md:gap-3 animate-fade-in-up stagger-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
           <Input
             data-testid="input-library-search"
-            placeholder="Search by title, author, vertical, keyword..."
+            placeholder="Search books..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-10 bg-white/[0.03] border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 focus-visible:ring-purple-500/30"
+            className="pl-10 h-9 md:h-10 bg-white/[0.03] border-border/20 text-[12px] md:text-sm font-mono placeholder:text-muted-foreground/25 focus-visible:ring-purple-500/30"
           />
         </div>
         <div className="flex gap-2">
           <Select value={verticalFilter} onValueChange={setVerticalFilter}>
-            <SelectTrigger className="w-44 bg-white/[0.03] border-border/20 text-[12px] font-mono" data-testid="select-vertical-filter">
-              <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/40" />
+            <SelectTrigger className="w-32 md:w-44 h-9 md:h-10 bg-white/[0.03] border-border/20 text-[11px] md:text-[12px] font-mono" data-testid="select-vertical-filter">
+              <Filter className="h-3.5 w-3.5 mr-1 md:mr-1.5 text-muted-foreground/40" />
               <SelectValue placeholder="All Verticals" />
             </SelectTrigger>
             <SelectContent>
@@ -266,8 +266,8 @@ export default function Library() {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={v => setSortBy(v as SortKey)}>
-            <SelectTrigger className="w-36 bg-white/[0.03] border-border/20 text-[12px] font-mono" data-testid="select-sort">
-              <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/40" />
+            <SelectTrigger className="w-28 md:w-36 h-9 md:h-10 bg-white/[0.03] border-border/20 text-[11px] md:text-[12px] font-mono" data-testid="select-sort">
+              <ArrowUpDown className="h-3.5 w-3.5 mr-1 md:mr-1.5 text-muted-foreground/40" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -418,7 +418,7 @@ export default function Library() {
                   {rest.map((book) => (
                     <Link key={book.id} href={`/projects/${book.id}`}>
                       <div
-                        className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-purple-500/[0.03] transition-all duration-300 group"
+                        className="flex items-center gap-3 md:gap-4 px-3 md:px-5 py-3 md:py-3.5 cursor-pointer hover:bg-purple-500/[0.03] transition-all duration-300 group"
                         data-testid={`library-book-${book.id}`}
                       >
                         {book.hasCover ? (

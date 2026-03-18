@@ -87,7 +87,7 @@ function StatCard({ label, value, sub, index }: { label: string; value: string; 
               <div className={`h-2 w-2 rounded-full ${cfg.glowClass} shadow-lg`} />
               <p className="text-[9px] font-mono font-bold text-muted-foreground/50 tracking-[0.2em] uppercase">{label}</p>
             </div>
-            <p className={`text-3xl font-bold tracking-tighter ${cfg.textGlow} animate-count-up`} data-testid={`stat-${label.toLowerCase()}`}>{value}</p>
+            <p className={`text-xl md:text-3xl font-bold tracking-tighter ${cfg.textGlow} animate-count-up`} data-testid={`stat-${label.toLowerCase()}`}>{value}</p>
             {sub && <p className="text-[11px] text-muted-foreground/60 font-mono">{sub}</p>}
           </div>
           <div className="relative">
@@ -157,22 +157,22 @@ export default function Dashboard() {
   const { recentProjects, recentTrends } = data || { recentProjects: [], recentTrends: [] };
 
   return (
-    <div className="p-8 space-y-8 overflow-y-auto h-full aurora-bg-animated">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8 overflow-y-auto h-full aurora-bg-animated">
       <Helmet>
         <title>Dashboard — Lexora</title>
         <meta name="description" content="Lexora command center — view project stats, recent manuscripts, trend intel, and quick actions." />
       </Helmet>
-      <div className="flex items-end justify-between gap-4 flex-wrap animate-fade-in-up">
+      <div className="flex items-end justify-between gap-3 md:gap-4 flex-wrap animate-fade-in-up">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Activity className="h-3.5 w-3.5 text-purple-400 animate-pulse-glow" />
+          <div className="flex items-center gap-2 mb-1.5 md:mb-2">
+            <Activity className="h-3 w-3 md:h-3.5 md:w-3.5 text-purple-400 animate-pulse-glow" />
             <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.25em] uppercase">COMMAND CENTER</span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tighter">Publishing<span className="shimmer-text"> Dashboard</span></h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Publishing<span className="shimmer-text"> Dashboard</span></h1>
         </div>
         <Link href="/projects/new">
-          <Button data-testid="button-new-project" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.6)] hover:scale-105 transition-all duration-300">
-            <Plus className="h-4 w-4 mr-2" />
+          <Button data-testid="button-new-project" size="sm" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.6)] hover:scale-105 transition-all duration-300 text-[12px] md:text-sm h-9 md:h-10">
+            <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
             New Project
           </Button>
         </Link>
@@ -180,14 +180,14 @@ export default function Dashboard() {
 
       <div className="line-glow" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
         <StatCard label="PROJECTS" value={animatedProjects.toString()} sub={`${stats.completedProjects} complete`} index={0} />
         <StatCard label="WORDS" value={formatNumber(animatedWords)} sub="generated" index={1} />
         <StatCard label="AI SPEND" value={formatCost(stats.totalCost)} sub="total cost" index={2} />
         <StatCard label="QUALITY" value={stats.avgQuality > 0 ? `${stats.avgQuality.toFixed(1)}` : "\u2014"} sub="avg score" index={3} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         <div className="lg:col-span-2 animate-fade-in-up stagger-5">
           <Card className="border-border/20 bg-card/40 glass-card-premium">
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
@@ -221,7 +221,7 @@ export default function Dashboard() {
                   const pct = getLivePct(project);
                   return (
                     <Link key={project.id} href={`/projects/${project.id}`}>
-                      <div className={`group flex items-center gap-4 p-4 rounded-xl border border-border/15 bg-white/[0.02] hover:border-purple-500/25 hover:bg-purple-500/[0.04] transition-all duration-300 cursor-pointer animate-fade-in-up stagger-${Math.min(idx + 1, 6)}`} data-testid={`project-card-${project.id}`}>
+                      <div className={`group flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border border-border/15 bg-white/[0.02] hover:border-purple-500/25 hover:bg-purple-500/[0.04] transition-all duration-300 cursor-pointer animate-fade-in-up stagger-${Math.min(idx + 1, 6)}`} data-testid={`project-card-${project.id}`}>
                         {project.hasCover && (
                           <div className="h-12 w-9 rounded-md overflow-hidden shrink-0 border border-border/20">
                             <img src={`/api/projects/${project.id}/cover-image`} alt="" loading="lazy" className="h-full w-full object-cover" />

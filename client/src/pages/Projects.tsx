@@ -81,43 +81,43 @@ export default function Projects() {
   }
 
   return (
-    <div className="p-8 space-y-6 overflow-y-auto h-full aurora-bg-animated">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-6 overflow-y-auto h-full aurora-bg-animated">
       <Helmet>
         <title>Projects — Lexora</title>
         <meta name="description" content="Manage your book manuscripts — create, track progress, and navigate through your publishing pipeline." />
       </Helmet>
-      <div className="flex items-end justify-between gap-4 flex-wrap animate-fade-in-up">
+      <div className="flex items-end justify-between gap-3 md:gap-4 flex-wrap animate-fade-in-up">
         <div>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1.5 md:mb-2">
             <Hexagon className="h-3 w-3 text-purple-500/50" />
             <span className="text-[9px] font-mono font-bold text-muted-foreground/40 tracking-[0.2em] uppercase">PROJECTS</span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tighter">Book <span className="shimmer-text">Projects</span></h1>
-          <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">{projects.length} in-progress manuscripts · Completed books move to Library</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Book <span className="shimmer-text">Projects</span></h1>
+          <p className="text-muted-foreground/50 text-[11px] font-mono mt-1 hidden sm:block">{projects.length} in-progress manuscripts · Completed books move to Library</p>
         </div>
         <Link href="/projects/new">
-          <Button data-testid="button-new-project" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.6)] hover:scale-105 transition-all duration-300">
-            <Plus className="h-4 w-4 mr-2" /> New Project
+          <Button data-testid="button-new-project" size="sm" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.6)] hover:scale-105 transition-all duration-300 h-9 md:h-10 text-[12px] md:text-sm">
+            <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" /> New Project
           </Button>
         </Link>
       </div>
 
       <div className="line-glow" />
 
-      <div className="flex items-center gap-3 flex-wrap animate-fade-in-up stagger-2">
-        <div className="relative flex-1 min-w-48">
+      <div className="flex items-center gap-2 md:gap-3 flex-wrap animate-fade-in-up stagger-2">
+        <div className="relative flex-1 min-w-0 sm:min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
-          <Input placeholder="Search manuscripts..." className="pl-9 h-10 bg-white/[0.03] border-border/20 font-mono text-sm focus:border-purple-500/40 transition-colors" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search" />
+          <Input placeholder="Search..." className="pl-9 h-9 md:h-10 bg-white/[0.03] border-border/20 font-mono text-[12px] md:text-sm focus:border-purple-500/40 transition-colors" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search" />
         </div>
         <Select value={filterVertical} onValueChange={setFilterVertical}>
-          <SelectTrigger className="w-44 h-10 bg-white/[0.03] border-border/20 font-mono text-[12px]" data-testid="select-vertical-filter"><SelectValue placeholder="All Verticals" /></SelectTrigger>
+          <SelectTrigger className="w-32 md:w-44 h-9 md:h-10 bg-white/[0.03] border-border/20 font-mono text-[11px] md:text-[12px]" data-testid="select-vertical-filter"><SelectValue placeholder="All Verticals" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Verticals</SelectItem>
             {VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40 h-10 bg-white/[0.03] border-border/20 font-mono text-[12px]" data-testid="select-status-filter"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectTrigger className="w-28 md:w-40 h-9 md:h-10 bg-white/[0.03] border-border/20 font-mono text-[11px] md:text-[12px]" data-testid="select-status-filter"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             {PROJECT_STATUSES.map(s => <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>)}

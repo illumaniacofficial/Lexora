@@ -121,7 +121,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-8 space-y-7 overflow-y-auto h-full max-w-3xl">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full max-w-3xl">
       <Helmet>
         <title>Settings — Lexora</title>
         <meta name="description" content="Configure your Lexora publishing platform — defaults, AI models, storefront, and export preferences." />
@@ -132,7 +132,7 @@ export default function Settings() {
           <Hexagon className="h-3 w-3 text-purple-500/50" />
           <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.2em] uppercase">CONFIGURATION</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tighter">App <span className="shimmer-text">Settings</span></h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">App <span className="shimmer-text">Settings</span></h1>
         <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Configure defaults and preferences for your publishing pipeline</p>
       </div>
 
@@ -159,7 +159,7 @@ export default function Settings() {
                 </FormItem>
               )} />
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField control={form.control} name="defaultVertical" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">Default Vertical</FormLabel>

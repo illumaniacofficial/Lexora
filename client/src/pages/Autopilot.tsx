@@ -169,7 +169,7 @@ export default function Autopilot() {
   };
 
   return (
-    <div className="p-8 space-y-7 overflow-y-auto h-full max-w-3xl">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full max-w-3xl">
       <Helmet>
         <title>Autopilot — Lexora</title>
         <meta name="description" content="Fully autonomous book publishing — configure targets, budget, quality thresholds, and let AI handle everything." />
@@ -179,8 +179,8 @@ export default function Autopilot() {
           <Activity className="h-3 w-3 text-purple-500/50 animate-pulse-glow" />
           <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.2em] uppercase">AUTONOMOUS</span>
         </div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tighter">Autopilot <span className="shimmer-text">Mode</span></h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Autopilot <span className="shimmer-text">Mode</span></h1>
           {isActive ? (
             <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-[10px] shadow-[0_0_8px_rgba(52,211,153,0.3)]">ACTIVE</Badge>
           ) : (
@@ -246,19 +246,19 @@ export default function Autopilot() {
       <Card className={`border-border/20 bg-card/30 overflow-hidden relative ${isActive ? "glow-border" : ""}`}>
         {isActive && <div className="absolute inset-0 mesh-bg opacity-30 pointer-events-none" />}
         <CardContent className="pt-5 pb-5 relative">
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col sm:flex-row items-start gap-3 md:gap-4">
             <div className={`flex h-10 w-10 items-center justify-center rounded-xl shadow-lg shrink-0 ${isActive ? "neon-glow" : "bg-zinc-700"}`}>
               <Bot className="h-5 w-5 text-white" />
             </div>
             <div className="flex-1">
               <p className="font-bold text-sm tracking-tight">How Autopilot Works</p>
-              <p className="text-[11px] text-muted-foreground/50 mt-1 leading-relaxed font-mono">Enable autopilot, configure your settings, then hit "Run Now" to auto-generate a complete book: topic discovery, trend analysis, outline, all chapters, and marketing — fully autonomous.</p>
+              <p className="text-[11px] text-muted-foreground/50 mt-1 leading-relaxed font-mono">Enable autopilot, configure your settings, then hit "Run Now" to auto-generate a complete book.</p>
             </div>
             <Button
               onClick={() => runMutation.mutate()}
               disabled={!isActive || runMutation.isPending || !!activeRun}
               data-testid="button-run-autopilot"
-              className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] font-mono text-[12px] shrink-0"
+              className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] font-mono text-[12px] shrink-0 w-full sm:w-auto"
             >
               {runMutation.isPending || activeRun ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

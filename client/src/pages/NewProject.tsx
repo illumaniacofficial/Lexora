@@ -51,12 +51,12 @@ export default function NewProject() {
   });
 
   return (
-    <div className="p-8 max-w-3xl mx-auto overflow-y-auto h-full">
+    <div className="p-4 md:p-8 max-w-3xl mx-auto overflow-y-auto h-full">
       <Helmet>
         <title>New Manuscript — Lexora</title>
         <meta name="description" content="Initialize a new book manuscript — set your title, author, vertical, and language to start the AI publishing pipeline." />
       </Helmet>
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-5 md:mb-8">
         <Link href="/projects">
           <Button variant="ghost" size="sm" data-testid="button-back" className="text-muted-foreground/60 hover:text-purple-400 font-mono text-[11px]">
             <ArrowLeft className="h-4 w-4 mr-1" /> BACK
@@ -64,16 +64,16 @@ export default function NewProject() {
         </Link>
       </div>
 
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="mb-5 md:mb-8">
+        <div className="flex items-center gap-2 mb-1.5 md:mb-2">
           <Hexagon className="h-3 w-3 text-purple-500/50" />
           <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.2em] uppercase">INITIALIZE</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tighter">New <span className="shimmer-text">Manuscript</span></h1>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">New <span className="shimmer-text">Manuscript</span></h1>
         <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Configure your book and let AI generate the rest</p>
       </div>
 
-      <div className="line-glow mb-8" />
+      <div className="line-glow mb-5 md:mb-8" />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-6">

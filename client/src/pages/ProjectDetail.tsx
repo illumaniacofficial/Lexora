@@ -371,29 +371,44 @@ export default function ProjectDetail() {
 
       let pageNum = 1;
 
+      const loadImageAsDataUrl = (src: string): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext("2d")!;
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL("image/jpeg", 0.95));
+          };
+          img.onerror = () => reject(new Error("Failed to load image"));
+          img.src = src;
+        });
+      };
+
       if (data.project.coverImageUrl) {
         try {
-          const loadCoverImage = (): Promise<string> => {
-            return new Promise((resolve, reject) => {
-              const img = new Image();
-              img.crossOrigin = "anonymous";
-              img.onload = () => {
-                const canvas = document.createElement("canvas");
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                const ctx = canvas.getContext("2d")!;
-                ctx.drawImage(img, 0, 0);
-                resolve(canvas.toDataURL("image/jpeg", 0.92));
-              };
-              img.onerror = () => reject(new Error("Failed to load cover"));
-              img.src = data.project.coverImageUrl!;
-            });
-          };
-          const coverDataUrl = await loadCoverImage();
-          const coverSize = Math.min(pageW - 72, pageH - 72);
-          const coverX = (pageW - coverSize) / 2;
-          const coverY = (pageH - coverSize) / 2;
-          doc.addImage(coverDataUrl, "JPEG", coverX, coverY, coverSize, coverSize);
+          const coverDataUrl = await loadImageAsDataUrl(data.project.coverImageUrl);
+          const imgObj = new Image();
+          imgObj.src = coverDataUrl;
+          await new Promise<void>((r) => { imgObj.onload = () => r(); });
+          const imgAspect = imgObj.naturalWidth / imgObj.naturalHeight;
+          const pageAspect = pageW / pageH;
+          let drawW: number, drawH: number, drawX: number, drawY: number;
+          if (imgAspect > pageAspect) {
+            drawH = pageH;
+            drawW = pageH * imgAspect;
+            drawX = (pageW - drawW) / 2;
+            drawY = 0;
+          } else {
+            drawW = pageW;
+            drawH = pageW / imgAspect;
+            drawX = 0;
+            drawY = (pageH - drawH) / 2;
+          }
+          doc.addImage(coverDataUrl, "JPEG", drawX, drawY, drawW, drawH);
           doc.addPage();
           pageNum++;
         } catch {
@@ -416,6 +431,42 @@ export default function ProjectDetail() {
       doc.setLineWidth(0.5);
       doc.line(pageW / 2 - 40, titleY - 20, pageW / 2 + 40, titleY - 20);
       doc.line(pageW / 2 - 40, titleY + titleLines.length * 34 + 50, pageW / 2 + 40, titleY + titleLines.length * 34 + 50);
+
+      doc.addPage();
+      pageNum++;
+
+      const copyrightYear = new Date().getFullYear();
+      const authorName = data.project.authorName || "the author";
+      doc.setFont("times", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      const copyrightLines = [
+        `Copyright \u00A9 ${copyrightYear} ${authorName}`,
+        "",
+        "All rights reserved. No part of this publication may be reproduced,",
+        "distributed, or transmitted in any form or by any means, including",
+        "photocopying, recording, or other electronic or mechanical methods,",
+        "without the prior written permission of the publisher, except in the",
+        "case of brief quotations embodied in critical reviews.",
+        "",
+        "",
+        "Published with Lexora AI Publishing Platform",
+        "www.lexora.ai",
+        "",
+        "",
+        `First Edition, ${copyrightYear}`,
+      ];
+      let copyrightY = pageH / 2 - (copyrightLines.length * 14) / 2;
+      for (const cl of copyrightLines) {
+        doc.text(cl, pageW / 2, copyrightY, { align: "center" });
+        copyrightY += 14;
+      }
+      doc.setDrawColor(180, 160, 130);
+      doc.setLineWidth(0.3);
+      doc.line(pageW / 2 - 60, copyrightY + 20, pageW / 2 + 60, copyrightY + 20);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text("Powered by Lexora", pageW / 2, copyrightY + 36, { align: "center" });
 
       doc.addPage();
       pageNum++;

@@ -225,7 +225,7 @@ export default function Marketing() {
   }
 
   return (
-    <div className="p-8 space-y-7 overflow-y-auto h-full">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full">
       <Helmet>
         <title>Marketing Suite — Lexora</title>
         <meta name="description" content="Complete marketing assets for your books — social hooks, email sequences, pricing matrices, and ad copy." />
@@ -235,13 +235,13 @@ export default function Marketing() {
           <Hexagon className="h-3 w-3 text-pink-500/50" />
           <span className="text-[9px] font-mono font-bold text-pink-400/60 tracking-[0.2em] uppercase">MARKETING</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tighter">Marketing <span className="shimmer-text">Suite</span></h1>
-        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Complete marketing assets and book creation log</p>
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Marketing <span className="shimmer-text">Suite</span></h1>
+        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1 hidden sm:block">Complete marketing assets and book creation log</p>
       </div>
 
       <div className="line-glow" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
         {featureCards.map(({ icon: Icon, label, desc, glow }) => (
           <Card key={label} className="border-border/20 bg-card/30 hover:border-purple-500/15 transition-all duration-300 overflow-hidden group">
             <CardContent className="pt-5 pb-5">
