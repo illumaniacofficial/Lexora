@@ -111,6 +111,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const wordCountRef = useRef(0);
   const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
   const [usingFallback, setUsingFallback] = useState(false);
+  const stickyFallbackRef = useRef<string | null>(null);
 
   useEffect(() => {
     onPlaybackStateChange?.({ isPlaying, isLoading, progress });
@@ -214,6 +215,12 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         return;
       }
 
+      if (stickyFallbackRef.current) {
+        setUsingFallback(true);
+        playWithBrowserTTS(text, stickyFallbackRef.current, expectedIdx);
+        return;
+      }
+
       let audioData: string;
       try {
         audioData = await fetchAudioCached(text, voice);
@@ -221,6 +228,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         console.warn("ElevenLabs TTS failed, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
         if (fallbackVoice) {
+          stickyFallbackRef.current = fallbackVoice.id;
           setUsingFallback(true);
           playWithBrowserTTS(text, fallbackVoice.id, expectedIdx);
           return;

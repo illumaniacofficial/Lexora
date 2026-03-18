@@ -60,6 +60,11 @@ export function browserTTSSpeak(
   rate: number,
   callbacks: BrowserTTSCallbacks
 ): { pause: () => void; resume: () => void; stop: () => void; setRate: (r: number) => void } {
+  if (!isBrowserTTSSupported()) {
+    callbacks.onError?.("Browser does not support speech synthesis");
+    return { pause: () => {}, resume: () => {}, stop: () => {}, setRate: () => {} };
+  }
+
   browserTTSStop();
 
   const synth = window.speechSynthesis;

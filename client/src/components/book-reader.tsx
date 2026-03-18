@@ -473,6 +473,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
   const [browserVoiceList, setBrowserVoiceList] = useState<BrowserVoiceOption[]>([]);
   const [readerUsingFallback, setReaderUsingFallback] = useState(false);
+  const stickyFallbackVoiceRef = useRef<string | null>(null);
   const isLandscape = useIsLandscape();
   const showDual = isLandscape && dualPage;
   const { navigateToPageRequest, clearNavigateRequest, currentWordIndex: miniPlayerWordIndex, narrationState: miniNarration } = useNarration();
@@ -568,7 +569,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     });
   }, []);
 
-  const stopNarration = useCallback(() => {
+  const stopNarration = useCallback((clearFallback = true) => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     if (browserTTSRef.current) { browserTTSRef.current.stop(); browserTTSRef.current = null; }
     browserTTSStop();
@@ -577,7 +578,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     setNarrationProgress(0);
     setReaderWordIndex(-1);
     setNarratedPageIdx(-1);
-    setReaderUsingFallback(false);
+    if (clearFallback) {
+      setReaderUsingFallback(false);
+      stickyFallbackVoiceRef.current = null;
+    }
   }, []);
 
   const audioCacheRef = useRef<Map<string, string>>(new Map());
@@ -659,8 +663,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
   const playPageRef = useRef<(pageIdx: number) => Promise<void>>();
 
-  const startBrowserNarration = useCallback((text: string, wordCount: number, lastPageIdx: number, pageIdx: number) => {
-    const controls = browserTTSSpeak(text, selectedVoice, 1, {
+  const startBrowserNarration = useCallback((text: string, wordCount: number, lastPageIdx: number, pageIdx: number, overrideVoice?: string) => {
+    const voiceToUse = overrideVoice || selectedVoice;
+    const controls = browserTTSSpeak(text, voiceToUse, 1, {
       onWordIndex: (idx) => setReaderWordIndex(idx),
       onProgress: (pct) => setNarrationProgress(pct),
       onEnd: () => {
@@ -710,7 +715,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     const { text: cleanText, lastIdx: lastPageIdx } = pageData;
     try {
       setNarrationLoading(true);
-      setReaderUsingFallback(false);
+      if (!stickyFallbackVoiceRef.current) setReaderUsingFallback(false);
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
       if (browserTTSRef.current) { browserTTSRef.current.stop(); browserTTSRef.current = null; }
       browserTTSStop();
@@ -735,6 +740,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         return;
       }
 
+      if (stickyFallbackVoiceRef.current) {
+        setReaderUsingFallback(true);
+        startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx, stickyFallbackVoiceRef.current);
+        return;
+      }
+
       let audioDataUrl: string;
       try {
         audioDataUrl = await fetchAudio(cleanText, selectedVoice);
@@ -742,9 +753,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         console.warn("ElevenLabs TTS failed in reader, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
         if (fallbackVoice) {
+          stickyFallbackVoiceRef.current = fallbackVoice.id;
           setReaderUsingFallback(true);
           toast({ title: "Using free voice", description: "Premium voice unavailable — switched to a free browser voice automatically." });
-          startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx);
+          startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx, fallbackVoice.id);
           return;
         }
         throw fetchErr;
@@ -809,6 +821,16 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const playCurrentPage = useCallback(() => playPage(currentPage), [playPage, currentPage]);
 
   const toggleNarration = useCallback(() => {
+    if (browserTTSRef.current) {
+      if (isNarrating) {
+        browserTTSRef.current.pause();
+        setIsNarrating(false);
+      } else {
+        browserTTSRef.current.resume();
+        setIsNarrating(true);
+      }
+      return;
+    }
     if (isNarrating && audioRef.current) {
       audioRef.current.pause();
       setIsNarrating(false);
@@ -847,6 +869,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   useEffect(() => {
     return () => {
       if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+      if (browserTTSRef.current) { browserTTSRef.current.stop(); browserTTSRef.current = null; }
+      browserTTSStop();
       if (narrationAnimRef.current) cancelAnimationFrame(narrationAnimRef.current);
     };
   }, []);
@@ -1020,7 +1044,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         )}
 
         {showNarrator && (
-          <div className={cn("absolute left-0 top-11 z-20 w-72 rounded-xl shadow-2xl p-4", "bg-stone-800 border border-stone-700")}>
+          <div className={cn("absolute left-0 top-11 z-20 w-72 rounded-xl shadow-2xl p-4 max-h-[70vh] overflow-y-auto", "bg-stone-800 border border-stone-700")}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-1.5">
                 <Volume2 className="h-3 w-3 text-purple-400" />
@@ -1029,6 +1053,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               <button onClick={() => setShowNarrator(false)} className="h-5 w-5 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close narrator panel" data-testid="button-close-narrator"><X className="h-3 w-3" /></button>
             </div>
             <p className="text-[10px] text-stone-400 mb-3">Choose a voice, then hit play. Narrator auto-turns pages when done.</p>
+            {readerUsingFallback && (
+              <div className="mb-3 px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <p className="text-[9px] text-amber-300 font-mono">Fell back to free browser voice — premium credits may be exhausted.</p>
+              </div>
+            )}
+            <p className="text-[9px] font-mono text-stone-500 uppercase tracking-wider mb-1.5">Premium Voices</p>
             <div className="space-y-1.5 mb-3">
               {VOICE_OPTIONS.map(v => (
                 <button key={v.value} onClick={() => { setSelectedVoice(v.value); stopNarration(); }} data-testid={`voice-${v.value}`}
@@ -1042,6 +1072,27 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 </button>
               ))}
             </div>
+            {browserVoiceList.length > 0 && (
+              <>
+                <p className="text-[9px] font-mono text-green-400/70 uppercase tracking-wider mb-1.5">Free Browser Voices</p>
+                <div className="space-y-1.5 mb-3">
+                  {browserVoiceList.map(bv => (
+                    <button key={bv.id} onClick={() => { setSelectedVoice(bv.id); stopNarration(); }} data-testid={`voice-browser-${bv.label}`}
+                      className={cn("w-full text-left px-3 py-2 rounded-lg border transition-all flex items-center justify-between",
+                        bv.id === selectedVoice ? "border-green-500/40 bg-green-500/10 text-green-200" : "border-stone-600 hover:border-stone-500 text-stone-400")}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/30 shrink-0">FREE</span>
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-mono font-bold truncate block">{bv.label}</span>
+                          <span className="text-[9px] text-stone-500">{bv.description}</span>
+                        </div>
+                      </div>
+                      {bv.id === selectedVoice && <span className="text-green-400 text-[10px]">●</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <label className="flex items-center gap-2 mb-3 cursor-pointer group">
               <input type="checkbox" checked={autoNarrate} onChange={e => setAutoNarrate(e.target.checked)}
                 className="accent-purple-500 w-3.5 h-3.5" data-testid="checkbox-auto-narrate" />
@@ -1050,10 +1101,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
             {isNarratableCurrentPage ? (
               <div className="flex gap-2">
                 <Button size="sm" onClick={playCurrentPage} disabled={narrationLoading}
-                  className="flex-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/30 text-[11px] font-mono h-8"
+                  className={cn("flex-1 text-[11px] font-mono h-8 border",
+                    isBrowserVoice(selectedVoice)
+                      ? "bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/30"
+                      : "bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border-purple-500/30")}
                   data-testid="button-narrator-play">
                   {narrationLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Play className="h-3 w-3 mr-1.5" />}
-                  {narrationLoading ? "Generating..." : "Read This Page"}
+                  {narrationLoading ? "Generating..." : isBrowserVoice(selectedVoice) ? "Read (Free)" : "Read This Page"}
                 </Button>
                 {isNarrating && (
                   <Button size="icon" variant="ghost" onClick={stopNarration}
