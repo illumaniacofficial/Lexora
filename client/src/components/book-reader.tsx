@@ -327,7 +327,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       return v && v in THEMES ? (v as PageTheme) : "parchment";
     } catch { return "parchment"; }
   });
-  const [selectedVoice, setSelectedVoice] = useState<NarratorVoice>("alloy");
+  const [selectedVoice, setSelectedVoice] = useState<NarratorVoice>("qJemC2CfKzP2DljOYBYj");
   const [isNarrating, setIsNarrating] = useState(false);
   const [narrationLoading, setNarrationLoading] = useState(false);
   const [narrationProgress, setNarrationProgress] = useState(0);

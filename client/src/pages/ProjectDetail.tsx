@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
-  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown,
+  Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -136,6 +136,7 @@ export default function ProjectDetail() {
   const [showReader, setShowReader] = useState(false);
   const [showCoverFull, setShowCoverFull] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [audiobookLoading, setAudiobookLoading] = useState(false);
   const { startNarration } = useNarration();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery<ProjectDetailData>({
@@ -361,6 +362,34 @@ export default function ProjectDetail() {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
       setPdfLoading(false);
+    }
+  }, [data, toast]);
+
+  const downloadAudiobook = useCallback(async () => {
+    if (!data?.project) return;
+    setAudiobookLoading(true);
+    try {
+      const res = await fetch("/api/tts/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: data.project.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Download failed" }));
+        throw new Error(err.error);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] || "audiobook.mp3";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Audiobook downloaded" });
+    } catch (err: any) {
+      toast({ title: "Audiobook download failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAudiobookLoading(false);
     }
   }, [data, toast]);
 
@@ -781,6 +810,19 @@ export default function ProjectDetail() {
                       <BookOpen className="h-3.5 w-3.5 mr-2 text-muted-foreground/40" /> .HTML
                     </Button>
                   </a>
+                  <div className="pt-2 border-t border-border/10">
+                    <Button
+                      variant="outline" size="sm"
+                      className="w-full justify-start border-purple-500/20 bg-purple-500/5 font-mono text-[10px] hover:border-purple-500/40 text-purple-300"
+                      onClick={downloadAudiobook}
+                      disabled={audiobookLoading}
+                      data-testid="button-download-audiobook"
+                    >
+                      {audiobookLoading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Volume2 className="h-3.5 w-3.5 mr-2 text-purple-400" />}
+                      .MP3 Audiobook (AI Voice)
+                    </Button>
+                    <p className="text-[8px] text-muted-foreground/30 font-mono mt-1 ml-1">ElevenLabs · Your voice narration</p>
+                  </div>
                 </>
               )}
             </CardContent>

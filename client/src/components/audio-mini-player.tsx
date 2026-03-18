@@ -11,14 +11,19 @@ export interface PlaybackState {
   progress: number;
 }
 
-export type NarratorVoice = "alloy" | "echo" | "fable" | "onyx" | "nova";
+export type NarratorVoice = string;
+
+export const DEFAULT_VOICE_ID = "qJemC2CfKzP2DljOYBYj";
 
 export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string }[] = [
-  { value: "alloy", label: "Alloy", description: "Neutral & balanced" },
-  { value: "echo", label: "Echo", description: "Warm & smooth" },
-  { value: "fable", label: "Fable", description: "Expressive & storytelling" },
-  { value: "onyx", label: "Onyx", description: "Deep & authoritative" },
-  { value: "nova", label: "Nova", description: "Bright & friendly" },
+  { value: "qJemC2CfKzP2DljOYBYj", label: "Sergio", description: "Professional author voice" },
+  { value: "4MnJDVdLqUeSlssQcssu", label: "Sergio Instant", description: "Cloned author voice" },
+  { value: "JBFqnCBsd6RMkjVDRZzb", label: "George", description: "Warm, captivating storyteller" },
+  { value: "nPczCjzI2devNBz1zQrb", label: "Brian", description: "Deep, resonant & comforting" },
+  { value: "pFZP5JQG7iQjIQuC4Bku", label: "Lily", description: "Velvety actress" },
+  { value: "EXAVITQu4vr4xnSDxMaL", label: "Sarah", description: "Mature, reassuring & confident" },
+  { value: "Xb7hH8MSUJpSbSDYk0k2", label: "Alice", description: "Clear, engaging educator" },
+  { value: "onwK4e9ZLuTAKqWW03F9", label: "Daniel", description: "Steady broadcaster" },
 ];
 
 interface NarrationState {

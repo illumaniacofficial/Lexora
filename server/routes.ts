@@ -1082,9 +1082,6 @@ Return JSON with:
     }
   });
 
-  const ttsVoices = ["alloy", "echo", "fable", "onyx", "nova"] as const;
-  type TTSVoice = typeof ttsVoices[number];
-
   const ttsCache = new Map<string, { audio: string; ts: number }>();
   const TTS_CACHE_MAX = 50;
   const TTS_CACHE_TTL = 10 * 60 * 1000;
@@ -1100,6 +1097,51 @@ Return JSON with:
     for (const [key] of toRemove) ttsCache.delete(key);
   }
 
+  async function elevenLabsTTS(text: string, voiceId: string): Promise<Buffer> {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) throw new Error("ELEVENLABS_API_KEY not configured");
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 },
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "Unknown error");
+      throw new Error(`ElevenLabs API error ${response.status}: ${errText}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  app.get("/api/elevenlabs/voices", async (_req, res) => {
+    try {
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "ElevenLabs not configured" });
+      const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+        headers: { "xi-api-key": apiKey },
+      });
+      if (!response.ok) throw new Error("Failed to fetch voices");
+      const data = await response.json() as { voices: { voice_id: string; name: string; category: string }[] };
+      const voices = (data.voices || []).map((v) => ({
+        id: v.voice_id,
+        name: v.name,
+        category: v.category,
+      }));
+      res.json({ voices });
+    } catch (err: any) {
+      console.error("ElevenLabs voices error:", err.message);
+      res.status(500).json({ error: "Failed to fetch voices" });
+    }
+  });
+
   app.post("/api/tts", async (req, res) => {
     try {
       const { text, voice } = req.body;
@@ -1109,17 +1151,16 @@ Return JSON with:
       if (text.length > 4000) {
         return res.status(400).json({ error: "Text too long (max 4000 characters)" });
       }
-      const selectedVoice: TTSVoice = ttsVoices.includes(voice) ? voice : "alloy";
       const trimmed = text.slice(0, 4000);
-      const cacheKey = ttsCacheKey(trimmed, selectedVoice);
+      const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const cacheKey = ttsCacheKey(trimmed, voiceId);
 
       const cached = ttsCache.get(cacheKey);
       if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      const { textToSpeech } = await import("./replit_integrations/audio/client");
-      const audioBuffer = await textToSpeech(trimmed, selectedVoice, "mp3");
+      const audioBuffer = await elevenLabsTTS(trimmed, voiceId);
       const base64Audio = audioBuffer.toString("base64");
 
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
@@ -1129,6 +1170,64 @@ Return JSON with:
     } catch (err: any) {
       console.error("TTS error:", err.message, err.stack);
       res.status(500).json({ error: "Failed to generate speech" });
+    }
+  });
+
+  function chunkText(text: string, maxLen: number = 4000): string[] {
+    const chunks: string[] = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+      if (remaining.length <= maxLen) {
+        chunks.push(remaining);
+        break;
+      }
+      let splitAt = remaining.lastIndexOf(". ", maxLen);
+      if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf(" ", maxLen);
+      if (splitAt < maxLen * 0.3) splitAt = maxLen;
+      chunks.push(remaining.slice(0, splitAt + 1).trim());
+      remaining = remaining.slice(splitAt + 1).trim();
+    }
+    return chunks.filter(c => c.length > 0);
+  }
+
+  app.post("/api/tts/download", async (req, res) => {
+    try {
+      const { projectId, chapterIds, voice } = req.body;
+      if (!projectId) return res.status(400).json({ error: "projectId required" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const allChapters = await storage.getChapters(projectId);
+      const chapters = chapterIds?.length
+        ? allChapters.filter((c) => chapterIds.includes(c.id) && c.status === "complete" && c.content)
+        : allChapters.filter((c) => c.status === "complete" && c.content);
+
+      if (chapters.length === 0) return res.status(400).json({ error: "No completed chapters to narrate" });
+
+      const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const audioChunks: Buffer[] = [];
+
+      for (const chapter of chapters.sort((a, b) => a.chapterNumber - b.chapterNumber)) {
+        const cleanText = (chapter.content || "").replace(/[#*_`~>\[\]()]/g, "");
+        if (!cleanText.trim()) continue;
+        const textChunks = chunkText(cleanText);
+        for (const chunk of textChunks) {
+          const buf = await elevenLabsTTS(chunk, voiceId);
+          audioChunks.push(buf);
+        }
+      }
+
+      if (audioChunks.length === 0) return res.status(400).json({ error: "No audio generated" });
+
+      const combined = Buffer.concat(audioChunks);
+      const filename = `${slugify(project.title)}-audiobook.mp3`;
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", combined.length);
+      res.send(combined);
+    } catch (err: any) {
+      console.error("TTS download error:", err.message, err.stack);
+      res.status(500).json({ error: "Failed to generate audiobook" });
     }
   });
 
