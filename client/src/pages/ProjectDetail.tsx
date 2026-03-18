@@ -17,7 +17,7 @@ import {
   Save, Edit3, Check, Music, ArrowRight,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
+import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
@@ -42,7 +42,7 @@ function StepStatus({ status }: { status: string }) {
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, onSaveEdit, isSavingEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -50,32 +50,36 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   isCancelling: boolean;
   projectId: number;
   isEditingMode: boolean;
+  isProjectComplete: boolean;
   onSaveEdit: (id: number, content: string) => void;
   isSavingEdit: boolean;
+  editingChapterId: number | null;
+  onStartEdit: (id: number) => void;
+  onCancelEdit: () => void;
   onGenerateAudio: (id: number) => void;
   isGeneratingAudio: boolean;
   mostRecentEditId: number | null;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
+
+  const isEditing = editingChapterId === chapter.id;
 
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditContent(chapter.content || "");
-    setIsEditing(true);
+    onStartEdit(chapter.id);
     setExpanded(true);
   };
 
   const saveEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     onSaveEdit(chapter.id, editContent);
-    setIsEditing(false);
   };
 
   const cancelEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsEditing(false);
+    onCancelEdit();
     setEditContent("");
   };
 
@@ -143,7 +147,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                     >
                       <Edit3 className="h-2.5 w-2.5 mr-0.5" /> EDIT
                     </Button>
-                  ) : (
+                  ) : !isProjectComplete ? (
                     <Button
                       size="sm" variant="outline"
                       className="h-6 text-[9px] font-mono border-border/30 hover:border-amber-500/30 hover:text-amber-300 px-1.5"
@@ -154,7 +158,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                     >
                       <RefreshCw className="h-2.5 w-2.5 mr-0.5" /> REGEN
                     </Button>
-                  )}
+                  ) : null}
                 </>
               ) : chapter.status === "generating" ? (
                 <>
@@ -305,6 +309,36 @@ export default function ProjectDetail() {
     onSuccess: () => { invalidate(); toast({ title: "Generation cancelled", description: "Chapter reset to pending" }); },
     onError: (e: any) => toast({ title: "Cancel failed", description: e.message, variant: "destructive" }),
   });
+  const [editingChapterId, setEditingChapterId] = useState<number | null>(null);
+  const editChapterMutation = useMutation({
+    mutationFn: ({ chapterId, content }: { chapterId: number; content: string }) =>
+      apiRequest("PATCH", `/api/projects/${projectId}/chapters/${chapterId}/edit`, { content }),
+    onSuccess: () => { setEditingChapterId(null); invalidate(); toast({ title: "Chapter saved" }); },
+    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+  const markCompleteMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/mark-complete`),
+    onSuccess: () => { invalidate(); toast({ title: "Book marked as complete!", description: "Your book is now in the Library" }); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const revertToEditingMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/revert-to-editing`),
+    onSuccess: () => { invalidate(); toast({ title: "Reverted to editing" }); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const [generatingAudioChapterId, setGeneratingAudioChapterId] = useState<number | null>(null);
+  const generateChapterAudio = useCallback(async (chapterId: number) => {
+    setGeneratingAudioChapterId(chapterId);
+    try {
+      await apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/generate-audio`);
+      invalidate();
+      toast({ title: "Chapter audio saved", description: "MP3 ready for download" });
+    } catch (err: any) {
+      toast({ title: "Audio generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingAudioChapterId(null);
+    }
+  }, [projectId, toast]);
 
   const exportPdf = useCallback(async () => {
     if (!data?.project) return;
@@ -550,6 +584,13 @@ export default function ProjectDetail() {
 
   const { project, chapters, runSteps, bookDna, marketing, trendReport } = data;
   const completedChapters = chapters.filter(c => c.status === "complete");
+  const isEditingMode = project.status === "editing";
+  const mostRecentEditId = (() => {
+    const edited = chapters.filter(c => c.lastEditedAt);
+    if (edited.length === 0) return null;
+    edited.sort((a, b) => new Date(b.lastEditedAt!).getTime() - new Date(a.lastEditedAt!).getTime());
+    return edited[0].id;
+  })();
   const pct = (() => {
     let done = 0, total = 0;
     total += 1; if (!!trendReport) done += 1;
@@ -674,6 +715,64 @@ export default function ProjectDetail() {
             ))}
           </div>
 
+          {isEditingMode && (
+            <Card className="border-amber-500/20 bg-amber-500/[0.03] overflow-hidden" data-testid="editing-mode-banner">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20">
+                      <Edit3 className="h-5 w-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold tracking-tight text-amber-300">Editing Mode</p>
+                      <p className="text-[10px] text-muted-foreground/50 font-mono">
+                        {mostRecentEditId ? `Last edited: Ch ${chapters.find(c => c.id === mostRecentEditId)?.chapterNumber || "?"}` : "Click EDIT on any chapter to make changes"}
+                        {" · "}{completedChapters.length}/{chapters.length} chapters complete
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    className="neon-glow-nature text-white border-0 font-mono text-[11px] h-9 px-5"
+                    onClick={() => markCompleteMutation.mutate()}
+                    disabled={markCompleteMutation.isPending || completedChapters.length < chapters.length}
+                    data-testid="button-mark-complete"
+                  >
+                    {markCompleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
+                    MARK AS COMPLETE
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {project.status === "complete" && (
+            <Card className="border-emerald-500/20 bg-emerald-500/[0.03] overflow-hidden" data-testid="complete-banner">
+              <CardContent className="py-4">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                      <CheckCircle className="h-5 w-5 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold tracking-tight text-emerald-300">Book Complete</p>
+                      <p className="text-[10px] text-muted-foreground/50 font-mono">This book is published in your Library</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="border-amber-500/20 text-amber-400 font-mono text-[11px] h-9 hover:border-amber-500/40 hover:bg-amber-500/5"
+                    onClick={() => revertToEditingMutation.mutate()}
+                    disabled={revertToEditingMutation.isPending}
+                    data-testid="button-revert-editing"
+                  >
+                    {revertToEditingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Edit3 className="h-3.5 w-3.5 mr-1.5" />}
+                    REVERT TO EDITING
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Tabs defaultValue="chapters">
             <TabsList className="h-10 bg-card/30 border border-border/20">
               <TabsTrigger value="chapters" data-testid="tab-chapters" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
@@ -708,7 +807,25 @@ export default function ProjectDetail() {
                 </Card>
               ) : (
                 chapters.map(ch => (
-                  <ChapterCard key={ch.id} chapter={ch} onGenerate={(cid) => chapterMutation.mutate(cid)} isGenerating={chapterMutation.isPending} onCancel={(cid) => cancelChapterMutation.mutate(cid)} isCancelling={cancelChapterMutation.isPending} />
+                  <ChapterCard
+                    key={ch.id}
+                    chapter={ch}
+                    onGenerate={(cid) => chapterMutation.mutate(cid)}
+                    isGenerating={chapterMutation.isPending}
+                    onCancel={(cid) => cancelChapterMutation.mutate(cid)}
+                    isCancelling={cancelChapterMutation.isPending}
+                    projectId={projectId}
+                    isEditingMode={isEditingMode}
+                    isProjectComplete={project.status === "complete"}
+                    onSaveEdit={(cid, content) => editChapterMutation.mutate({ chapterId: cid, content })}
+                    isSavingEdit={editChapterMutation.isPending}
+                    editingChapterId={editingChapterId}
+                    onStartEdit={(cid) => setEditingChapterId(cid)}
+                    onCancelEdit={() => setEditingChapterId(null)}
+                    onGenerateAudio={(cid) => generateChapterAudio(cid)}
+                    isGeneratingAudio={generatingAudioChapterId === ch.id}
+                    mostRecentEditId={mostRecentEditId}
+                  />
                 ))
               )}
             </TabsContent>

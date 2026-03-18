@@ -853,8 +853,7 @@ Write the full chapter content only, no meta-commentary.`;
       if (audioChunks.length === 0) return res.status(400).json({ error: "No audio generated" });
 
       const combined = Buffer.concat(audioChunks);
-      const project = await storage.getProject(projectId);
-      const filename = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
+      const filename = `project-${projectId}-chapter-${chapterId}.mp3`;
       const filePath = path.join(AUDIO_DIR, filename);
       fs.writeFileSync(filePath, combined);
 
