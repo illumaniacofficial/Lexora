@@ -19,6 +19,7 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - Utilizes React Query for data fetching and caching, Wouter for routing, and Shadcn UI for component styling.
 - Design System: "Futuristic Abstract Artist Aesthetic" featuring a dark-first palette, electric purple primary color, Space Grotesk/JetBrains Mono/Playfair Display fonts, neon gradients, aurora backgrounds, glassmorphism effects, glow borders, and various animations (pulse, float, shimmer, fade-in-up, count-up).
 - UI/UX decisions include a full-screen immersive book reader with page flip animations, themes, and an AI narrator.
+- **VoiceSelector Component**: Searchable dropdown with voice filtering (free vs. premium), used in Settings page and book reader for intuitive voice selection across 17 voice options.
 - Accessibility: Implemented `aria-label` for icons, `sr-only` for labels, and `data-testid` for interactive elements.
 - SEO: Uses `react-helmet-async` for per-page titles and meta descriptions.
 
@@ -42,7 +43,7 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Library**: Stores completed books with search, filter, and sort functionalities.
 - **Autopilot Mode**: Autonomous book publishing, including topic generation and full pipeline execution with budget/quality controls.
 - **Book Export**: Supports .pdf, .txt, and .html formats.
-- **AI Narrator**: Integrates ElevenLabs TTS with multiple voice options, client-side audio caching, and server-side TTS caching for seamless narration. Per-voice disk-based caching saves audio files so switching voices doesn't waste credits. Word-level highlighting syncs with audio playback progress, with theme-aware styling (purple highlight for dark themes, light purple for light themes) and throttled auto-scroll. Continuous reading mode auto-advances pages.
+- **AI Narrator**: Integrates ElevenLabs TTS with 12 premium voices (Sergio, Sergio Instant, George, Brian, Lily, Sarah, Alice, Daniel, Ryan, Emma, Chris, Jessica) and 5 free browser voices (Alloy, Echo, Fable, Onyx, Nova). Voice selection via searchable dropdown with free/premium filtering on Settings page and reader pages. Client-side audio caching and server-side TTS caching for seamless narration. Per-voice disk-based caching saves audio files so switching voices doesn't waste credits. Word-level highlighting syncs with audio playback progress, with theme-aware styling (purple highlight for dark themes, light purple for light themes) and throttled auto-scroll. Continuous reading mode auto-advances pages.
 - **Book Reader Intro/Outro**: Narrates the book title, author name, and chapter count before chapter 1 (intro page). After the last chapter, narrates a thank-you outro with Lexora branding.
 - **Per-Voice Audio Caching**: Audio files stored in voice-specific folders (`uploads/audio/{voiceId}/project-{id}-chapter-{id}.mp3`). TTS page-level audio cached to disk (`uploads/audio/tts-cache/{voiceId}/`). Existing files served instantly without regenerating.
 - **Editing Stage**: Provides an inline chapter editor with save/cancel, timestamps, and status management. REGEN blocked when project is complete.

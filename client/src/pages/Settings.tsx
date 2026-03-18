@@ -19,6 +19,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
 import type { AppSettings } from "@shared/schema";
+import { VoiceSelector } from "@/components/voice-selector";
+import { DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
 
 const schema = z.object({
   defaultAuthorName: z.string().min(1, "Author name is required").max(200),
@@ -34,14 +36,6 @@ const schema = z.object({
 });
 
 type FormData = z.infer<typeof schema>;
-
-const voiceOptions = [
-  { value: "alloy", label: "Alloy" },
-  { value: "echo", label: "Echo" },
-  { value: "fable", label: "Fable" },
-  { value: "onyx", label: "Onyx" },
-  { value: "nova", label: "Nova" },
-];
 
 const aiModelOptions = [
   { value: "fast", label: "Fast (GPT-5 Mini)", desc: "Faster, lower cost" },
@@ -67,7 +61,7 @@ export default function Settings() {
       chapterWordTarget: 3000,
       autoGenerateCover: true,
       autoGenerateMarketing: true,
-      ttsDefaultVoice: "alloy",
+      ttsDefaultVoice: DEFAULT_VOICE_ID,
       storefrontTitle: "Lexora Book Collection",
       exportFormat: "html",
     },
@@ -287,15 +281,11 @@ export default function Settings() {
             <CardContent>
               <FormField control={form.control} name="ttsDefaultVoice" render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">Default TTS Voice</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-tts-voice" className="h-10 bg-card/30 border-border/30 font-mono text-[12px]"><SelectValue /></SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {voiceOptions.map(v => <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">Default Narrator Voice</FormLabel>
+                  <FormControl>
+                    <VoiceSelector value={field.value} onChange={field.onChange} />
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
               )} />
             </CardContent>
