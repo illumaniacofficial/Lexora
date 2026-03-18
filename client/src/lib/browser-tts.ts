@@ -13,28 +13,46 @@ export function isBrowserVoice(voiceId: string): boolean {
 export function getBrowserVoices(): BrowserVoiceOption[] {
   if (typeof window === "undefined" || !window.speechSynthesis) return [];
   const voices = window.speechSynthesis.getVoices();
-  const enVoices = voices.filter(v => v.lang.startsWith("en"));
   const seen = new Set<string>();
-  const result: BrowserVoiceOption[] = [];
-  for (const v of enVoices) {
+  const enVoices: BrowserVoiceOption[] = [];
+  const otherVoices: BrowserVoiceOption[] = [];
+  for (const v of voices) {
     const key = v.name;
     if (seen.has(key)) continue;
     seen.add(key);
-    const shortLang = v.lang === "en-US" ? "US" : v.lang === "en-GB" ? "UK" : v.lang === "en-AU" ? "AU" : v.lang.replace("en-", "");
-    result.push({
+    const langCode = v.lang.split("-")[0].toUpperCase();
+    const region = v.lang.split("-")[1] || "";
+    const shortLang = v.lang.startsWith("en")
+      ? (v.lang === "en-US" ? "US" : v.lang === "en-GB" ? "UK" : v.lang === "en-AU" ? "AU" : region || langCode)
+      : `${langCode}${region ? "-" + region : ""}`;
+    const option: BrowserVoiceOption = {
       id: `browser:${v.voiceURI}`,
       label: v.name.replace(/^(Google |Microsoft |Apple )/, "").split(" (")[0].split(" -")[0],
       description: `Free · ${shortLang}${v.localService ? "" : " · Network"}`,
       lang: v.lang,
       voice: v,
-    });
+    };
+    if (v.lang.startsWith("en")) {
+      enVoices.push(option);
+    } else {
+      otherVoices.push(option);
+    }
   }
-  return result.slice(0, 8);
+  return [...enVoices, ...otherVoices].slice(0, 12);
 }
 
 export function getDefaultBrowserVoice(): BrowserVoiceOption | null {
-  const voices = getBrowserVoices();
-  return voices.find(v => v.voice.default) || voices[0] || null;
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  const allVoices = window.speechSynthesis.getVoices();
+  if (allVoices.length === 0) return null;
+  const defaultVoice = allVoices.find(v => v.default) || allVoices[0];
+  return {
+    id: `browser:${defaultVoice.voiceURI}`,
+    label: defaultVoice.name,
+    description: "Free",
+    lang: defaultVoice.lang,
+    voice: defaultVoice,
+  };
 }
 
 export function findBrowserVoice(voiceId: string): SpeechSynthesisVoice | null {
