@@ -5,6 +5,7 @@ import { createServer } from "http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
+import pg from "pg";
 
 const app = express();
 const httpServer = createServer(app);
@@ -23,6 +24,8 @@ declare module "express-session" {
   }
 }
 
+app.set("trust proxy", 1);
+
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -38,12 +41,30 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const sessionPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+async function ensureSessionTable() {
+  await sessionPool.query(`
+    CREATE TABLE IF NOT EXISTS "session" (
+      "sid" varchar NOT NULL COLLATE "default",
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL,
+      CONSTRAINT "session_pkey" PRIMARY KEY ("sid")
+    ) WITH (OIDS=FALSE);
+  `);
+  await sessionPool.query(`
+    CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+  `);
+}
+
+ensureSessionTable().catch(console.error);
+
 const PgStore = connectPgSimple(session);
 app.use(
   session({
     store: new PgStore({
-      conString: process.env.DATABASE_URL,
-      createTableIfMissing: true,
+      pool: sessionPool,
+      tableName: "session",
     }),
     secret: process.env.SESSION_SECRET || "lexora-dev-secret-change-me",
     resave: false,
