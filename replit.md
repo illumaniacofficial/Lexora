@@ -109,17 +109,27 @@ english, spanish, portuguese, french, german
 - **Primary**: Electric purple (`--primary: 270 100% 72%`)
 - **Font stack**: Space Grotesk (headings/body), JetBrains Mono (mono/labels), Playfair Display (serif)
 - **Neon gradients**: `.neon-glow` (purple→indigo→cyan), `.neon-glow-warm` (pink→purple→indigo), `.neon-glow-cool` (cyan→blue→purple), `.neon-glow-fire` (amber→red→pink), `.neon-glow-nature` (emerald→cyan→indigo)
-- **Aurora backgrounds**: `.aurora-bg` (multi-radial gradient overlay on main content), `.aurora-card` (card-level variant)
-- **Glassmorphism**: `.glass-panel` (frosted blur + border for header), `.glass-card` (lighter blur for cards)
+- **Aurora backgrounds**: `.aurora-bg` (static), `.aurora-bg-animated` (slowly drifting gradient, 20s cycle — used on Dashboard, Projects, Library, Chat empty state)
+- **Glassmorphism**: `.glass-panel` (frosted blur + border), `.glass-card` (lighter blur), `.glass-card-premium` (deeper blur + purple-tinted border + inset highlight — used on major cards)
 - **Glow borders**: `.glow-border` (purple), `.glow-border-cyan`, `.glow-border-pink` — subtle box-shadow + border effects
+- **Gradient border animation**: `.gradient-border-animated` — animated conic gradient border (4s rotation) for featured items
 - **Glow text**: `.glow-text`, `.glow-text-cyan`, `.glow-text-pink` — text-shadow effects
 - **Mesh backgrounds**: `.mesh-bg` — multi-radial abstract gradient overlay
-- **Animations**: `.animate-pulse-glow` (breathing opacity), `.animate-float` (levitation), `.shimmer-text` (gradient text animation)
-- **Utility classes**: `.line-glow` (horizontal separator), `.dot-grid` (background pattern), `.stat-orb` (radial glow on stat cards), `.holographic` (multi-color gradient)
-- **Status dots**: Neon glow shadows on active statuses (blue, purple, amber, pink, emerald)
+- **Animations**:
+  - `.animate-pulse-glow` (breathing opacity), `.animate-float` (levitation), `.shimmer-text` (gradient text shimmer)
+  - `.animate-fade-in-up` + `.stagger-1` through `.stagger-6` — staggered entrance animations on cards and page sections
+  - `.animate-count-up` — stat counter pulse animation
+  - `.card-hover-lift` — translateY(-4px) + scale(1.01) with purple glow shadow on hover
+  - `.typing-dot` — bouncing dot indicator for AI typing states in Chat Studio
+  - `.nav-active-bar` — animated left-edge gradient bar for active sidebar nav items
+- **Progress bars**: `.progress-gradient` — applies purple→cyan gradient to progress bar indicators
+- **Message bubbles**: `.message-bubble-ai` (dark purple gradient + glow shadow), `.message-bubble-user` (lighter purple tint) — used in Chat Studio
+- **Utility classes**: `.line-glow`, `.dot-grid`, `.stat-orb`, `.holographic`, `.cover-gradient-overlay` (fade-to-bg for cover images)
+- **Status dots**: Neon glow shadows on active statuses
 - **Mono labels**: 9-10px font-mono uppercase tracking-[0.2em] for section headers
-- **Card style**: `border-border/20 bg-card/30` base, hover transitions to purple/pink/cyan borders
-- **Interactive surfaces**: `bg-white/[0.02]` hover states, very subtle transparency
+- **Card style**: `border-border/15 bg-card/30` base, hover transitions with purple/cyan borders, cover thumbnails on project cards
+- **Interactive surfaces**: `bg-white/[0.02]` to `bg-white/[0.04]` hover states, button hover:scale-105 effects
+- **Cover art**: Project cards show cover thumbnails (h-28 with gradient overlay), Library featured cards use taller aspect ratios (2:3, max-h-56), list items show mini thumbnails (h-10 w-7)
 
 ## File Structure
 

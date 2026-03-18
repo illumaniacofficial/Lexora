@@ -93,10 +93,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="border-b border-border/40 px-5 py-5">
+      <SidebarHeader className="border-b border-border/30 px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="relative flex h-10 w-10 items-center justify-center">
-            <div className="absolute inset-0 rounded-xl neon-glow opacity-80 blur-[2px]" />
+          <div className="relative flex h-10 w-10 items-center justify-center group">
+            <div className="absolute inset-0 rounded-xl neon-glow opacity-80 blur-[2px] group-hover:opacity-100 group-hover:blur-[4px] transition-all duration-500" />
             <img src={logoPath} alt="Lexora" className="relative h-10 w-10 rounded-xl object-cover drop-shadow-lg" />
           </div>
           <div>
@@ -124,13 +124,19 @@ export function AppSidebar() {
                       asChild
                       data-active={isActive}
                       data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
-                      className={isActive
-                        ? "bg-purple-500/10 text-purple-300 font-semibold border border-purple-500/20 glow-border"
-                        : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03] border border-transparent"
-                      }
+                      className={cn(
+                        "relative transition-all duration-300",
+                        isActive
+                          ? "bg-purple-500/10 text-purple-300 font-semibold border border-purple-500/20"
+                          : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border border-transparent hover:border-purple-500/10"
+                      )}
                     >
                       <Link href={item.url}>
-                        <item.icon className={`h-4 w-4 ${isActive ? "text-purple-400 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]" : ""}`} />
+                        {isActive && <span className="nav-active-bar" />}
+                        <item.icon className={cn(
+                          "h-4 w-4 transition-all duration-300",
+                          isActive ? "text-purple-400 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]" : ""
+                        )} />
                         <span className="text-[13px] tracking-tight">{item.title}</span>
                         {isActive && (
                           <span className="ml-auto h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
@@ -202,7 +208,7 @@ export function AppSidebar() {
                         onClick={() => playbackControls?.togglePlay()}
                         disabled={playbackState.isLoading}
                         className={cn(
-                          "h-8 w-8 rounded-full transition-all",
+                          "h-8 w-8 rounded-full transition-all duration-300",
                           playbackState.isPlaying
                             ? "bg-purple-500 hover:bg-purple-600 text-white shadow-[0_0_16px_rgba(147,51,234,0.4)]"
                             : "bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30"
@@ -248,7 +254,7 @@ export function AppSidebar() {
                   <TooltipTrigger asChild>
                     <button
                       onClick={() => playbackControls?.togglePlay()}
-                      className="relative flex items-center justify-center h-9 w-9 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-colors"
+                      className="relative flex items-center justify-center h-9 w-9 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all duration-300"
                       data-testid="sidebar-now-playing-icon"
                       aria-label={playbackState.isPlaying ? "Pause narration" : "Play narration"}
                     >
@@ -277,10 +283,10 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/30 px-4 py-3 space-y-2">
+      <SidebarFooter className="border-t border-border/20 px-4 py-3 space-y-2">
         <Link href="/library#invites">
           <button
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[11px] font-mono text-muted-foreground/50 hover:text-purple-300 hover:bg-purple-500/5 transition-all border border-transparent hover:border-purple-500/15"
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[11px] font-mono text-muted-foreground/50 hover:text-purple-300 hover:bg-purple-500/5 transition-all duration-300 border border-transparent hover:border-purple-500/15"
             data-testid="button-sidebar-invites"
           >
             <Share2 className="h-3.5 w-3.5 text-purple-400/50" />

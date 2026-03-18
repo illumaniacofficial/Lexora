@@ -81,22 +81,22 @@ export default function Projects() {
   }
 
   return (
-    <div className="p-8 space-y-6 overflow-y-auto h-full">
+    <div className="p-8 space-y-6 overflow-y-auto h-full aurora-bg-animated">
       <Helmet>
         <title>Projects — Lexora</title>
         <meta name="description" content="Manage your book manuscripts — create, track progress, and navigate through your publishing pipeline." />
       </Helmet>
-      <div className="flex items-end justify-between gap-4 flex-wrap">
+      <div className="flex items-end justify-between gap-4 flex-wrap animate-fade-in-up">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <Hexagon className="h-3 w-3 text-purple-500/50" />
-            <span className="text-[9px] font-mono font-bold text-muted-foreground/40 tracking-[0.2em] uppercase">LIBRARY</span>
+            <span className="text-[9px] font-mono font-bold text-muted-foreground/40 tracking-[0.2em] uppercase">PROJECTS</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tighter">Book <span className="shimmer-text">Projects</span></h1>
           <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">{projects.length} in-progress manuscripts · Completed books move to Library</p>
         </div>
         <Link href="/projects/new">
-          <Button data-testid="button-new-project" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)]">
+          <Button data-testid="button-new-project" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.6)] hover:scale-105 transition-all duration-300">
             <Plus className="h-4 w-4 mr-2" /> New Project
           </Button>
         </Link>
@@ -104,20 +104,20 @@ export default function Projects() {
 
       <div className="line-glow" />
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap animate-fade-in-up stagger-2">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
-          <Input placeholder="Search manuscripts..." className="pl-9 h-10 bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search" />
+          <Input placeholder="Search manuscripts..." className="pl-9 h-10 bg-white/[0.03] border-border/20 font-mono text-sm focus:border-purple-500/40 transition-colors" value={search} onChange={e => setSearch(e.target.value)} data-testid="input-search" />
         </div>
         <Select value={filterVertical} onValueChange={setFilterVertical}>
-          <SelectTrigger className="w-44 h-10 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="select-vertical-filter"><SelectValue placeholder="All Verticals" /></SelectTrigger>
+          <SelectTrigger className="w-44 h-10 bg-white/[0.03] border-border/20 font-mono text-[12px]" data-testid="select-vertical-filter"><SelectValue placeholder="All Verticals" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Verticals</SelectItem>
             {VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40 h-10 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="select-status-filter"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectTrigger className="w-40 h-10 bg-white/[0.03] border-border/20 font-mono text-[12px]" data-testid="select-status-filter"><SelectValue placeholder="All Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             {PROJECT_STATUSES.map(s => <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>)}
@@ -131,7 +131,7 @@ export default function Projects() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="relative">
+          <div className="relative animate-float">
             <div className="absolute inset-0 neon-glow opacity-20 blur-3xl rounded-full scale-150" />
             <BookOpen className="h-12 w-12 text-purple-500/30 relative" />
           </div>
@@ -142,31 +142,58 @@ export default function Projects() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((project) => {
+          {filtered.map((project, idx) => {
             const pct = getLivePct(project);
             return (
-              <div key={project.id} className="group relative" data-testid={`project-card-${project.id}`}>
+              <div key={project.id} className={`group relative animate-fade-in-up stagger-${Math.min(idx + 1, 6)}`} data-testid={`project-card-${project.id}`}>
                 <Link href={`/projects/${project.id}`}>
-                  <Card className="h-full cursor-pointer border-border/20 bg-card/30 hover:border-purple-500/20 hover:bg-purple-500/[0.02] transition-all duration-500">
-                    <CardContent className="pt-5 pb-4 space-y-4">
+                  <Card className="h-full cursor-pointer border-border/15 bg-card/30 hover:border-purple-500/25 transition-all duration-500 card-hover-lift overflow-hidden">
+                    {project.coverImageUrl && (
+                      <div className="relative w-full h-28 overflow-hidden">
+                        <img
+                          src={project.coverImageUrl}
+                          alt=""
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        />
+                        <div className="cover-gradient-overlay" />
+                        <div className="absolute bottom-2 left-3">
+                          <span className="inline-flex items-center gap-1.5 text-[9px] font-mono text-white/80 bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-full">
+                            <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
+                            {statusLabel(project.status)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    <CardContent className={`${project.coverImageUrl ? "pt-3" : "pt-5"} pb-4 space-y-4`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-sm tracking-tight line-clamp-2 group-hover:text-purple-300 transition-colors">{project.title}</h3>
                           <p className="text-[10px] font-mono text-muted-foreground/40 mt-1 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</p>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground/15 group-hover:text-purple-400/50 transition-colors shrink-0 mt-0.5" />
+                        <ArrowRight className="h-4 w-4 text-muted-foreground/15 group-hover:text-purple-400/50 group-hover:translate-x-1 transition-all duration-300 shrink-0 mt-0.5" />
                       </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50">
-                            <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
-                            {statusLabel(project.status)}
-                          </span>
-                          <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
+                      {!project.coverImageUrl && (
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50">
+                              <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
+                              {statusLabel(project.status)}
+                            </span>
+                            <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
+                          </div>
+                          <Progress value={pct} className="h-[3px] progress-gradient" />
                         </div>
-                        <Progress value={pct} className="h-[3px]" />
-                      </div>
+                      )}
+
+                      {project.coverImageUrl && (
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] font-mono text-muted-foreground/40">{pct}% complete</span>
+                          </div>
+                          <Progress value={pct} className="h-[3px] progress-gradient" />
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-3 gap-2">
                         {[
@@ -174,7 +201,7 @@ export default function Projects() {
                           { v: formatScore(project.qualityScore), l: "QUAL", c: scoreColor(project.qualityScore) },
                           { v: project.chapterCount.toString(), l: "CH" },
                         ].map(({ v, l, c }) => (
-                          <div key={l} className="bg-white/[0.02] border border-border/20 rounded-lg py-2 text-center">
+                          <div key={l} className="bg-white/[0.03] border border-border/15 rounded-lg py-2 text-center">
                             <div className={`text-[11px] font-bold font-mono ${c || ""}`}>{v}</div>
                             <div className="text-[8px] font-mono text-muted-foreground/30 mt-0.5 tracking-widest">{l}</div>
                           </div>

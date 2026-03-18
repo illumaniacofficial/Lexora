@@ -148,12 +148,12 @@ export default function Library() {
   }
 
   return (
-    <div className="p-8 space-y-7 overflow-y-auto h-full">
+    <div className="p-8 space-y-7 overflow-y-auto h-full aurora-bg-animated">
       <Helmet>
         <title>Library — Lexora</title>
         <meta name="description" content="Your completed book library — browse, search, and explore published manuscripts ranked by quality." />
       </Helmet>
-      <div>
+      <div className="animate-fade-in-up">
         <div className="flex items-center gap-2 mb-2">
           <Hexagon className="h-3 w-3 text-emerald-500/50" />
           <span className="text-[9px] font-mono font-bold text-emerald-400/60 tracking-[0.2em] uppercase">LIBRARY</span>
@@ -167,7 +167,7 @@ export default function Library() {
             variant="outline"
             size="sm"
             onClick={() => setShowInvites(!showInvites)}
-            className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 font-mono text-[11px] h-8"
+            className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 hover:scale-105 transition-all duration-300 font-mono text-[11px] h-8"
             data-testid="button-toggle-invites"
           >
             <Share2 className="h-3.5 w-3.5 mr-1.5" /> {showInvites ? "Hide" : "Invites"} {invites.length > 0 && `(${invites.length})`}
@@ -176,7 +176,7 @@ export default function Library() {
       </div>
 
       {showInvites && (
-        <Card className="border-purple-500/15 bg-purple-500/[0.03]">
+        <Card className="border-purple-500/15 bg-purple-500/[0.03] glass-card-premium animate-fade-in-up">
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-1.5 mb-3">
               <Share2 className="h-3 w-3 text-purple-400" />
@@ -188,13 +188,13 @@ export default function Library() {
                 value={inviteLabel}
                 onChange={e => setInviteLabel(e.target.value)}
                 placeholder="Label (e.g., Beta Readers, Marketing Team)"
-                className="bg-card/30 border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 flex-1"
+                className="bg-white/[0.03] border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 flex-1"
                 data-testid="input-invite-label"
               />
               <Button
                 onClick={() => createInviteMutation.mutate(inviteLabel)}
                 disabled={createInviteMutation.isPending}
-                className="neon-glow text-white border-0 font-mono text-[11px] h-9 px-4"
+                className="neon-glow text-white border-0 font-mono text-[11px] h-9 px-4 hover:scale-105 transition-transform"
                 data-testid="button-create-invite"
               >
                 {createInviteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
@@ -204,7 +204,7 @@ export default function Library() {
             {invites.length > 0 && (
               <div className="space-y-2">
                 {invites.map(inv => (
-                  <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-card/30 border border-border/10 group" data-testid={`invite-${inv.id}`}>
+                  <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-border/10 group hover:border-purple-500/15 transition-all duration-300" data-testid={`invite-${inv.id}`}>
                     <LinkIcon className="h-3.5 w-3.5 text-purple-400/50 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-[12px] font-medium truncate">{inv.label}</p>
@@ -239,7 +239,7 @@ export default function Library() {
 
       <div className="line-glow" />
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 animate-fade-in-up stagger-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
           <Input
@@ -247,12 +247,12 @@ export default function Library() {
             placeholder="Search by title, author, vertical, keyword..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="pl-10 bg-card/30 border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 focus-visible:ring-purple-500/30"
+            className="pl-10 bg-white/[0.03] border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 focus-visible:ring-purple-500/30"
           />
         </div>
         <div className="flex gap-2">
           <Select value={verticalFilter} onValueChange={setVerticalFilter}>
-            <SelectTrigger className="w-44 bg-card/30 border-border/20 text-[12px] font-mono" data-testid="select-vertical-filter">
+            <SelectTrigger className="w-44 bg-white/[0.03] border-border/20 text-[12px] font-mono" data-testid="select-vertical-filter">
               <Filter className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/40" />
               <SelectValue placeholder="All Verticals" />
             </SelectTrigger>
@@ -266,7 +266,7 @@ export default function Library() {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={v => setSortBy(v as SortKey)}>
-            <SelectTrigger className="w-36 bg-card/30 border-border/20 text-[12px] font-mono" data-testid="select-sort">
+            <SelectTrigger className="w-36 bg-white/[0.03] border-border/20 text-[12px] font-mono" data-testid="select-sort">
               <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/40" />
               <SelectValue />
             </SelectTrigger>
@@ -286,10 +286,10 @@ export default function Library() {
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-36 rounded-xl bg-muted/20" />)}
         </div>
       ) : books.length === 0 ? (
-        <Card className="border-border/20 bg-card/30">
+        <Card className="border-border/20 bg-card/30 glass-card-premium">
           <CardContent className="flex flex-col items-center justify-center py-20">
-            <div className="relative">
-              <div className="absolute inset-0 neon-glow opacity-20 blur-2xl rounded-full" />
+            <div className="relative animate-float">
+              <div className="absolute inset-0 neon-glow opacity-20 blur-2xl rounded-full scale-150" />
               <LibraryIcon className="h-12 w-12 text-emerald-500/30 relative" />
             </div>
             <p className="font-bold text-lg mt-5 tracking-tight">Library is empty</p>
@@ -302,44 +302,44 @@ export default function Library() {
           </CardContent>
         </Card>
       ) : filtered.length === 0 ? (
-        <Card className="border-border/20 bg-card/30">
+        <Card className="border-border/20 bg-card/30 glass-card-premium">
           <CardContent className="flex flex-col items-center justify-center py-14">
-            <Search className="h-10 w-10 text-muted-foreground/20" />
+            <Search className="h-10 w-10 text-muted-foreground/20 animate-float" />
             <p className="font-bold mt-4 tracking-tight">No matches found</p>
             <p className="text-[11px] text-muted-foreground/40 font-mono mt-1">Try adjusting your search or filters</p>
           </CardContent>
         </Card>
       ) : (
         <>
-          <div>
+          <div className="animate-fade-in-up stagger-3">
             <h2 className="text-[9px] font-mono font-bold text-emerald-400/50 tracking-[0.2em] uppercase mb-3 flex items-center gap-2">
               <Star className="h-3 w-3" /> FEATURED ({top5.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {top5.map((book) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {top5.map((book, idx) => (
                 <Link key={book.id} href={`/projects/${book.id}`}>
                   <Card
-                    className={`cursor-pointer bg-card/30 transition-all duration-300 group h-full overflow-hidden ${getRankBorder(book.rank)}`}
+                    className={`cursor-pointer bg-card/30 transition-all duration-300 group h-full overflow-hidden card-hover-lift animate-fade-in-up stagger-${Math.min(idx + 1, 6)} ${getRankBorder(book.rank)} ${book.rank <= 3 ? "glass-card-premium" : ""}`}
                     data-testid={`library-featured-${book.id}`}
                   >
                     {book.coverImageUrl && (
-                      <div className="relative w-full aspect-[3/2] overflow-hidden rounded-t-xl -mt-0 -mx-0">
+                      <div className="relative w-full aspect-[2/3] max-h-56 overflow-hidden rounded-t-xl -mt-0 -mx-0">
                         <img
                           src={book.coverImageUrl}
                           alt={`Cover for ${book.title}`}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                           data-testid={`img-cover-${book.id}`}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
                         <div className="absolute top-2.5 left-2.5">
-                          <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono backdrop-blur-sm ${
-                            book.rank === 1 ? "neon-glow-fire" : book.rank <= 3 ? "neon-glow" : "bg-card/70 border border-border/20"
+                          <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono backdrop-blur-md ${
+                            book.rank === 1 ? "neon-glow-fire shadow-[0_0_12px_rgba(245,158,11,0.3)]" : book.rank <= 3 ? "neon-glow" : "bg-card/70 border border-border/20"
                           }`}>
                             {book.rank <= 3 ? getRankIcon(book.rank) : <span className="text-muted-foreground/50">#{book.rank}</span>}
                           </div>
                         </div>
                         <div className="absolute top-2.5 right-2.5">
-                          <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 backdrop-blur-sm bg-card/50">
+                          <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 backdrop-blur-md bg-card/50">
                             COMPLETE
                           </Badge>
                         </div>
@@ -382,7 +382,7 @@ export default function Library() {
                       </div>
                       <Button
                         size="sm"
-                        className="w-full mt-3 neon-glow-nature text-white border-0 font-mono text-[10px] h-8"
+                        className="w-full mt-3 neon-glow-nature text-white border-0 font-mono text-[10px] h-8 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)] transition-shadow"
                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
                         disabled={loadingReaderId === book.id}
                         data-testid={`button-read-library-${book.id}`}
@@ -398,21 +398,27 @@ export default function Library() {
           </div>
 
           {rest.length > 0 && (
-            <div>
+            <div className="animate-fade-in-up stagger-5">
               <h2 className="text-[9px] font-mono font-bold text-muted-foreground/40 tracking-[0.2em] uppercase mb-3 flex items-center gap-2">
                 <BookOpen className="h-3 w-3" /> ALL BOOKS ({rest.length} more)
               </h2>
-              <Card className="border-border/20 bg-card/30 overflow-hidden">
+              <Card className="border-border/15 bg-card/30 overflow-hidden glass-card-premium">
                 <div className="divide-y divide-border/10">
                   {rest.map((book) => (
                     <Link key={book.id} href={`/projects/${book.id}`}>
                       <div
-                        className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-white/[0.02] transition-colors group"
+                        className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-purple-500/[0.03] transition-all duration-300 group"
                         data-testid={`library-book-${book.id}`}
                       >
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-card/50 border border-border/15 text-[10px] font-mono font-bold text-muted-foreground/40">
-                          #{book.rank}
-                        </div>
+                        {book.coverImageUrl ? (
+                          <div className="h-10 w-7 rounded overflow-hidden shrink-0 border border-border/15">
+                            <img src={book.coverImageUrl} alt="" className="h-full w-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-card/50 border border-border/15 text-[10px] font-mono font-bold text-muted-foreground/40">
+                            #{book.rank}
+                          </div>
+                        )}
                         <span className="text-base shrink-0">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
@@ -437,7 +443,7 @@ export default function Library() {
                         >
                           {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Eye className="h-3 w-3 mr-1" /> Read</>}
                         </Button>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/15 group-hover:text-purple-400/50 transition-colors shrink-0" />
+                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/15 group-hover:text-purple-400/50 group-hover:translate-x-1 transition-all duration-300 shrink-0" />
                       </div>
                     </Link>
                   ))}

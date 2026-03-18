@@ -90,6 +90,23 @@ function formatInline(text: string) {
   });
 }
 
+function TypingIndicator() {
+  return (
+    <div className="flex gap-3 justify-start animate-fade-in-up">
+      <div className="shrink-0 h-8 w-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mt-1">
+        <Bot className="h-4 w-4 text-purple-400" />
+      </div>
+      <div className="message-bubble-ai rounded-xl px-5 py-4">
+        <div className="flex items-center gap-1.5">
+          <span className="typing-dot" />
+          <span className="typing-dot" />
+          <span className="typing-dot" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatStudio() {
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [input, setInput] = useState("");
@@ -185,12 +202,12 @@ export default function ChatStudio() {
         <meta name="description" content="Chat with AI to plan, structure, and write books step by step" />
       </Helmet>
 
-      <div className="w-64 border-r border-border/30 flex flex-col bg-black/20 shrink-0">
-        <div className="p-4 border-b border-border/30">
+      <div className="w-64 border-r border-border/20 flex flex-col bg-black/30 shrink-0">
+        <div className="p-4 border-b border-border/20">
           <Button
             onClick={() => createConv.mutate()}
             disabled={createConv.isPending}
-            className="w-full gap-2 bg-purple-600 hover:bg-purple-700 text-white"
+            className="w-full gap-2 neon-glow text-white border-0 hover:shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:scale-[1.02] transition-all duration-300"
             data-testid="button-new-conversation"
           >
             <Plus className="h-4 w-4" />
@@ -215,14 +232,15 @@ export default function ChatStudio() {
               <div
                 key={conv.id}
                 className={cn(
-                  "group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all text-[13px]",
+                  "group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-300 text-[13px] relative",
                   activeConvId === conv.id
                     ? "bg-purple-500/10 text-purple-200 border border-purple-500/20"
-                    : "text-muted-foreground hover:text-foreground hover:bg-white/[0.03] border border-transparent"
+                    : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border border-transparent hover:border-purple-500/10"
                 )}
                 onClick={() => setActiveConvId(conv.id)}
                 data-testid={`chat-conversation-${conv.id}`}
               >
+                {activeConvId === conv.id && <span className="nav-active-bar" />}
                 <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate flex-1">{conv.title}</span>
                 <button
@@ -236,7 +254,7 @@ export default function ChatStudio() {
               </div>
             ))}
             {!convsLoading && conversations.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground/40 text-xs">
+              <div className="text-center py-8 text-muted-foreground/40 text-xs font-mono">
                 No conversations yet
               </div>
             )}
@@ -246,15 +264,15 @@ export default function ChatStudio() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {!activeConvId ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center max-w-lg px-6">
+          <div className="flex-1 flex items-center justify-center aurora-bg-animated">
+            <div className="text-center max-w-lg px-6 animate-fade-in-up">
               <div className="relative mx-auto h-16 w-16 mb-6">
-                <div className="absolute inset-0 rounded-2xl neon-glow opacity-40 blur-md" />
+                <div className="absolute inset-0 rounded-2xl neon-glow opacity-40 blur-md animate-pulse-glow" />
                 <div className="relative h-16 w-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
                   <Bot className="h-8 w-8 text-purple-400" />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-foreground mb-3">Chat Studio</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-3">Chat <span className="shimmer-text">Studio</span></h2>
               <p className="text-muted-foreground text-sm leading-relaxed mb-6">
                 Send a prompt, outline, or entire book structure and let AI generate your book step by step.
                 Works with all genres — novels, sci-fi, horror, romance, erotica, non-fiction, and more.
@@ -268,7 +286,7 @@ export default function ChatStudio() {
                 ].map((item, i) => (
                   <div
                     key={i}
-                    className="p-3 rounded-lg border border-border/30 bg-white/[0.02] hover:bg-purple-500/5 hover:border-purple-500/20 transition-all cursor-pointer"
+                    className={`p-3 rounded-lg border border-border/20 bg-white/[0.02] hover:bg-purple-500/5 hover:border-purple-500/20 transition-all duration-300 cursor-pointer card-hover-lift animate-fade-in-up stagger-${i + 1}`}
                     onClick={() => {
                       setInput(`Help me ${item.title.toLowerCase()}: `);
                       textareaRef.current?.focus();
@@ -295,13 +313,14 @@ export default function ChatStudio() {
                   <p className="text-sm text-red-400/70">Failed to load messages. Try selecting the conversation again.</p>
                 </div>
               )}
-              {messages.map((msg) => (
+              {messages.map((msg, idx) => (
                 <div
                   key={msg.id}
                   className={cn(
-                    "flex gap-3",
+                    "flex gap-3 animate-fade-in-up",
                     msg.role === "user" ? "justify-end" : "justify-start"
                   )}
+                  style={{ animationDelay: `${Math.min(idx * 0.05, 0.3)}s` }}
                   data-testid={`chat-message-${msg.id}`}
                 >
                   {msg.role === "assistant" && (
@@ -313,8 +332,8 @@ export default function ChatStudio() {
                     className={cn(
                       "rounded-xl px-4 py-3 max-w-[85%]",
                       msg.role === "user"
-                        ? "bg-purple-600/20 border border-purple-500/30 text-foreground"
-                        : "bg-white/[0.03] border border-border/30 text-foreground"
+                        ? "message-bubble-user text-foreground"
+                        : "message-bubble-ai text-foreground"
                     )}
                   >
                     {msg.role === "assistant" ? (
@@ -330,25 +349,13 @@ export default function ChatStudio() {
                   )}
                 </div>
               ))}
-              {sendMessage.isPending && (
-                <div className="flex gap-3 justify-start">
-                  <div className="shrink-0 h-8 w-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mt-1">
-                    <Bot className="h-4 w-4 text-purple-400" />
-                  </div>
-                  <div className="bg-white/[0.03] border border-border/30 rounded-xl px-4 py-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
-                      Thinking...
-                    </div>
-                  </div>
-                </div>
-              )}
+              {sendMessage.isPending && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
         )}
 
-        <div className="border-t border-border/30 p-4 bg-black/20">
+        <div className="border-t border-border/20 p-4 bg-black/30 backdrop-blur-sm">
           <div className="max-w-3xl mx-auto flex gap-3">
             <Textarea
               ref={textareaRef}
@@ -356,14 +363,14 @@ export default function ChatStudio() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Describe your book idea, paste an outline, or ask for help..."
-              className="flex-1 min-h-[48px] max-h-[200px] resize-none bg-white/[0.03] border-border/30 focus:border-purple-500/40 text-sm"
+              className="flex-1 min-h-[48px] max-h-[200px] resize-none bg-white/[0.03] border-border/20 focus:border-purple-500/40 text-sm transition-colors duration-300"
               rows={2}
               data-testid="input-chat-message"
             />
             <Button
               onClick={handleSend}
               disabled={!input.trim() || sendMessage.isPending}
-              className="self-end bg-purple-600 hover:bg-purple-700 text-white h-12 w-12 p-0"
+              className="self-end neon-glow text-white border-0 h-12 w-12 p-0 hover:shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:scale-105 transition-all duration-300"
               data-testid="button-send-message"
               aria-label="Send message"
             >
