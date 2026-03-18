@@ -5,6 +5,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/components/markdown-renderer";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getDefaultBrowserVoice } from "@/lib/browser-tts";
+import { useToast } from "@/hooks/use-toast";
 
 export interface PlaybackState {
   isPlaying: boolean;
@@ -93,6 +94,7 @@ function formatTime(seconds: number): string {
 }
 
 export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady, onTitleClick, onWordIndexChange }: AudioMiniPlayerProps) {
+  const { toast } = useToast();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -230,6 +232,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         if (fallbackVoice) {
           stickyFallbackRef.current = fallbackVoice.id;
           setUsingFallback(true);
+          toast({ title: "Using free voice", description: "Premium voice unavailable — switched to a free browser voice automatically." });
           playWithBrowserTTS(text, fallbackVoice.id, expectedIdx);
           return;
         }
@@ -304,6 +307,9 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.playbackRate = speed;
+    }
+    if (browserTTSRef.current) {
+      browserTTSRef.current.setRate(speed);
     }
   }, [speed]);
 
