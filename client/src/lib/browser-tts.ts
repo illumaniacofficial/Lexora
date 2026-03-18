@@ -38,7 +38,7 @@ export function getBrowserVoices(): BrowserVoiceOption[] {
       otherVoices.push(option);
     }
   }
-  return [...enVoices, ...otherVoices].slice(0, 12);
+  return [...enVoices, ...otherVoices];
 }
 
 export function getDefaultBrowserVoice(): BrowserVoiceOption | null {
