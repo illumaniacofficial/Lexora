@@ -210,7 +210,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       wordCountRef.current = words.length;
       onWordIndexChangeRef.current?.(-1);
 
-      const expectedIdx = narration.currentPageIndex;
+      const expectedIdx = narrationRef.current.currentPageIndex;
 
       if (isBrowserVoice(voice)) {
         playWithBrowserTTS(text, voice, expectedIdx);
