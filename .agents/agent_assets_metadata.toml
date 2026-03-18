@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "1tSbfyCzbGSKpuKrr2X1L"
+uri = "file://LEXORA_AUDIT_REPORT.md"
+type = "text"
+title = "Lexora Full Application Audit Report"
