@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Play, Pause, SkipForward, RotateCcw, Volume2, Loader2 } from "lucide-react";
+import { X, Play, Pause, SkipForward, SkipBack, RotateCcw, Volume2, VolumeX, Loader2, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { stripMarkdown } from "@/components/markdown-renderer";
@@ -25,6 +26,8 @@ export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: 
   { value: "Xb7hH8MSUJpSbSDYk0k2", label: "Alice", description: "Clear, engaging educator" },
   { value: "onwK4e9ZLuTAKqWW03F9", label: "Daniel", description: "Steady broadcaster" },
 ];
+
+const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
 
 interface NarrationState {
   bookTitle: string;
@@ -69,10 +72,23 @@ async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<str
   return dataUrl;
 }
 
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration, onPlaybackStateChange, onControlsReady }: AudioMiniPlayerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const animationRef = useRef<number | null>(null);
   const narrationRef = useRef(narration);
@@ -97,6 +113,8 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       setIsLoading(true);
       setIsPlaying(false);
       setProgress(0);
+      setCurrentTime(0);
+      setDuration(0);
 
       if (audioRef.current) {
         audioRef.current.pause();
@@ -105,6 +123,8 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
 
       const audioData = await fetchAudioCached(text, voice);
       const audio = new Audio(audioData);
+      audio.volume = isMuted ? 0 : volume;
+      audio.playbackRate = speed;
       audioRef.current = audio;
 
       const latest = narrationRef.current;
@@ -134,9 +154,15 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         }, 400);
       };
 
+      audio.onloadedmetadata = () => {
+        setDuration(audio.duration);
+      };
+
       const updateProgress = () => {
         if (audio && audio.duration > 0) {
           setProgress((audio.currentTime / audio.duration) * 100);
+          setCurrentTime(audio.currentTime);
+          setDuration(audio.duration);
         }
         if (!audio.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);
@@ -151,7 +177,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       console.error("TTS playback error:", err);
       setIsLoading(false);
     }
-  }, [prefetchNext]);
+  }, [prefetchNext, volume, isMuted, speed]);
 
   useEffect(() => {
     generateAndPlay(narration.text, narration.voice);
@@ -164,6 +190,18 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     };
   }, [narration.text, narration.currentPageIndex]);
 
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+  }, [volume, isMuted]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, [speed]);
+
   const togglePlay = useCallback(() => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -175,6 +213,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       const updateProgress = () => {
         if (audioRef.current && audioRef.current.duration > 0) {
           setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100);
+          setCurrentTime(audioRef.current.currentTime);
         }
         if (audioRef.current && !audioRef.current.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);
@@ -190,6 +229,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       audioRef.current.play();
       setIsPlaying(true);
       setProgress(0);
+      setCurrentTime(0);
     } else {
       generateAndPlay(narration.text, narration.voice);
     }
@@ -211,6 +251,22 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     }
   }, [narration, onUpdateNarration]);
 
+  const prevPage = useCallback(() => {
+    const prevIdx = narration.currentPageIndex - 1;
+    if (prevIdx >= 0) {
+      const prevP = narration.allPages[prevIdx];
+      onUpdateNarration({
+        ...narration,
+        chapterNumber: prevP.chapterNumber,
+        chapterTitle: prevP.chapterTitle,
+        pageInChapter: prevP.pageInChapter,
+        totalPagesInChapter: prevP.totalPagesInChapter,
+        text: prevP.text,
+        currentPageIndex: prevIdx,
+      });
+    }
+  }, [narration, onUpdateNarration]);
+
   const handleClose = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -224,23 +280,29 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     onControlsReady?.({ togglePlay, nextPage, replay, close: handleClose });
   }, [togglePlay, nextPage, replay, handleClose]);
 
+  const handleSeek = useCallback((value: number[]) => {
+    if (!audioRef.current || !audioRef.current.duration) return;
+    const pct = value[0];
+    const newTime = (pct / 100) * audioRef.current.duration;
+    audioRef.current.currentTime = newTime;
+    setProgress(pct);
+    setCurrentTime(newTime);
+  }, []);
+
   const hasNextPage = narration.currentPageIndex < narration.allPages.length - 1;
+  const hasPrevPage = narration.currentPageIndex > 0;
+  const totalPages = narration.allPages.length;
+  const currentPageNum = narration.currentPageIndex + 1;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[200] w-80 rounded-2xl border border-purple-500/30 bg-card/95 backdrop-blur-xl shadow-[0_0_40px_rgba(147,51,234,0.15)] overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
-      <div className="h-1 bg-border/20 relative">
-        <div
-          className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-200"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2 mb-3">
+    <div className="fixed bottom-6 right-6 z-[200] w-[340px] rounded-2xl border border-purple-500/30 bg-card/95 backdrop-blur-xl shadow-[0_0_40px_rgba(147,51,234,0.15)] overflow-hidden animate-in slide-in-from-bottom-5 duration-300" data-testid="audio-mini-player">
+      <div className="px-4 pt-3 pb-1">
+        <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-1">
               <Volume2 className="h-3 w-3 text-purple-400 shrink-0" />
               <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-[0.2em]">AI Narrator</span>
+              <span className="text-[8px] font-mono text-muted-foreground/25 ml-auto">{currentPageNum}/{totalPages}</span>
             </div>
             <p className="text-[12px] font-medium text-foreground truncate" data-testid="mini-player-title">{narration.bookTitle}</p>
             <p className="text-[10px] text-muted-foreground/50 font-mono truncate">
@@ -256,16 +318,43 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
+      </div>
 
-        <div className="flex items-center justify-center gap-2">
+      <div className="px-4 pb-1">
+        <Slider
+          value={[progress]}
+          onValueChange={handleSeek}
+          max={100}
+          step={0.1}
+          className="h-5 cursor-pointer [&_[role=slider]]:h-3 [&_[role=slider]]:w-3 [&_[role=slider]]:border-purple-400 [&_[role=slider]]:bg-purple-400 [&_[role=slider]]:shadow-[0_0_8px_rgba(147,51,234,0.5)] [&_[data-orientation=horizontal]>span:first-child]:bg-gradient-to-r [&_[data-orientation=horizontal]>span:first-child]:from-purple-500 [&_[data-orientation=horizontal]>span:first-child]:to-cyan-400"
+          data-testid="mini-player-seekbar"
+        />
+        <div className="flex justify-between mt-0.5 mb-2">
+          <span className="text-[8px] font-mono text-muted-foreground/30">{formatTime(currentTime)}</span>
+          <span className="text-[8px] font-mono text-muted-foreground/30">{formatTime(duration)}</span>
+        </div>
+      </div>
+
+      <div className="px-4 pb-2">
+        <div className="flex items-center justify-center gap-1.5">
+          <Button
+            size="icon" variant="ghost"
+            onClick={prevPage}
+            disabled={!hasPrevPage || isLoading}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-20"
+            data-testid="button-mini-player-prev" aria-label="Previous page"
+          >
+            <SkipBack className="h-3.5 w-3.5" />
+          </Button>
+
           <Button
             size="icon" variant="ghost"
             onClick={replay}
             disabled={isLoading}
-            className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
             data-testid="button-mini-player-replay" aria-label="Replay page"
           >
-            <RotateCcw className="h-4 w-4" />
+            <RotateCcw className="h-3.5 w-3.5" />
           </Button>
 
           <Button
@@ -273,7 +362,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
             onClick={isLoading ? undefined : togglePlay}
             disabled={isLoading}
             className={cn(
-              "h-11 w-11 rounded-full transition-all",
+              "h-12 w-12 rounded-full transition-all",
               isPlaying
                 ? "bg-purple-500 hover:bg-purple-600 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)]"
                 : "bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30"
@@ -293,16 +382,62 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
             size="icon" variant="ghost"
             onClick={nextPage}
             disabled={!hasNextPage || isLoading}
-            className="h-9 w-9 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground disabled:opacity-20"
             data-testid="button-mini-player-next" aria-label="Next page"
           >
-            <SkipForward className="h-4 w-4" />
+            <SkipForward className="h-3.5 w-3.5" />
           </Button>
-        </div>
 
-        <div className="mt-2 flex items-center justify-center">
-          <span className="text-[9px] font-mono text-muted-foreground/30">
-            Voice: {VOICE_OPTIONS.find(v => v.value === narration.voice)?.label || narration.voice}
+          <div className="relative">
+            <Button
+              size="icon" variant="ghost"
+              onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              data-testid="button-mini-player-speed" aria-label="Playback speed"
+            >
+              <span className="text-[9px] font-mono font-bold">{speed}x</span>
+            </Button>
+            {showSpeedMenu && (
+              <div className="absolute bottom-full right-0 mb-1 bg-card/95 border border-border/30 rounded-lg shadow-xl backdrop-blur-lg py-1 min-w-[60px]">
+                {SPEED_OPTIONS.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => { setSpeed(s); setShowSpeedMenu(false); }}
+                    className={cn(
+                      "w-full px-3 py-1 text-[10px] font-mono text-left hover:bg-white/[0.05] transition-colors",
+                      speed === s ? "text-purple-400 font-bold" : "text-muted-foreground/60"
+                    )}
+                    data-testid={`speed-option-${s}`}
+                  >
+                    {s}x
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-2">
+          <Button
+            size="icon" variant="ghost"
+            onClick={() => setIsMuted(!isMuted)}
+            className="h-6 w-6 text-muted-foreground/40 hover:text-foreground shrink-0"
+            data-testid="button-mini-player-mute" aria-label={isMuted ? "Unmute" : "Mute"}
+          >
+            {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+          </Button>
+          <Slider
+            value={[isMuted ? 0 : volume * 100]}
+            onValueChange={(v) => { setVolume(v[0] / 100); if (isMuted) setIsMuted(false); }}
+            max={100}
+            step={1}
+            className="flex-1 h-4 [&_[role=slider]]:h-2.5 [&_[role=slider]]:w-2.5 [&_[role=slider]]:border-purple-400/50 [&_[role=slider]]:bg-purple-400/50"
+            data-testid="mini-player-volume"
+          />
+          <span className="text-[8px] font-mono text-muted-foreground/25 w-5 text-right shrink-0">
+            {VOICE_OPTIONS.find(v => v.value === narration.voice)?.label?.slice(0, 3) || "?"}
           </span>
         </div>
       </div>

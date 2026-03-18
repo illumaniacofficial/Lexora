@@ -1,0 +1,370 @@
+You are an elite senior full-stack engineer, AI systems architect, and SaaS product optimizer.
+
+You are working on an EXISTING application called **Lexora**.
+
+Your job is NOT to rebuild from scratch.
+
+Your job is to:
+- analyze the current codebase
+- improve architecture
+- extend features
+- fill missing functionality
+- refine UX/UI
+- upgrade performance and reliability
+
+You must PRESERVE what already works and EVOLVE the system into a premium, production-ready AI publishing platform.
+
+--------------------------------------------------
+1. PRIMARY OBJECTIVE
+--------------------------------------------------
+
+Transform Lexora into a high-end AI publishing system that includes:
+
+- advanced writing intelligence
+- full book generation workflows
+- persistent memory (Book DNA)
+- market analysis tools
+- monetization and marketing systems
+- cover/design generation
+- multilingual capabilities
+- automation (autopilot)
+- quality scoring + validation
+
+Do NOT delete working features unless necessary.
+Improve and extend them.
+
+--------------------------------------------------
+2. FIRST STEP — CODEBASE ANALYSIS
+--------------------------------------------------
+
+Before making changes:
+
+- Review all existing folders and files
+- Identify:
+  - current architecture
+  - existing features
+  - missing components
+  - weak areas (UI, logic, structure)
+  - duplicated logic
+  - incomplete flows
+
+Then:
+- summarize findings briefly
+- propose improvements
+- THEN begin implementing
+
+--------------------------------------------------
+3. UPGRADE: AI WRITING CORE
+--------------------------------------------------
+
+Improve or add:
+
+- Multi-style writing modes:
+  - educational
+  - persuasive
+  - storytelling
+
+- Adjustable reading level:
+  - 5th grade → expert
+
+- Story continuity tracker:
+  - preserve flow between chapters
+  - avoid contradictions
+  - maintain narrative consistency
+
+Ensure:
+- writing settings are stored per project
+- settings influence ALL generated content
+
+--------------------------------------------------
+4. UPGRADE: BOOK GENERATION ENGINE
+--------------------------------------------------
+
+Improve existing generation flow:
+
+- Add full book auto-completion pipeline
+- Ensure generation is step-based and resumable
+- Improve chapter regeneration:
+  - regenerate without breaking entire book
+- Add:
+  - chapter expansion
+  - chapter compression
+
+Ensure:
+- context from previous chapters is preserved
+- structure remains consistent
+
+--------------------------------------------------
+5. UPGRADE: BOOK DNA + MEMORY SYSTEM
+--------------------------------------------------
+
+Add or enhance a persistent Book DNA system:
+
+Features to implement or improve:
+- persistent writing identity
+- terminology consistency
+- character/idea tracking
+- “never repeat this” memory rules
+- style lock
+- concept evolution tracking
+- cross-chapter callbacks
+- idea reinforcement
+- voice stabilization across books
+- personal knowledge embedding
+
+Ensure:
+- Book DNA is stored in DB
+- used in ALL writing steps
+- user can edit and customize rules
+
+--------------------------------------------------
+6. UPGRADE: MARKET & TREND ENGINE
+--------------------------------------------------
+
+Add a Market Intelligence module:
+
+Features:
+- trending topic prediction
+- niche demand scoring
+- title conversion scoring
+- pain-point cluster generation
+- micro-niche discovery
+- competition gap detection
+- “would this sell?” evaluator
+- viral hook generator
+- audience persona builder
+- seasonal trend insights
+
+Add UI:
+- market dashboard
+- input topic → output insights + scores
+
+--------------------------------------------------
+7. UPGRADE: MONETIZATION SYSTEM
+--------------------------------------------------
+
+Add or improve:
+
+- pricing optimizer
+- upsell funnel builder
+- bundle creator
+- revenue projection estimator
+- subscription model generator
+- passive income strategy generator
+
+Ensure:
+- tied to each book/project
+- outputs are editable and exportable
+
+--------------------------------------------------
+8. UPGRADE: MARKETING MACHINE
+--------------------------------------------------
+
+Enhance marketing capabilities:
+
+- 30-day content calendar
+- TikTok/Reels hooks
+- ad copy generator
+- email launch sequences
+- influencer outreach templates
+- webinar scripts
+- landing page copy
+- social captions
+- CTA optimizer
+- A/B testing variations
+
+Organize outputs into tabs:
+- social
+- ads
+- email
+- funnel
+- launch
+
+--------------------------------------------------
+9. UPGRADE: DESIGN + COVER SYSTEM
+--------------------------------------------------
+
+Improve or add:
+
+- AI cover generation
+- typography system
+- thumbnail readability scoring
+- brand color system
+- series consistency system
+- style toggle (minimalist vs bold)
+- icon generator
+- print-ready sizing
+- 3D mockups
+- A/B cover comparison
+
+Ensure:
+- multiple design variants
+- user can select and save preferred designs
+
+--------------------------------------------------
+10. UPGRADE: MULTI-LANGUAGE SYSTEM
+--------------------------------------------------
+
+Add global support:
+
+- multi-language book generation
+- cultural adaptation (not literal translation)
+- region-specific tone rewriting
+- localization marketing packs
+- global keyword adaptation
+- audiobook script translation
+- cross-market pricing suggestions
+- translation memory system
+- tone regionalization
+- international targeting
+
+Ensure:
+- projects can have multiple language versions
+- translations remain consistent
+
+--------------------------------------------------
+11. UPGRADE: AUTOMATION + AUTOPILOT
+--------------------------------------------------
+
+Add Autopilot system:
+
+- automated book production
+- daily quotas
+- budget limits
+- quality threshold auto-stop
+- pipeline resume system
+- multi-project batching
+- scheduling
+- niche switching
+- AI decision engine (what to create next)
+- smart retry system
+
+Add UI:
+- autopilot control panel
+- job queue visualization
+
+--------------------------------------------------
+12. UPGRADE: QUALITY + CONTROL SYSTEM
+--------------------------------------------------
+
+Add scoring system:
+
+- clarity score
+- usefulness score
+- originality detection
+- repetition detection
+- promise alignment
+- readability score
+- engagement prediction
+- human-like rewrite pass
+- beta reader simulation
+- final “publish-ready” score
+
+Show:
+- visual dashboard
+- per chapter + full book scoring
+
+--------------------------------------------------
+13. ARCHITECTURE IMPROVEMENTS
+--------------------------------------------------
+
+Improve:
+
+- modular file structure
+- separation of concerns
+- reusable services
+- Prisma schema relationships
+- API organization
+- error handling
+- logging
+
+Use:
+- queues for long-running jobs
+- idempotent job handling
+- retry logic
+
+--------------------------------------------------
+14. UI / UX IMPROVEMENTS
+--------------------------------------------------
+
+Upgrade UI to feel:
+
+- premium
+- futuristic
+- clean
+- fast
+
+Improve:
+- navigation
+- dashboards
+- progress indicators
+- generation states
+- editing experience
+
+Ensure:
+- responsive layout
+- clear hierarchy
+- minimal clutter
+
+--------------------------------------------------
+15. PERFORMANCE + RELIABILITY
+--------------------------------------------------
+
+Improve:
+
+- API efficiency
+- job processing
+- caching where needed
+- retry mechanisms
+- graceful fallbacks
+
+--------------------------------------------------
+16. IMPLEMENTATION STRATEGY
+--------------------------------------------------
+
+Do NOT attempt everything at once.
+
+Work in phases:
+
+Phase 1:
+- Writing Core
+- Book Engine
+- Book DNA
+
+Phase 2:
+- Market + Monetization + Marketing
+
+Phase 3:
+- Design + Language
+
+Phase 4:
+- Autopilot + Quality system
+
+After each phase:
+- ensure app runs
+- ensure no breaking changes
+
+--------------------------------------------------
+17. OUTPUT REQUIREMENTS
+--------------------------------------------------
+
+As you implement:
+
+- modify existing files instead of duplicating
+- clearly explain major changes
+- keep code clean and readable
+- avoid unnecessary complexity
+
+--------------------------------------------------
+FINAL INSTRUCTION
+--------------------------------------------------
+
+Continuously:
+- analyze
+- improve
+- extend
+- refine
+
+Turn Lexora into a polished, scalable, production-ready AI publishing platform.
+
+Start by analyzing the current codebase, then begin Phase 1 improvements.

@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
+  Save, Edit3, Check, Music, ArrowRight,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -41,46 +42,122 @@ function StepStatus({ status }: { status: string }) {
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, onSaveEdit, isSavingEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
   onCancel: (id: number) => void;
   isCancelling: boolean;
+  projectId: number;
+  isEditingMode: boolean;
+  onSaveEdit: (id: number, content: string) => void;
+  isSavingEdit: boolean;
+  onGenerateAudio: (id: number) => void;
+  isGeneratingAudio: boolean;
+  mostRecentEditId: number | null;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState("");
+
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditContent(chapter.content || "");
+    setIsEditing(true);
+    setExpanded(true);
+  };
+
+  const saveEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSaveEdit(chapter.id, editContent);
+    setIsEditing(false);
+  };
+
+  const cancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(false);
+    setEditContent("");
+  };
+
+  const isLastEdited = mostRecentEditId === chapter.id;
+  const lastEditedLabel = chapter.lastEditedAt ? new Date(chapter.lastEditedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
 
   return (
-    <div className="border border-border/20 rounded-xl overflow-hidden bg-card/30 hover:border-purple-500/15 transition-all duration-300" data-testid={`chapter-${chapter.id}`}>
+    <div className={cn(
+      "border rounded-xl overflow-hidden bg-card/30 hover:border-purple-500/15 transition-all duration-300",
+      isLastEdited ? "border-amber-500/30 ring-1 ring-amber-500/10" : "border-border/20"
+    )} data-testid={`chapter-${chapter.id}`}>
       <div
         className="flex items-start gap-3 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs font-bold font-mono text-purple-300">
+        <div className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold font-mono",
+          isLastEdited ? "bg-amber-500/15 border border-amber-500/25 text-amber-300" : "bg-purple-500/10 border border-purple-500/20 text-purple-300"
+        )}>
           {chapter.chapterNumber}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm font-bold tracking-tight">{chapter.title}</p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-sm font-bold tracking-tight truncate">{chapter.title}</p>
+              {isLastEdited && (
+                <Badge variant="outline" className="text-[8px] font-mono border-amber-500/20 bg-amber-500/5 text-amber-400 shrink-0">
+                  LAST EDITED
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
               {chapter.status === "complete" ? (
-                <div className="flex items-center gap-1.5">
+                <>
                   <Badge variant="outline" className="text-[10px] font-mono text-emerald-400 border-emerald-500/20 bg-emerald-500/5">
                     {chapter.wordCount.toLocaleString()} w
                   </Badge>
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-7 text-[10px] font-mono border-border/30 hover:border-amber-500/30 hover:text-amber-300"
-                    onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
-                    disabled={isGenerating}
-                    data-testid={`button-regenerate-chapter-${chapter.id}`}
-                    aria-label="Regenerate chapter"
-                  >
-                    <RefreshCw className="h-2.5 w-2.5 mr-1" /> REGEN
-                  </Button>
-                </div>
+                  {chapter.audioUrl && (
+                    <a href={`/api/projects/${projectId}/chapters/${chapter.id}/audio`} download onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40 px-1.5" data-testid={`button-download-chapter-audio-${chapter.id}`} aria-label="Download chapter audio">
+                        <Music className="h-2.5 w-2.5 mr-0.5" /> MP3
+                      </Button>
+                    </a>
+                  )}
+                  {!chapter.audioUrl && (
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 px-1.5"
+                      onClick={(e) => { e.stopPropagation(); onGenerateAudio(chapter.id); }}
+                      disabled={isGeneratingAudio}
+                      data-testid={`button-gen-audio-${chapter.id}`}
+                      aria-label="Generate chapter audio"
+                    >
+                      {isGeneratingAudio ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Volume2 className="h-2.5 w-2.5 mr-0.5" />}
+                      GEN MP3
+                    </Button>
+                  )}
+                  {isEditingMode ? (
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-6 text-[9px] font-mono border-amber-500/20 text-amber-400 hover:border-amber-500/40 px-1.5"
+                      onClick={startEditing}
+                      data-testid={`button-edit-chapter-${chapter.id}`}
+                      aria-label="Edit chapter"
+                    >
+                      <Edit3 className="h-2.5 w-2.5 mr-0.5" /> EDIT
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-6 text-[9px] font-mono border-border/30 hover:border-amber-500/30 hover:text-amber-300 px-1.5"
+                      onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
+                      disabled={isGenerating}
+                      data-testid={`button-regenerate-chapter-${chapter.id}`}
+                      aria-label="Regenerate chapter"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5 mr-0.5" /> REGEN
+                    </Button>
+                  )}
+                </>
               ) : chapter.status === "generating" ? (
-                <div className="flex items-center gap-1.5">
+                <>
                   <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
                     <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-purple-400" /> Writing...
                   </Badge>
@@ -95,7 +172,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                     {isCancelling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <X className="h-2.5 w-2.5 mr-1" />}
                     CANCEL
                   </Button>
-                </div>
+                </>
               ) : (
                 <Button
                   size="sm" variant="outline"
@@ -115,12 +192,53 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
               {expanded ? <ChevronUp className="h-3 w-3 text-muted-foreground/40" /> : <ChevronDown className="h-3 w-3 text-muted-foreground/40" />}
             </div>
           </div>
-          {chapter.blueprint && (
-            <p className="text-[10px] text-muted-foreground/40 mt-1 line-clamp-1 font-mono">{chapter.blueprint}</p>
-          )}
+          <div className="flex items-center gap-2 mt-1">
+            {chapter.blueprint && (
+              <p className="text-[10px] text-muted-foreground/40 line-clamp-1 font-mono flex-1">{chapter.blueprint}</p>
+            )}
+            {lastEditedLabel && (
+              <span className="text-[8px] font-mono text-amber-500/40 shrink-0">edited {lastEditedLabel}</span>
+            )}
+          </div>
         </div>
       </div>
-      {expanded && chapter.content && (
+      {expanded && isEditing && (
+        <div className="px-4 pb-4 border-t border-amber-500/15">
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <span className="text-[9px] font-mono text-amber-400/60 uppercase tracking-wider">Editing Chapter {chapter.chapterNumber}</span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm" variant="outline"
+                className="h-6 text-[9px] font-mono border-border/30 text-muted-foreground hover:text-foreground px-2"
+                onClick={cancelEdit}
+                data-testid={`button-cancel-edit-${chapter.id}`}
+              >
+                <X className="h-2.5 w-2.5 mr-0.5" /> Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 text-[9px] font-mono bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 px-2"
+                onClick={saveEdit}
+                disabled={isSavingEdit}
+                data-testid={`button-save-edit-${chapter.id}`}
+              >
+                {isSavingEdit ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Save className="h-2.5 w-2.5 mr-0.5" />}
+                Save
+              </Button>
+            </div>
+          </div>
+          <Textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="min-h-[300px] text-[12px] bg-card/50 border-amber-500/15 font-mono resize-y focus:border-amber-500/30 leading-relaxed"
+            data-testid={`textarea-edit-chapter-${chapter.id}`}
+          />
+          <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">
+            {editContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
+          </p>
+        </div>
+      )}
+      {expanded && !isEditing && chapter.content && (
         <div className="px-4 pb-4 border-t border-border/15">
           <ScrollArea className="h-52 mt-3">
             <MarkdownRendererDark content={chapter.content} />

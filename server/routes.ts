@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
@@ -6,6 +7,8 @@ import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSche
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { z } from "zod";
+import fs from "fs";
+import path from "path";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -166,6 +169,8 @@ function parseId(raw: string): number | null {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  app.use("/uploads", express.static(path.resolve("uploads")));
+
   app.get("/api/dashboard", async (_req, res) => {
     try {
       const stats = await storage.getDashboardStats();
@@ -762,6 +767,124 @@ Write the full chapter content only, no meta-commentary.`;
       if (chapter.status !== "generating") return res.status(400).json({ error: "Chapter is not generating" });
       await storage.updateChapter(chapterId, { status: "pending" });
       res.json({ success: true, chapterId });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/projects/:id/chapters/:chapterId/edit", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      const { content } = req.body;
+      if (typeof content !== "string") return res.status(400).json({ error: "Content is required" });
+      const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
+      const updated = await storage.updateChapter(chapterId, {
+        content,
+        wordCount,
+        lastEditedAt: new Date(),
+      });
+      const allChapters = await storage.getChapters(projectId);
+      const totalWords = allChapters.reduce((s, c) => s + (c.id === chapterId ? wordCount : c.wordCount), 0);
+      await storage.updateProject(projectId, { wordCount: totalWords });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/projects/:id/mark-complete", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      if (project.status !== "editing") return res.status(400).json({ error: "Project must be in editing status to mark complete" });
+      const chapters = await storage.getChapters(id);
+      const allComplete = chapters.length > 0 && chapters.every(c => c.status === "complete");
+      if (!allComplete) return res.status(400).json({ error: "All chapters must be complete" });
+      const updated = await storage.updateProject(id, { status: "complete" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/projects/:id/revert-to-editing", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      if (project.status !== "complete") return res.status(400).json({ error: "Project must be complete to revert to editing" });
+      const updated = await storage.updateProject(id, { status: "editing" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const AUDIO_DIR = path.resolve("uploads/audio");
+  fs.mkdirSync(AUDIO_DIR, { recursive: true });
+
+  app.post("/api/projects/:id/chapters/:chapterId/generate-audio", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      if (chapter.status !== "complete" || !chapter.content) return res.status(400).json({ error: "Chapter must be complete with content" });
+
+      const { voice } = req.body || {};
+      const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const cleanText = (chapter.content || "").replace(/[#*_`~>\[\]()]/g, "");
+      if (!cleanText.trim()) return res.status(400).json({ error: "Chapter has no narrable content" });
+
+      const textChunks = chunkText(cleanText);
+      const audioChunks: Buffer[] = [];
+      for (const chunk of textChunks) {
+        const buf = await elevenLabsTTS(chunk, voiceId);
+        audioChunks.push(buf);
+      }
+      if (audioChunks.length === 0) return res.status(400).json({ error: "No audio generated" });
+
+      const combined = Buffer.concat(audioChunks);
+      const project = await storage.getProject(projectId);
+      const filename = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
+      const filePath = path.join(AUDIO_DIR, filename);
+      fs.writeFileSync(filePath, combined);
+
+      const audioUrl = `/uploads/audio/${filename}`;
+      await storage.updateChapter(chapterId, { audioUrl });
+
+      res.json({ audioUrl, chapterId, size: combined.length });
+    } catch (err: any) {
+      console.error("Chapter audio generation error:", err.message, err.stack);
+      res.status(500).json({ error: "Failed to generate chapter audio" });
+    }
+  });
+
+  app.get("/api/projects/:id/chapters/:chapterId/audio", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      if (!chapter.audioUrl) return res.status(404).json({ error: "No audio generated for this chapter" });
+
+      const filePath = path.resolve("." + chapter.audioUrl);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Audio file not found on disk" });
+
+      const project = await storage.getProject(projectId);
+      const filename = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      fs.createReadStream(filePath).pipe(res);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -94,6 +94,8 @@ export const chapters = pgTable("chapters", {
   wordCount: integer("word_count").notNull().default(0),
   qualityScore: real("quality_score"),
   status: text("status").notNull().default("pending"),
+  audioUrl: text("audio_url"),
+  lastEditedAt: timestamp("last_edited_at"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 }, (table) => [
