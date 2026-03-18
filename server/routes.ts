@@ -1032,70 +1032,90 @@ Return JSON with:
         });
       }
 
-      const verticalStyles: Record<string, string> = {
-        money: "professional financial book cover, gold and dark blue, modern typography, wealth symbols",
-        fitness: "energetic fitness book cover, bold red and white, dynamic typography, athletic imagery",
-        spirituality: "serene spiritual book cover, purple and gold gradients, ethereal typography, mindfulness symbols",
-        career: "professional career book cover, corporate blue, clean modern design",
-        education: "academic book cover, forest green, knowledge symbols, clean design",
-        relationships: "warm relationship book cover, soft coral and cream, heart motifs",
-        health: "clean health book cover, teal and white, medical cross, modern sans-serif",
-        mindset: "motivational book cover, orange and black, bold typography, abstract brain imagery",
-        parenting: "warm parenting book cover, soft yellows and blues, family imagery",
-        technology: "sleek tech book cover, dark with neon accents, circuit patterns",
-        cooking: "appetizing cookbook cover, warm kitchen tones, rustic wood textures, food photography style",
-        travel: "adventurous travel book cover, vibrant landscapes, compass motifs, wanderlust typography",
-        photography: "artistic photography book cover, monochrome with color accents, lens bokeh effects",
-        music: "dynamic music book cover, sound wave patterns, vinyl aesthetic, bold gradients",
-        writing: "elegant writing guide cover, ink and quill motifs, parchment textures, classic serif fonts",
-        art: "creative art book cover, paint splatter accents, gallery-inspired layout, vivid colors",
-        gardening: "lush gardening book cover, botanical illustrations, earthy greens and browns",
-        pets: "heartwarming pet book cover, paw prints, soft pastels and warm tones",
-        sports: "bold sports book cover, stadium lighting, dynamic action lines, team colors",
-        gaming: "futuristic gaming book cover, pixel art accents, neon glows, controller motifs",
-        philosophy: "contemplative philosophy cover, marble textures, stoic typography, deep navy and gold",
-        history: "classic history book cover, aged parchment, vintage maps, sepia tones",
-        science: "modern science book cover, molecular structures, lab blue and white, clean sans-serif",
-        psychology: "intriguing psychology cover, brain visualization, warm gradients, puzzle motifs",
-        sociology: "community-focused sociology cover, interconnected figures, muted earth tones",
-        politics: "authoritative politics cover, capitol imagery, red white blue, bold serif fonts",
-        law: "professional law book cover, scales of justice, dark leather textures, gold embossing",
-        business: "corporate business cover, skyscraper silhouettes, power blue and charcoal",
-        marketing: "vibrant marketing book cover, megaphone motifs, bright gradients, bold callouts",
-        sales: "persuasive sales book cover, handshake imagery, confident red and black typography",
-        "real-estate": "premium real estate cover, luxury home photography, gold accents, clean layout",
-        crypto: "futuristic crypto cover, blockchain patterns, digital gold, dark tech aesthetic",
-        ai: "cutting-edge AI book cover, neural network visuals, electric blue, holographic effects",
-        cybersecurity: "secure cybersecurity cover, shield motifs, matrix green on black, lock icons",
-        productivity: "clean productivity cover, clock and checklist motifs, minimalist white and blue",
-        minimalism: "ultra-minimal book cover, vast whitespace, single accent color, thin typography",
-        sustainability: "eco-friendly sustainability cover, leaf patterns, earth greens, recycled textures",
-        fashion: "stylish fashion book cover, runway photography, high-contrast black and white, chic fonts",
-        beauty: "luxurious beauty book cover, soft pink and gold, floral accents, elegant script",
-        diy: "hands-on DIY book cover, workshop tools, craft paper textures, bold hand-drawn type",
-        "sci-fi": "futuristic sci-fi book cover, space nebulae, holographic chrome text, starships and alien worlds, cinematic lighting",
-        fantasy: "epic fantasy book cover, enchanted landscapes, dragon silhouettes, ornate gold filigree borders, magical glow",
-        horror: "dark horror book cover, ominous shadows, dripping blood red typography, haunted atmosphere, moonlit fog",
-        romance: "passionate romance book cover, soft bokeh, flowing fabrics, warm rose and gold palette, elegant script font",
-        thriller: "intense thriller book cover, rain-soaked streets, high contrast shadows, shattered glass, tense red accents",
-        mystery: "atmospheric mystery book cover, magnifying glass, foggy alleyways, dark teal and amber, vintage detective aesthetic",
-        "literary-fiction": "sophisticated literary fiction cover, abstract watercolor art, muted earth tones, understated elegant typography",
-        dystopian: "gritty dystopian book cover, crumbling cityscapes, ash-grey skies, rebellious red accents, stark typography",
-        erotica: "sensual erotica book cover, silk and satin textures, deep burgundy and black, intimate soft lighting, tasteful elegance",
-        memoir: "personal memoir book cover, vintage photograph aesthetic, warm sepia and cream, handwritten-style title",
-        biography: "distinguished biography book cover, portrait silhouette, classic navy and gold, authoritative serif typography",
-        "true-crime": "gripping true crime book cover, crime scene tape, noir photography, stark red and black, investigative feel",
-        comedy: "bright comedy book cover, playful illustrations, bold vibrant colors, fun hand-lettered typography",
-        adventure: "thrilling adventure book cover, vast mountain landscapes, treasure maps, bold earth tones and gold accents",
-        "young-adult": "dynamic young adult book cover, vibrant gradients, swooping motion lines, bold modern typography",
-        children: "colorful children's book cover, whimsical illustrations, friendly characters, bright primary colors, rounded playful fonts",
-        poetry: "ethereal poetry book cover, watercolor florals, delicate calligraphy, soft pastels, minimalist elegance",
-        drama: "emotional drama book cover, theatrical curtain motifs, deep crimson and gold, spotlight lighting effects",
-        western: "rugged western book cover, desert sunset landscapes, leather textures, lasso motifs, weathered serif fonts",
-        novel: "elegant novel book cover, classic design, rich colors, sophisticated typography, premium literary feel",
+      const dna = await storage.getBookDna(id);
+      const trend = await storage.getTrendReportByProject(id);
+      const chapterList = await storage.getChapters(id);
+
+      const contentContext: string[] = [];
+      if (project.description) contentContext.push(`Book description: ${project.description}`);
+      if (dna?.corePromise) contentContext.push(`Core promise: ${dna.corePromise}`);
+      if (dna?.transformationArc) contentContext.push(`Transformation arc: ${dna.transformationArc}`);
+      if (dna?.frameworkSummary) contentContext.push(`Framework: ${dna.frameworkSummary}`);
+      if (trend?.summary) contentContext.push(`Market context: ${trend.summary.slice(0, 200)}`);
+      if (trend?.nicheTopics?.length) contentContext.push(`Niche: ${trend.nicheTopics.slice(0, 2).join("; ")}`);
+      if (chapterList.length > 0) {
+        const titles = chapterList.slice(0, 6).map(c => c.title).join(", ");
+        contentContext.push(`Key chapters: ${titles}`);
+      }
+
+      const bookContext = contentContext.length > 0
+        ? `\n\nThis book is specifically about: ${contentContext.join(". ")}. The cover imagery, symbols, and color palette MUST reflect this specific subject matter — not generic category art.`
+        : "";
+
+      const verticalHints: Record<string, string> = {
+        money: "gold and dark blue palette, modern typography",
+        fitness: "bold red and white, dynamic typography",
+        spirituality: "purple and gold gradients, ethereal typography",
+        career: "corporate blue, clean modern design",
+        education: "forest green, knowledge symbols",
+        relationships: "soft coral and cream",
+        health: "teal and white, modern sans-serif",
+        mindset: "orange and black, bold typography",
+        parenting: "soft yellows and blues",
+        technology: "dark with neon accents",
+        cooking: "warm kitchen tones, rustic wood textures",
+        travel: "vibrant landscapes, compass motifs",
+        photography: "monochrome with color accents",
+        music: "sound wave patterns, bold gradients",
+        writing: "ink and quill motifs, parchment textures",
+        art: "paint splatter accents, vivid colors",
+        gardening: "botanical illustrations, earthy greens",
+        pets: "paw prints, soft pastels",
+        sports: "stadium lighting, dynamic action lines",
+        gaming: "pixel art accents, neon glows",
+        philosophy: "marble textures, deep navy and gold",
+        history: "aged parchment, vintage maps, sepia tones",
+        science: "molecular structures, lab blue and white",
+        psychology: "brain visualization, warm gradients",
+        sociology: "interconnected figures, muted earth tones",
+        politics: "capitol imagery, red white blue",
+        law: "scales of justice, dark leather textures",
+        business: "professional polish, power palette",
+        marketing: "bright gradients, bold callouts",
+        sales: "confident red and black typography",
+        "real-estate": "luxury home photography, gold accents",
+        crypto: "blockchain patterns, digital gold",
+        ai: "neural network visuals, electric blue",
+        cybersecurity: "shield motifs, matrix green on black",
+        productivity: "clock and checklist motifs, minimalist",
+        minimalism: "vast whitespace, single accent color",
+        sustainability: "leaf patterns, earth greens",
+        fashion: "high-contrast black and white, chic fonts",
+        beauty: "soft pink and gold, floral accents",
+        diy: "workshop tools, craft paper textures",
+        "sci-fi": "space nebulae, holographic chrome text, starships",
+        fantasy: "enchanted landscapes, ornate gold filigree, magical glow",
+        horror: "ominous shadows, dripping blood red typography, moonlit fog",
+        romance: "soft bokeh, flowing fabrics, warm rose and gold",
+        thriller: "rain-soaked streets, high contrast shadows, tense red",
+        mystery: "foggy alleyways, dark teal and amber, detective aesthetic",
+        "literary-fiction": "abstract watercolor art, muted earth tones",
+        dystopian: "crumbling cityscapes, ash-grey skies, rebellious red",
+        erotica: "silk and satin textures, deep burgundy, intimate soft lighting",
+        memoir: "vintage photograph aesthetic, warm sepia and cream",
+        biography: "portrait silhouette, classic navy and gold",
+        "true-crime": "crime scene tape, noir photography, stark red",
+        comedy: "playful illustrations, bold vibrant colors",
+        adventure: "vast mountain landscapes, treasure maps",
+        "young-adult": "vibrant gradients, swooping motion lines",
+        children: "whimsical illustrations, bright primary colors",
+        poetry: "watercolor florals, delicate calligraphy, soft pastels",
+        drama: "theatrical curtain motifs, deep crimson and gold",
+        western: "desert sunset landscapes, leather textures",
+        novel: "classic design, rich colors, sophisticated typography",
       };
 
-      const style = verticalStyles[project.vertical] || "professional book cover, modern design";
+      const colorHint = verticalHints[project.vertical] || "modern design, premium feel";
 
       const userPrompt = coverPrompt || project.coverPrompt || "";
       const userAvoid = avoidStyles || project.coverAvoidStyles || "";
@@ -1105,7 +1125,7 @@ Return JSON with:
       const imageUrl = await runStep(id, "Cover Generation", IMAGE_MODEL, async () => {
         const completion = await openai.images.generate({
           model: IMAGE_MODEL,
-          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).${customSection}${avoidSection}`,
+          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Color/typography hints: ${colorHint}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).${bookContext}${customSection}${avoidSection} CRITICAL: The cover art, imagery, and visual metaphors must be UNIQUE to this specific book's subject matter. Do NOT use generic category imagery — create visuals that could ONLY belong to this particular book.`,
           size: "1024x1536",
           n: 1,
         });
