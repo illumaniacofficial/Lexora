@@ -66,7 +66,7 @@ export default function Library() {
         return;
       }
       setReaderChapters(chapters);
-      setReaderBook({ id: book.id, title: book.title, authorName: book.authorName, coverImageUrl: book.coverImageUrl });
+      setReaderBook({ id: book.id, title: book.title, authorName: book.authorName, coverImageUrl: data.project?.coverImageUrl || `/api/projects/${book.id}/cover-image` });
     } catch {
       toast({ title: "Failed to load book", description: "Could not load chapters for reading." });
     } finally {
@@ -322,11 +322,12 @@ export default function Library() {
                     className={`cursor-pointer bg-card/30 transition-all duration-300 group h-full overflow-hidden card-hover-lift animate-fade-in-up stagger-${Math.min(idx + 1, 6)} ${getRankBorder(book.rank)} ${book.rank <= 3 ? "glass-card-premium" : ""}`}
                     data-testid={`library-featured-${book.id}`}
                   >
-                    {book.coverImageUrl && (
+                    {book.hasCover && (
                       <div className="relative w-full aspect-[2/3] max-h-56 overflow-hidden rounded-t-xl -mt-0 -mx-0">
                         <img
-                          src={book.coverImageUrl}
+                          src={`/api/projects/${book.id}/cover-image`}
                           alt={`Cover for ${book.title}`}
+                          loading="lazy"
                           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                           data-testid={`img-cover-${book.id}`}
                         />
@@ -345,8 +346,8 @@ export default function Library() {
                         </div>
                       </div>
                     )}
-                    <CardContent className={`pb-5 ${book.coverImageUrl ? "pt-3" : "pt-5"}`}>
-                      {!book.coverImageUrl && (
+                    <CardContent className={`pb-5 ${book.hasCover ? "pt-3" : "pt-5"}`}>
+                      {!book.hasCover && (
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono ${
@@ -410,9 +411,9 @@ export default function Library() {
                         className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-purple-500/[0.03] transition-all duration-300 group"
                         data-testid={`library-book-${book.id}`}
                       >
-                        {book.coverImageUrl ? (
+                        {book.hasCover ? (
                           <div className="h-10 w-7 rounded overflow-hidden shrink-0 border border-border/15">
-                            <img src={book.coverImageUrl} alt="" className="h-full w-full object-cover" />
+                            <img src={`/api/projects/${book.id}/cover-image`} alt="" loading="lazy" className="h-full w-full object-cover" />
                           </div>
                         ) : (
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-card/50 border border-border/15 text-[10px] font-mono font-bold text-muted-foreground/40">

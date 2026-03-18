@@ -148,11 +148,12 @@ export default function Projects() {
               <div key={project.id} className={`group relative animate-fade-in-up stagger-${Math.min(idx + 1, 6)}`} data-testid={`project-card-${project.id}`}>
                 <Link href={`/projects/${project.id}`}>
                   <Card className="h-full cursor-pointer border-border/15 bg-card/30 hover:border-purple-500/25 transition-all duration-500 card-hover-lift overflow-hidden">
-                    {project.coverImageUrl && (
+                    {project.hasCover && (
                       <div className="relative w-full h-28 overflow-hidden">
                         <img
-                          src={project.coverImageUrl}
+                          src={`/api/projects/${project.id}/cover-image`}
                           alt=""
+                          loading="lazy"
                           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                         />
                         <div className="cover-gradient-overlay" />
@@ -164,7 +165,7 @@ export default function Projects() {
                         </div>
                       </div>
                     )}
-                    <CardContent className={`${project.coverImageUrl ? "pt-3" : "pt-5"} pb-4 space-y-4`}>
+                    <CardContent className={`${project.hasCover ? "pt-3" : "pt-5"} pb-4 space-y-4`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-sm tracking-tight line-clamp-2 group-hover:text-purple-300 transition-colors">{project.title}</h3>
@@ -173,7 +174,7 @@ export default function Projects() {
                         <ArrowRight className="h-4 w-4 text-muted-foreground/15 group-hover:text-purple-400/50 group-hover:translate-x-1 transition-all duration-300 shrink-0 mt-0.5" />
                       </div>
 
-                      {!project.coverImageUrl && (
+                      {!project.hasCover && (
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="inline-flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50">
@@ -186,7 +187,7 @@ export default function Projects() {
                         </div>
                       )}
 
-                      {project.coverImageUrl && (
+                      {project.hasCover && (
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
                             <span className="text-[10px] font-mono text-muted-foreground/40">{pct}% complete</span>

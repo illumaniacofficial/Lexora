@@ -205,8 +205,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const library = await Promise.all(completed.map(async (project) => {
         const marketing = await storage.getMarketingAsset(project.id);
         const chapterList = await storage.getChapters(project.id);
+        const { coverImageUrl, ...rest } = project;
         return {
-          ...project,
+          ...rest,
+          hasCover: !!coverImageUrl,
           shortBlurb: marketing?.shortBlurb || null,
           chapterCount: chapterList.length,
           completedChapters: chapterList.filter(c => c.status === "complete").length,
@@ -266,7 +268,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           title: project.title,
           authorName: project.authorName,
           vertical: project.vertical,
-          coverImageUrl: project.coverImageUrl,
+          hasCover: !!project.coverImageUrl,
           wordCount: project.wordCount,
           chapterCount: chapterList.length,
           qualityScore: project.qualityScore,
@@ -382,12 +384,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const chapters = await storage.getChapters(p.id);
         const trend = await storage.getTrendReportByProject(p.id);
         const marketing = await storage.getMarketingAsset(p.id);
+        const { coverImageUrl, ...rest } = p;
         return {
-          ...p,
+          ...rest,
           totalChapters: chapters.length,
           completedChapters: chapters.filter(c => c.status === "complete").length,
           hasTrend: !!trend,
-          hasCover: !!p.coverImageUrl,
+          hasCover: !!coverImageUrl,
           hasMarketing: !!marketing,
         };
       }));
@@ -419,6 +422,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const marketing = await storage.getMarketingAsset(id);
       const trendReport = await storage.getTrendReportByProject(id);
       res.json({ project, chapters, runSteps, bookDna, marketing, trendReport });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/cover-image", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project || !project.coverImageUrl) return res.status(404).send();
+      const match = project.coverImageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+      if (!match) {
+        return res.redirect(project.coverImageUrl);
+      }
+      const ext = match[1];
+      const buf = Buffer.from(match[2], "base64");
+      res.set("Content-Type", `image/${ext}`);
+      res.set("Cache-Control", "public, max-age=86400");
+      res.send(buf);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

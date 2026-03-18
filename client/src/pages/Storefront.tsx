@@ -22,7 +22,7 @@ interface StoreBook {
   title: string;
   authorName: string;
   vertical: string;
-  coverImageUrl: string | null;
+  hasCover: boolean;
   wordCount: number;
   chapterCount: number;
   qualityScore: number | null;
@@ -31,6 +31,7 @@ interface StoreBook {
 }
 
 interface StoreBookDetail extends StoreBook {
+  coverImageUrl: string | null;
   chapters: { id: number; chapterNumber: number; title: string; content: string | null; wordCount: number; status: string }[];
 }
 
@@ -259,11 +260,12 @@ export default function Storefront() {
                 data-testid={`store-book-${book.id}`}
               >
                 <Card className="bg-stone-900/50 border-stone-800/50 hover:border-purple-500/20 transition-all duration-300 overflow-hidden h-full">
-                  {book.coverImageUrl && (
+                  {book.hasCover && (
                     <div className="relative w-full aspect-[3/4] overflow-hidden">
                       <img
-                        src={book.coverImageUrl}
+                        src={`/api/projects/${book.id}/cover-image`}
                         alt={book.title}
+                        loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         data-testid={`img-store-cover-${book.id}`}
                       />
@@ -281,8 +283,8 @@ export default function Storefront() {
                       )}
                     </div>
                   )}
-                  <CardContent className={`pb-4 ${book.coverImageUrl ? "pt-3" : "pt-5"}`}>
-                    {!book.coverImageUrl && (
+                  <CardContent className={`pb-4 ${book.hasCover ? "pt-3" : "pt-5"}`}>
+                    {!book.hasCover && (
                       <>
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-lg">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
@@ -300,7 +302,7 @@ export default function Storefront() {
                     <div className="flex items-center gap-3 text-[9px] font-mono text-stone-600 pt-2 border-t border-stone-800/50">
                       <span>{book.wordCount.toLocaleString()} words</span>
                       <span>{book.chapterCount} ch</span>
-                      {book.coverImageUrl && (
+                      {book.hasCover && (
                         <span className="ml-auto text-purple-400/50 flex items-center gap-1">
                           <Volume2 className="h-2.5 w-2.5" /> AI Narrator
                         </span>

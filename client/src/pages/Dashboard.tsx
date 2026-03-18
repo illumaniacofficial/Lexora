@@ -222,9 +222,9 @@ export default function Dashboard() {
                   return (
                     <Link key={project.id} href={`/projects/${project.id}`}>
                       <div className={`group flex items-center gap-4 p-4 rounded-xl border border-border/15 bg-white/[0.02] hover:border-purple-500/25 hover:bg-purple-500/[0.04] transition-all duration-300 cursor-pointer animate-fade-in-up stagger-${Math.min(idx + 1, 6)}`} data-testid={`project-card-${project.id}`}>
-                        {project.coverImageUrl && (
+                        {project.hasCover && (
                           <div className="h-12 w-9 rounded-md overflow-hidden shrink-0 border border-border/20">
-                            <img src={project.coverImageUrl} alt="" className="h-full w-full object-cover" />
+                            <img src={`/api/projects/${project.id}/cover-image`} alt="" loading="lazy" className="h-full w-full object-cover" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
