@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon, AlertCircle, ChevronDown, ChevronUp, Clock, CheckCircle, PenTool } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { useState } from "react";
 import { VERTICAL_LABELS, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -22,8 +22,31 @@ interface ProjectWithMarketing {
   marketing: MarketingAsset | null;
 }
 
+function statusBadge(status: string) {
+  const styles: Record<string, string> = {
+    complete: "text-emerald-400 border-emerald-500/20",
+    marketing: "text-pink-400 border-pink-500/20",
+    writing: "text-blue-400 border-blue-500/20",
+    outlining: "text-cyan-400 border-cyan-500/20",
+    trend_analysis: "text-amber-400 border-amber-500/20",
+    draft: "text-muted-foreground/50 border-border/30",
+    paused: "text-orange-400 border-orange-500/20",
+    editing: "text-violet-400 border-violet-500/20",
+  };
+  return styles[status] || "text-muted-foreground/50 border-border/30";
+}
+
+function statusIcon(status: string) {
+  if (status === "complete") return <CheckCircle className="h-3 w-3 text-emerald-400" />;
+  if (status === "marketing") return <Megaphone className="h-3 w-3 text-pink-400" />;
+  if (status === "writing") return <PenTool className="h-3 w-3 text-blue-400" />;
+  return <Clock className="h-3 w-3 text-muted-foreground/40" />;
+}
+
 function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
   const [expanded, setExpanded] = useState(false);
+  const createdDate = new Date(project.createdAt);
+  const updatedDate = new Date(project.updatedAt);
 
   return (
     <Card className="border-border/20 bg-card/30 hover:border-pink-500/15 transition-all duration-300 overflow-hidden" data-testid={`marketing-project-${project.id}`}>
@@ -37,11 +60,21 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
               <Link href={`/projects/${project.id}`}>
                 <h3 className="font-bold text-sm tracking-tight hover:text-pink-300 transition-colors cursor-pointer">{project.title}</h3>
               </Link>
-              <Badge variant="outline" className={`text-[10px] font-mono border-border/30 ${project.status === "complete" ? "text-emerald-400" : "text-pink-400"}`}>
-                {project.status === "complete" ? "COMPLETE" : "MARKETING"}
+              <Badge variant="outline" className={`text-[10px] font-mono border-border/30 ${statusBadge(project.status)}`}>
+                {project.status.replace("_", " ").toUpperCase()}
               </Badge>
             </div>
-            <p className="text-[10px] font-mono text-muted-foreground/40 mt-0.5 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</p>
+            <div className="flex items-center gap-3 mt-0.5 text-[10px] font-mono text-muted-foreground/40">
+              <span className="uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</span>
+              <span>·</span>
+              <span>{createdDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+              {project.wordCount > 0 && (
+                <>
+                  <span>·</span>
+                  <span>{project.wordCount.toLocaleString()} words</span>
+                </>
+              )}
+            </div>
 
             {marketing ? (
               <>
@@ -131,10 +164,18 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
               </>
             ) : (
               <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-muted-foreground/30 flex-wrap">
-                <span className="text-amber-400/60">Marketing data not yet generated</span>
-                <Link href={`/projects/${project.id}`}>
-                  <span className="text-purple-400/60 hover:text-purple-300 transition-colors cursor-pointer underline underline-offset-2">Generate →</span>
-                </Link>
+                {project.status === "complete" || project.status === "marketing" ? (
+                  <>
+                    <span className="text-amber-400/60">Marketing data not yet generated</span>
+                    <Link href={`/projects/${project.id}`}>
+                      <span className="text-purple-400/60 hover:text-purple-300 transition-colors cursor-pointer underline underline-offset-2">Generate →</span>
+                    </Link>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground/40 flex items-center gap-1.5">
+                    {statusIcon(project.status)} Pipeline in progress — {project.status.replace("_", " ")}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -146,14 +187,16 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
 
 export default function Marketing() {
   const { data: projects = [], isLoading: projectsLoading, error: projectsError } = useQuery<Project[]>({ queryKey: ["/api/projects"] });
-  const projectsWithMarketing = projects.filter(p => p.status === "marketing" || p.status === "complete");
+  const sortedProjects = [...projects].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const projectsWithMarketingStatus = sortedProjects.filter(p => p.status === "marketing" || p.status === "complete");
+  const projectsInProgress = sortedProjects.filter(p => p.status !== "marketing" && p.status !== "complete");
 
-  const marketingQueries = projectsWithMarketing.map(p => p.id);
+  const marketingQueries = projectsWithMarketingStatus.map(p => p.id);
   const { data: projectDetails = [], isLoading: detailsLoading } = useQuery<ProjectWithMarketing[]>({
     queryKey: ["/api/marketing-details", marketingQueries],
     queryFn: async () => {
       const results = await Promise.all(
-        projectsWithMarketing.map(async (p) => {
+        projectsWithMarketingStatus.map(async (p) => {
           try {
             const res = await fetch(`/api/projects/${p.id}`);
             if (!res.ok) return { project: p, marketing: null };
@@ -166,7 +209,7 @@ export default function Marketing() {
       );
       return results;
     },
-    enabled: projectsWithMarketing.length > 0,
+    enabled: projectsWithMarketingStatus.length > 0,
   });
 
   const isLoading = projectsLoading || detailsLoading;
@@ -193,7 +236,7 @@ export default function Marketing() {
           <span className="text-[9px] font-mono font-bold text-pink-400/60 tracking-[0.2em] uppercase">MARKETING</span>
         </div>
         <h1 className="text-3xl font-bold tracking-tighter">Marketing <span className="shimmer-text">Suite</span></h1>
-        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Complete marketing assets for your books</p>
+        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Complete marketing assets and book creation log</p>
       </div>
 
       <div className="line-glow" />
@@ -216,15 +259,15 @@ export default function Marketing() {
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl bg-muted/20" />)}
         </div>
-      ) : projectsWithMarketing.length === 0 ? (
+      ) : sortedProjects.length === 0 ? (
         <Card className="border-border/20 bg-card/30">
           <CardContent className="flex flex-col items-center justify-center py-20">
             <div className="relative">
               <div className="absolute inset-0 neon-glow-warm opacity-20 blur-2xl rounded-full" />
               <Megaphone className="h-12 w-12 text-pink-500/30 relative" />
             </div>
-            <p className="font-bold text-lg mt-5 tracking-tight">No marketing assets yet</p>
-            <p className="text-[11px] text-muted-foreground/40 font-mono mt-1 text-center max-w-sm">Complete the writing pipeline to generate marketing</p>
+            <p className="font-bold text-lg mt-5 tracking-tight">No books yet</p>
+            <p className="text-[11px] text-muted-foreground/40 font-mono mt-1 text-center max-w-sm">Create your first project to start building marketing assets</p>
             <Link href="/projects/new">
               <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[12px]" data-testid="button-start-project">
                 <BookOpen className="h-4 w-4 mr-2" /> START PROJECT
@@ -233,17 +276,50 @@ export default function Marketing() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-3">
-          <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">With Marketing ({projectsWithMarketing.length})</h2>
-          {projectDetails.length > 0 ? (
-            projectDetails.map(({ project, marketing }) => (
-              <MarketingProjectCard key={project.id} project={project} marketing={marketing} />
-            ))
-          ) : (
-            projectsWithMarketing.map(project => (
-              <MarketingProjectCard key={project.id} project={project} marketing={null} />
-            ))
+        <div className="space-y-6">
+          {projectsWithMarketingStatus.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">
+                  Books with Marketing ({projectsWithMarketingStatus.length})
+                </h2>
+                <Badge variant="outline" className="text-[9px] font-mono text-emerald-400/60 border-emerald-500/15">
+                  <CheckCircle className="h-2.5 w-2.5 mr-1" /> STRATEGIES GENERATED
+                </Badge>
+              </div>
+              {projectDetails.length > 0 ? (
+                projectDetails.map(({ project, marketing }) => (
+                  <MarketingProjectCard key={project.id} project={project} marketing={marketing} />
+                ))
+              ) : (
+                projectsWithMarketingStatus.map(project => (
+                  <MarketingProjectCard key={project.id} project={project} marketing={null} />
+                ))
+              )}
+            </div>
           )}
+
+          {projectsInProgress.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">
+                  In Pipeline ({projectsInProgress.length})
+                </h2>
+                <Badge variant="outline" className="text-[9px] font-mono text-amber-400/60 border-amber-500/15">
+                  <Clock className="h-2.5 w-2.5 mr-1" /> IN PROGRESS
+                </Badge>
+              </div>
+              {projectsInProgress.map(project => (
+                <MarketingProjectCard key={project.id} project={project} marketing={null} />
+              ))}
+            </div>
+          )}
+
+          <div className="border-t border-border/10 pt-4">
+            <p className="text-[10px] font-mono text-muted-foreground/30 text-center">
+              {sortedProjects.length} total books · {projectsWithMarketingStatus.length} with marketing · {projectsInProgress.length} in pipeline
+            </p>
+          </div>
         </div>
       )}
     </div>

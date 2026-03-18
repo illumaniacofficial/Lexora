@@ -15,12 +15,12 @@ A production-grade AI publishing platform capable of generating complete books, 
 2. **Book Projects** — Full pipeline from concept to complete manuscript
 3. **Publishing Pipeline** — Step-by-step AI generation:
    - Trend Analysis (market demand, greenlight scores)
-   - Book Outline + DNA (core promise, reader avatar, chapter blueprints)
+   - Book Outline + DNA (core promise, reader avatar, chapter blueprints) — uses project description/prompt for creative direction
    - Chapter Writing (full chapters with real AI quality evaluation)
-   - AI Cover Generation (category-specific designs, cost-tracked via runStep)
+   - AI Cover Generation (category-specific designs, custom prompt + "styles to avoid" fields, cost-tracked via runStep)
    - Marketing Suite (blurbs, hooks, email sequences, social calendar, pricing)
 4. **Trend Intelligence** — Market analysis by vertical with demand/competition scoring
-5. **Marketing Suite** — Per-project expandable marketing content: hooks, email sequences, social calendar, pricing matrix, blurbs (XSS-sanitized)
+5. **Marketing Suite** — Chronological log of all books (with marketing + in-pipeline), per-project expandable marketing content: hooks, email sequences, social calendar, pricing matrix, blurbs (XSS-sanitized)
 6. **Library** — Completed books collection with search bar, vertical filters, sort options (rank/title/words/quality/date), top-5 featured cards with rank badges, and clickable link list for the rest
 7. **Autopilot Mode** — Fully autonomous book publishing: AI generates topic, runs full pipeline (trend analysis → outline → chapters → marketing), with budget/quality auto-stop controls and run history tracking
 8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
@@ -31,7 +31,7 @@ A production-grade AI publishing platform capable of generating complete books, 
 
 ## Database Schema
 
-- `projects` — Book projects with status, metrics, settings, and `authorName` field
+- `projects` — Book projects with status, metrics, settings, `authorName`, `description` (book idea/prompt), `coverPrompt`, and `coverAvoidStyles` fields
 - `book_dna` — Core promise, reader avatar, tone rules, transformation arc (indexed on projectId)
 - `trend_reports` — Market analysis with demand/greenlight scores (indexed on projectId, vertical)
 - `chapters` — Individual chapters with content and quality scores (indexed on projectId)

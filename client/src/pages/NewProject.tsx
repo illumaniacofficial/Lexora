@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon } from "lucide-react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
@@ -19,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 const schema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(200),
   authorName: z.string().min(1, "Author name is required").max(200),
+  description: z.string().max(2000).optional(),
   vertical: z.enum(VERTICALS),
   targetLanguage: z.enum(LANGUAGES),
 });
@@ -33,7 +35,7 @@ export default function NewProject() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", authorName: "Sergio A. Delgado", vertical: "money", targetLanguage: "english" },
+    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", vertical: "money", targetLanguage: "english" },
   });
 
   const mutation = useMutation({
@@ -91,6 +93,21 @@ export default function NewProject() {
                 <FormItem>
                   <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Author</FormLabel>
                   <FormControl><Input {...field} placeholder="Author name" className="h-11 bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40" data-testid="input-author" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="description" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Book Idea / Prompt <span className="text-muted-foreground/30">(optional)</span></FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Describe your book idea, target audience, key topics, or any specific direction you want the AI to follow..."
+                      className="min-h-[100px] bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40 resize-y"
+                      data-testid="input-description"
+                    />
+                  </FormControl>
+                  <p className="text-[9px] font-mono text-muted-foreground/30 mt-1">This guides the AI when generating your outline, chapters, and marketing</p>
                   <FormMessage />
                 </FormItem>
               )} />

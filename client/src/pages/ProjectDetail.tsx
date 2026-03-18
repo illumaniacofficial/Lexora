@@ -9,6 +9,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
@@ -137,6 +139,8 @@ export default function ProjectDetail() {
   const [showCoverFull, setShowCoverFull] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [audiobookLoading, setAudiobookLoading] = useState(false);
+  const [coverText, setCoverText] = useState("");
+  const [coverAvoid, setCoverAvoid] = useState("");
   const { startNarration } = useNarration();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery<ProjectDetailData>({
@@ -171,7 +175,10 @@ export default function ProjectDetail() {
     onError: (e: any) => toast({ title: "Marketing failed", description: e.message, variant: "destructive" }),
   });
   const coverMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-cover`),
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-cover`, {
+      coverPrompt: coverText || undefined,
+      avoidStyles: coverAvoid || undefined,
+    }),
     onSuccess: () => { invalidate(); toast({ title: "Cover generated" }); },
     onError: (e: any) => toast({ title: "Cover failed", description: e.message, variant: "destructive" }),
   });
@@ -728,6 +735,22 @@ export default function ProjectDetail() {
                       <Eye className="h-6 w-6 text-white drop-shadow-lg" />
                     </div>
                   </div>
+                  <div className="space-y-2 pt-1">
+                    <Textarea
+                      value={coverText}
+                      onChange={(e) => setCoverText(e.target.value)}
+                      placeholder="Describe what you want on the cover (e.g., 'a lone astronaut on Mars with Earth in the sky')..."
+                      className="min-h-[60px] text-[11px] bg-card/30 border-border/20 font-mono resize-y focus:border-pink-500/30"
+                      data-testid="input-cover-prompt"
+                    />
+                    <Input
+                      value={coverAvoid}
+                      onChange={(e) => setCoverAvoid(e.target.value)}
+                      placeholder="Styles to avoid (e.g., 'cartoon, clipart, neon colors')"
+                      className="h-8 text-[11px] bg-card/30 border-border/20 font-mono focus:border-pink-500/30"
+                      data-testid="input-cover-avoid"
+                    />
+                  </div>
                   <Button
                     size="sm" variant="outline"
                     className="w-full border-border/30 font-mono text-[10px] hover:border-pink-500/30"
@@ -751,10 +774,26 @@ export default function ProjectDetail() {
                   </Dialog>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center aspect-[3/4] rounded-xl bg-white/[0.02] border border-dashed border-border/20">
-                  <Image className="h-8 w-8 text-muted-foreground/20 mb-3" />
-                  <p className="text-[10px] text-muted-foreground/40 font-mono">No cover</p>
-                  <Button size="sm" variant="outline" className="mt-3 border-border/30 font-mono text-[10px] hover:border-pink-500/30" onClick={() => coverMutation.mutate()} disabled={coverMutation.isPending} data-testid="button-generate-cover">
+                <div className="space-y-3">
+                  <div className="flex flex-col items-center justify-center aspect-[3/4] rounded-xl bg-white/[0.02] border border-dashed border-border/20">
+                    <Image className="h-8 w-8 text-muted-foreground/20 mb-3" />
+                    <p className="text-[10px] text-muted-foreground/40 font-mono">No cover</p>
+                  </div>
+                  <Textarea
+                    value={coverText}
+                    onChange={(e) => setCoverText(e.target.value)}
+                    placeholder="Describe what you want on the cover (e.g., 'a lone astronaut on Mars with Earth in the sky')..."
+                    className="min-h-[60px] text-[11px] bg-card/30 border-border/20 font-mono resize-y focus:border-pink-500/30"
+                    data-testid="input-cover-prompt"
+                  />
+                  <Input
+                    value={coverAvoid}
+                    onChange={(e) => setCoverAvoid(e.target.value)}
+                    placeholder="Styles to avoid (e.g., 'cartoon, clipart, neon colors')"
+                    className="h-8 text-[11px] bg-card/30 border-border/20 font-mono focus:border-pink-500/30"
+                    data-testid="input-cover-avoid"
+                  />
+                  <Button size="sm" variant="outline" className="w-full border-border/30 font-mono text-[10px] hover:border-pink-500/30" onClick={() => coverMutation.mutate()} disabled={coverMutation.isPending} data-testid="button-generate-cover">
                     {coverMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Zap className="h-3 w-3 mr-1.5 text-pink-400" />}
                     GENERATE
                   </Button>

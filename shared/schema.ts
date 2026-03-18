@@ -34,6 +34,7 @@ export const projects = pgTable("projects", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   title: text("title").notNull(),
   authorName: text("author_name").notNull().default(""),
+  description: text("description"),
   vertical: text("vertical").notNull().default("money"),
   targetLanguage: text("target_language").notNull().default("english"),
   status: text("status").notNull().default("draft"),
@@ -44,6 +45,8 @@ export const projects = pgTable("projects", {
   wordCount: integer("word_count").notNull().default(0),
   chapterCount: integer("chapter_count").notNull().default(0),
   coverImageUrl: text("cover_image_url"),
+  coverPrompt: text("cover_prompt"),
+  coverAvoidStyles: text("cover_avoid_styles"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });

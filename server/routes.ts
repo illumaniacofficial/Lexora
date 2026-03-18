@@ -585,7 +585,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }, {
             role: "user",
             content: isFiction(project.vertical)
-              ? `Create a complete book outline for the ${project.vertical} novel "${project.title}" for ${project.targetLanguage} speaking readers.
+              ? `Create a complete book outline for the ${project.vertical} novel "${project.title}" for ${project.targetLanguage} speaking readers.${project.description ? `\n\nAuthor's creative direction: ${project.description}` : ""}
 
 Return JSON with:
 - corePromise: string (the story's central premise and hook)
@@ -596,7 +596,7 @@ Return JSON with:
 - chapters: array of objects with {chapterNumber, title, blueprint (150 word description of plot events, character development, tension points, and scene details for this chapter)}
 
 Generate 15-25 chapters. Each chapter should advance the plot and deepen character arcs. Include rising action, climax, and resolution.`
-              : `Create a complete book outline for "${project.title}" in the ${project.vertical} vertical for ${project.targetLanguage} speaking audience.
+              : `Create a complete book outline for "${project.title}" in the ${project.vertical} vertical for ${project.targetLanguage} speaking audience.${project.description ? `\n\nAuthor's creative direction: ${project.description}` : ""}
 
 Return JSON with:
 - corePromise: string (the book's core transformation promise)
@@ -841,6 +841,15 @@ Return JSON with:
       if (!project) return res.status(404).json({ error: "Not found" });
       prevStatus = project.status;
 
+      const { coverPrompt, avoidStyles } = req.body || {};
+
+      if (coverPrompt || avoidStyles) {
+        await storage.updateProject(id, {
+          coverPrompt: coverPrompt || project.coverPrompt,
+          coverAvoidStyles: avoidStyles || project.coverAvoidStyles,
+        });
+      }
+
       const verticalStyles: Record<string, string> = {
         money: "professional financial book cover, gold and dark blue, modern typography, wealth symbols",
         fitness: "energetic fitness book cover, bold red and white, dynamic typography, athletic imagery",
@@ -906,10 +915,15 @@ Return JSON with:
 
       const style = verticalStyles[project.vertical] || "professional book cover, modern design";
 
+      const userPrompt = coverPrompt || project.coverPrompt || "";
+      const userAvoid = avoidStyles || project.coverAvoidStyles || "";
+      const customSection = userPrompt ? ` Additional creative direction: ${userPrompt}.` : "";
+      const avoidSection = userAvoid ? ` IMPORTANT — Do NOT use these styles: ${userAvoid}.` : "";
+
       const imageUrl = await runStep(id, "Cover Generation", IMAGE_MODEL, async () => {
         const completion = await openai.images.generate({
           model: IMAGE_MODEL,
-          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).`,
+          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Style: ${style}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).${customSection}${avoidSection}`,
           size: "1024x1536",
           n: 1,
         });
