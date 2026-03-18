@@ -259,7 +259,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       await storage.incrementInviteViewCount(invite.id);
       const allProjects = await storage.getProjects();
-      const completed = allProjects.filter(p => p.status === "complete" || p.status === "editing");
+      const completed = allProjects.filter(p => p.publishedToStore === true);
       const books = await Promise.all(completed.map(async (project) => {
         const marketing = await storage.getMarketingAsset(project.id);
         const chapterList = await storage.getChapters(project.id);
@@ -291,7 +291,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const bookId = parseId(req.params.bookId);
       if (!bookId) return res.status(400).json({ error: "Invalid book ID" });
       const project = await storage.getProject(bookId);
-      if (!project || (project.status !== "complete" && project.status !== "editing")) {
+      if (!project || !project.publishedToStore) {
         return res.status(404).json({ error: "Book not found" });
       }
       const chapterList = await storage.getChapters(bookId);
@@ -830,6 +830,27 @@ Write the full chapter content only, no meta-commentary.`;
       const allComplete = chapters.length > 0 && chapters.every(c => c.status === "complete");
       if (!allComplete) return res.status(400).json({ error: "All chapters must be complete" });
       const updated = await storage.updateProject(id, { status: "complete" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/projects/:id/toggle-storefront", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      if (project.status !== "complete" && project.status !== "editing") {
+        return res.status(400).json({ error: "Only completed or editing books can be published to the storefront" });
+      }
+      const chapters = await storage.getChapters(id);
+      const hasContent = chapters.some(c => c.status === "complete");
+      if (!hasContent && !project.publishedToStore) {
+        return res.status(400).json({ error: "Book must have at least one completed chapter to publish to storefront" });
+      }
+      const updated = await storage.updateProject(id, { publishedToStore: !project.publishedToStore });
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

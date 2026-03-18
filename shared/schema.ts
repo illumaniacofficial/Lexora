@@ -47,6 +47,7 @@ export const projects = pgTable("projects", {
   coverImageUrl: text("cover_image_url"),
   coverPrompt: text("cover_prompt"),
   coverAvoidStyles: text("cover_avoid_styles"),
+  publishedToStore: boolean("published_to_store").notNull().default(false),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
@@ -234,7 +235,7 @@ export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({
 export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ id: true, createdAt: true, viewCount: true });
 export const insertBookRequestSchema = createInsertSchema(bookRequests).omit({ id: true, createdAt: true, isRead: true });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true, publishedToStore: true });
 export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertTrendReportSchema = createInsertSchema(trendReports).omit({ id: true, createdAt: true });
 export const insertMarketingAssetSchema = createInsertSchema(marketingAssets).omit({ id: true, createdAt: true });

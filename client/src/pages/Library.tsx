@@ -339,7 +339,12 @@ export default function Library() {
                             {book.rank <= 3 ? getRankIcon(book.rank) : <span className="text-muted-foreground/50">#{book.rank}</span>}
                           </div>
                         </div>
-                        <div className="absolute top-2.5 right-2.5">
+                        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
+                          {book.publishedToStore && (
+                            <Badge variant="outline" className="text-[9px] font-mono border-purple-500/30 text-purple-300 backdrop-blur-md bg-card/50">
+                              STOREFRONT
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 backdrop-blur-md bg-card/50">
                             COMPLETE
                           </Badge>
@@ -358,6 +363,11 @@ export default function Library() {
                             <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/20 text-emerald-400">
                               COMPLETE
                             </Badge>
+                            {book.publishedToStore && (
+                              <Badge variant="outline" className="text-[9px] font-mono border-purple-500/20 text-purple-300">
+                                STOREFRONT
+                              </Badge>
+                            )}
                           </div>
                           <span className="text-lg">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
                         </div>

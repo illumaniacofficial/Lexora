@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
-  Save, Edit3, Check, Music, ArrowRight,
+  Save, Edit3, Check, Music, ArrowRight, Globe,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -324,6 +324,11 @@ export default function ProjectDetail() {
   const revertToEditingMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/revert-to-editing`),
     onSuccess: () => { invalidate(); toast({ title: "Reverted to editing" }); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+  const toggleStorefrontMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/toggle-storefront`),
+    onSuccess: () => { invalidate(); queryClient.invalidateQueries({ queryKey: ["/api/library"] }); toast({ title: project?.publishedToStore ? "Removed from Storefront" : "Published to Storefront!" }); },
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
   const [generatingAudioChapterId, setGeneratingAudioChapterId] = useState<number | null>(null);
@@ -755,19 +760,37 @@ export default function ProjectDetail() {
                     </div>
                     <div>
                       <p className="text-sm font-bold tracking-tight text-emerald-300">Book Complete</p>
-                      <p className="text-[10px] text-muted-foreground/50 font-mono">This book is published in your Library</p>
+                      <p className="text-[10px] text-muted-foreground/50 font-mono">
+                        This book is published in your Library
+                        {project.publishedToStore && " · Live on Storefront"}
+                      </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="border-amber-500/20 text-amber-400 font-mono text-[11px] h-9 hover:border-amber-500/40 hover:bg-amber-500/5"
-                    onClick={() => revertToEditingMutation.mutate()}
-                    disabled={revertToEditingMutation.isPending}
-                    data-testid="button-revert-editing"
-                  >
-                    {revertToEditingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Edit3 className="h-3.5 w-3.5 mr-1.5" />}
-                    REVERT TO EDITING
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className={project.publishedToStore
+                        ? "border-purple-500/30 text-purple-300 font-mono text-[11px] h-9 hover:border-purple-500/50 hover:bg-purple-500/10"
+                        : "border-purple-500/20 text-purple-400 font-mono text-[11px] h-9 hover:border-purple-500/40 hover:bg-purple-500/5"
+                      }
+                      onClick={() => toggleStorefrontMutation.mutate()}
+                      disabled={toggleStorefrontMutation.isPending}
+                      data-testid="button-toggle-storefront"
+                    >
+                      {toggleStorefrontMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Globe className="h-3.5 w-3.5 mr-1.5" />}
+                      {project.publishedToStore ? "ON STOREFRONT" : "ADD TO STOREFRONT"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-amber-500/20 text-amber-400 font-mono text-[11px] h-9 hover:border-amber-500/40 hover:bg-amber-500/5"
+                      onClick={() => revertToEditingMutation.mutate()}
+                      disabled={revertToEditingMutation.isPending}
+                      data-testid="button-revert-editing"
+                    >
+                      {revertToEditingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Edit3 className="h-3.5 w-3.5 mr-1.5" />}
+                      REVERT TO EDITING
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
