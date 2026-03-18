@@ -26,15 +26,18 @@ A production-grade AI publishing platform capable of generating complete books, 
 8. **Book Export** — Download completed books as .pdf (rich book format with title page, TOC, chapter title pages, page numbers), .txt, or .html
 9. **Full-Screen Book Reader** — Immersive book experience with paper textures, spine shadows, page edge effects, page flip animations, keyboard navigation, TOC jump, font size controls (XS–2XL), 6 page themes (Parchment/Cream/White/Sepia/Dark/Midnight), progress tracking, and landscape two-page spread mode with a book spine
 10. **AI Narrator** — ElevenLabs TTS narration with 8 voice options (Sergio professional/cloned, George, Brian, Lily, Sarah, Alice, Daniel); auto-advances pages when reading finishes (toggleable); plays inside full-screen reader and continues in a floating mini-player after closing the book with play/pause, replay, next-page controls, and auto-advance to next page on completion; client-side audio cache + next-page prefetching for seamless transitions; server-side TTS cache (50 entries, 10min TTL) for instant replays; admin-only audiobook download (.mp3) from project export section
-11. **Cancel Generation** — Cancel button on chapters stuck in "generating" status, resets to "pending" via PATCH endpoint with project ownership validation
-12. **Chat Studio** — Conversational AI book architect page for planning, structuring, and writing books step by step. Supports all genres (fiction and non-fiction). Persistent conversations with message history. Markdown rendering for AI responses.
+11. **Enhanced Mini Player** — Seekable progress bar with elapsed/remaining time, volume slider with mute toggle, playback speed control (0.75x–2x), previous/next page buttons, page counter, larger play button
+12. **Per-Chapter Audio** — Generate and save MP3 per chapter (ElevenLabs TTS), download saved MP3 files; audio files stored at `uploads/audio/project-{id}-chapter-{id}.mp3`
+13. **Editing Stage** — Inline chapter editor with save/cancel, last-edited timestamps per chapter, most-recently-edited highlight; editing mode banner with "Mark as Complete" transition; complete banner with "Revert to Editing" option; REGEN blocked when project is complete
+14. **Cancel Generation** — Cancel button on chapters stuck in "generating" status, resets to "pending" via PATCH endpoint with project ownership validation
+15. **Chat Studio** — Conversational AI book architect page for planning, structuring, and writing books step by step. Supports all genres (fiction and non-fiction). Persistent conversations with message history. Markdown rendering for AI responses.
 
 ## Database Schema
 
 - `projects` — Book projects with status, metrics, settings, `authorName`, `description` (book idea/prompt), `coverPrompt`, and `coverAvoidStyles` fields
 - `book_dna` — Core promise, reader avatar, tone rules, transformation arc (indexed on projectId)
 - `trend_reports` — Market analysis with demand/greenlight scores (indexed on projectId, vertical)
-- `chapters` — Individual chapters with content and quality scores (indexed on projectId)
+- `chapters` — Individual chapters with content, quality scores, `audioUrl` (saved MP3 path), `lastEditedAt` (indexed on projectId)
 - `run_steps` — AI generation logs with token usage and cost tracking (indexed on projectId)
 - `marketing_assets` — Complete marketing suite (indexed on projectId)
 - `autopilot_config` — Autonomous publishing configuration
