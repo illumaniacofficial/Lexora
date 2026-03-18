@@ -2,20 +2,21 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon } from "lucide-react";
+import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon, Wand2, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
 import { VERTICAL_LABELS, VERTICAL_ICONS, LANGUAGE_LABELS, GENRE_GROUPS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from "react";
 
 const schema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(200),
@@ -32,11 +33,48 @@ type FormData = z.infer<typeof schema>;
 export default function NewProject() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", vertical: "money", targetLanguage: "english" },
   });
+
+  const currentTitle = form.watch("title");
+
+  useEffect(() => {
+    if (currentTitle.length < 5) {
+      setShowSuggestions(false);
+      setSuggestions([]);
+      return;
+    }
+
+    const fetchSuggestions = async () => {
+      setSuggestionsLoading(true);
+      try {
+        const res = await fetch("/api/projects/suggest-titles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: currentTitle }),
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSuggestions(data.suggestions || []);
+          setShowSuggestions(true);
+        }
+      } catch (err) {
+        console.error("Failed to fetch suggestions:", err);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    };
+
+    const timer = setTimeout(fetchSuggestions, 500);
+    return () => clearTimeout(timer);
+  }, [currentTitle]);
 
   const mutation = useMutation({
     mutationFn: (data: FormData) => apiRequest("POST", "/api/projects", { ...data, status: "draft" }),
@@ -86,6 +124,33 @@ export default function NewProject() {
                 <FormItem>
                   <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Title</FormLabel>
                   <FormControl><Input {...field} placeholder="e.g., The Millionaire Morning: 5 Habits That Changed Everything" className="h-11 bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40" data-testid="input-title" /></FormControl>
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-purple-400/60">
+                        <Wand2 className="h-3 w-3" />
+                        <span>SUGGESTED TITLES</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {suggestions.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => field.onChange(suggestion)}
+                            className="w-full text-left px-3 py-2 rounded-lg bg-purple-500/5 border border-purple-500/20 hover:border-purple-500/40 hover:bg-purple-500/10 transition-all text-[11px] font-mono text-purple-300/80 hover:text-purple-200 truncate"
+                            data-testid={`suggestion-title-${idx}`}
+                          >
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {suggestionsLoading && (
+                    <div className="mt-3 flex items-center gap-2 text-[10px] font-mono text-purple-400/40">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Generating suggestions...</span>
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )} />

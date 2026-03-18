@@ -591,6 +591,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/projects/suggest-titles", async (req, res) => {
+    try {
+      const { title } = req.body;
+      if (!title || typeof title !== "string" || title.trim().length < 3) {
+        return res.status(400).json({ error: "Title is required and must be at least 3 characters" });
+      }
+      const completion = await openai.chat.completions.create({
+        model: FAST_MODEL,
+        messages: [{
+          role: "system",
+          content: "You are a creative book title generator. Generate 5 alternative and compelling book titles based on the given title. Return ONLY a JSON object with a 'titles' array containing exactly 5 strings. No other text.",
+        }, {
+          role: "user",
+          content: `Generate 5 alternative titles similar to or inspired by: "${title.trim()}"`,
+        }],
+        max_completion_tokens: 500,
+        response_format: { type: "json_object" },
+      });
+      const content = completion.choices[0].message.content || "{}";
+      const parsed = JSON.parse(content);
+      const suggestions = (parsed.titles || []).filter((t: any) => typeof t === "string" && t.length > 0).slice(0, 5);
+      res.json({ suggestions });
+    } catch (err: any) {
+      console.error("Title suggestion error:", err.message);
+      res.status(500).json({ error: "Failed to generate title suggestions" });
+    }
+  });
+
   app.post("/api/projects", async (req, res) => {
     try {
       const data = insertProjectSchema.parse(req.body);
