@@ -1346,8 +1346,8 @@ Return JSON with:
       },
       body: JSON.stringify({
         text,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 },
+        model_id: "eleven_flash_v2_5",
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),
     });
     if (!response.ok) {
@@ -1424,6 +1424,10 @@ Return JSON with:
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
       console.error("TTS error:", err.message, err.stack);
+      const msg = err.message || "";
+      if (msg.includes("quota_exceeded") || msg.includes("quota")) {
+        return res.status(429).json({ error: "Voice credit quota exceeded. Please try again later or upgrade your ElevenLabs plan." });
+      }
       res.status(500).json({ error: "Failed to generate speech" });
     }
   });
@@ -1482,6 +1486,10 @@ Return JSON with:
       res.send(combined);
     } catch (err: any) {
       console.error("TTS download error:", err.message, err.stack);
+      const msg = err.message || "";
+      if (msg.includes("quota_exceeded") || msg.includes("quota")) {
+        return res.status(429).json({ error: "Voice credit quota exceeded. Please try again later or upgrade your ElevenLabs plan." });
+      }
       res.status(500).json({ error: "Failed to generate audiobook" });
     }
   });
