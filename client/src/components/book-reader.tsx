@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, SkipForward, Columns2, Square } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, SkipForward, Columns2, Square, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
@@ -731,6 +731,14 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 <div className="w-16 h-1 bg-stone-700 rounded-full overflow-hidden">
                   <div className="h-full bg-purple-400 rounded-full transition-all duration-200" style={{ width: `${narrationProgress}%` }} />
                 </div>
+                <button onClick={() => setAutoNarrate(!autoNarrate)}
+                  className={cn("h-7 px-2 rounded-full border text-[10px] font-mono flex items-center gap-1 transition-all",
+                    autoNarrate ? "bg-purple-500/20 border-purple-500/40 text-purple-300" : "bg-stone-800 border-stone-600 text-stone-500 hover:text-stone-300")}
+                  data-testid="button-continuous-reading" aria-label={autoNarrate ? "Continuous reading on" : "Continuous reading off"}
+                >
+                  <Repeat className="h-3 w-3" />
+                  <span className="hidden sm:inline">{autoNarrate ? "Continuous" : "1 Page"}</span>
+                </button>
               </div>
             )}
             <span className={cn("font-mono text-[10px]", "text-stone-500")}>
@@ -802,7 +810,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
             <label className="flex items-center gap-2 mb-3 cursor-pointer group">
               <input type="checkbox" checked={autoNarrate} onChange={e => setAutoNarrate(e.target.checked)}
                 className="accent-purple-500 w-3.5 h-3.5" data-testid="checkbox-auto-narrate" />
-              <span className="text-[10px] text-stone-400 group-hover:text-stone-300 transition-colors">Auto-read next page</span>
+              <span className="text-[10px] text-stone-400 group-hover:text-stone-300 transition-colors">Continuous reading (auto-advance pages)</span>
             </label>
             {isNarratableCurrentPage ? (
               <div className="flex gap-2">
