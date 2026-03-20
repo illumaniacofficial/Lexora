@@ -129,6 +129,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
   const [usingFallback, setUsingFallback] = useState(false);
   const stickyFallbackRef = useRef<string | null>(null);
+  const voiceInitRef = useRef(true);
 
   useEffect(() => {
     onPlaybackStateChange?.({ isPlaying, isLoading, progress });
@@ -137,6 +138,21 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   useEffect(() => { narrationRef.current = narration; }, [narration]);
   useEffect(() => { onUpdateRef.current = onUpdateNarration; }, [onUpdateNarration]);
   useEffect(() => { onWordIndexChangeRef.current = onWordIndexChange; }, [onWordIndexChange]);
+
+  useEffect(() => {
+    if (voiceInitRef.current) {
+      voiceInitRef.current = false;
+      return;
+    }
+    stickyFallbackRef.current = null;
+    setUsingFallback(false);
+    stopBrowserTTS();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    generateAndPlay(narration.text, narration.voice);
+  }, [narration.voice]);
 
   const prefetchNext = useCallback((currentIdx: number, voice: NarratorVoice, allPages: NarrationState["allPages"]) => {
     const nextIdx = currentIdx + 1;
