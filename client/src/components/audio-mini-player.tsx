@@ -5,6 +5,7 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/components/markdown-renderer";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getDefaultBrowserVoice } from "@/lib/browser-tts";
+import { buildCumulativeWeights, wordIndexFromProgress } from "@/lib/word-timing";
 import { useToast } from "@/hooks/use-toast";
 
 export interface PlaybackState {
@@ -126,6 +127,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const onUpdateRef = useRef(onUpdateNarration);
   const onWordIndexChangeRef = useRef(onWordIndexChange);
   const wordCountRef = useRef(0);
+  const cumulWeightsRef = useRef<Float32Array>(new Float32Array([0]));
   const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
   const [usingFallback, setUsingFallback] = useState(false);
   const stickyFallbackRef = useRef<string | null>(null);
@@ -239,6 +241,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       const cleanText = stripMarkdown(text).slice(0, 4000);
       const words = cleanText.split(/\s+/).filter(Boolean);
       wordCountRef.current = words.length;
+      cumulWeightsRef.current = buildCumulativeWeights(words);
       onWordIndexChangeRef.current?.(-1);
 
       const expectedIdx = narrationRef.current.currentPageIndex;
@@ -290,15 +293,14 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         setDuration(audio.duration);
       };
 
-      const wc = words.length;
+      const cumul = cumulWeightsRef.current;
       const updateProgress = () => {
         if (audio && audio.duration > 0) {
           const pct = audio.currentTime / audio.duration;
           setProgress(pct * 100);
           setCurrentTime(audio.currentTime);
           setDuration(audio.duration);
-          const wi = Math.min(Math.floor(pct * wc), wc - 1);
-          onWordIndexChangeRef.current?.(wi);
+          onWordIndexChangeRef.current?.(wordIndexFromProgress(pct, cumul));
         }
         if (!audio.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);
@@ -362,14 +364,13 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     } else {
       audioRef.current.play();
       setIsPlaying(true);
-      const wc = wordCountRef.current;
+      const resumeCumul = cumulWeightsRef.current;
       const updateProgress = () => {
         if (audioRef.current && audioRef.current.duration > 0) {
           const pct = audioRef.current.currentTime / audioRef.current.duration;
           setProgress(pct * 100);
           setCurrentTime(audioRef.current.currentTime);
-          const wi = Math.min(Math.floor(pct * wc), wc - 1);
-          onWordIndexChangeRef.current?.(wi);
+          onWordIndexChangeRef.current?.(wordIndexFromProgress(pct, resumeCumul));
         }
         if (audioRef.current && !audioRef.current.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);

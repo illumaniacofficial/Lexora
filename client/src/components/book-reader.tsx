@@ -8,6 +8,7 @@ import { useNarration } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getBrowserVoices, getDefaultBrowserVoice, type BrowserVoiceOption } from "@/lib/browser-tts";
+import { buildCumulativeWeights, wordIndexFromProgress } from "@/lib/word-timing";
 
 interface BookReaderProps {
   title: string;
@@ -286,16 +287,19 @@ function TextPage({ page, theme, fontSize, highlightWordIndex }: { page: Extract
 function HighlightedTextRenderer({ content, theme, wordIndex }: { content: string; theme: PageTheme; wordIndex: number }) {
   const t = THEMES[theme];
   const isDark = theme === "dark" || theme === "midnight";
-  const hlClass = isDark ? "bg-purple-500/30 text-purple-200 rounded px-0.5 transition-colors duration-150" : "bg-purple-200/60 text-purple-900 rounded px-0.5 transition-colors duration-150";
+  const hlClass = isDark
+    ? "bg-purple-500/40 text-purple-100 rounded px-0.5 shadow-[0_0_0_1px_rgba(168,85,247,0.4)] transition-all duration-100"
+    : "bg-violet-200/80 text-violet-900 rounded px-0.5 shadow-[0_0_0_1px_rgba(139,92,246,0.3)] transition-all duration-100";
   const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
   let globalWordCounter = 0;
   const highlightRef = useRef<HTMLSpanElement>(null);
   const lastScrollIdx = useRef(-1);
 
   useEffect(() => {
-    if (highlightRef.current && Math.abs(wordIndex - lastScrollIdx.current) > 3) {
+    if (!highlightRef.current) return;
+    if (wordIndex !== lastScrollIdx.current) {
       lastScrollIdx.current = wordIndex;
-      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      highlightRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [wordIndex]);
 
@@ -469,6 +473,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const containerRef = useRef<HTMLDivElement>(null);
   const autoNarRef = useRef(false);
   const readerWordCountRef = useRef(0);
+  const cumulWeightsRef = useRef<Float32Array>(new Float32Array([0]));
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const browserTTSRef = useRef<ReturnType<typeof browserTTSSpeak> | null>(null);
   const [browserVoiceList, setBrowserVoiceList] = useState<BrowserVoiceOption[]>([]);
@@ -727,8 +732,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       setNarratedPageIdx(pageIdx);
 
       const strippedText = stripMarkdown(cleanText).slice(0, 4000);
-      const wordCount = strippedText.split(/\s+/).filter(Boolean).length;
+      const strippedWords = strippedText.split(/\s+/).filter(Boolean);
+      const wordCount = strippedWords.length;
       readerWordCountRef.current = wordCount;
+      cumulWeightsRef.current = buildCumulativeWeights(strippedWords);
 
       if (wordCount === 0) {
         setNarrationLoading(false);
@@ -794,12 +801,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         }
       };
 
-      const wc = wordCount;
+      const cumul = cumulWeightsRef.current;
       const updateProgress = () => {
         if (audio && audio.duration > 0) {
           const pct = audio.currentTime / audio.duration;
           setNarrationProgress(pct * 100);
-          setReaderWordIndex(Math.min(Math.floor(pct * wc), wc - 1));
+          setReaderWordIndex(wordIndexFromProgress(pct, cumul));
         }
         if (!audio.paused) narrationAnimRef.current = requestAnimationFrame(updateProgress);
       };
