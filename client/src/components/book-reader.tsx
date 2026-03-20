@@ -3,7 +3,7 @@ import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Load
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
-import { VOICE_OPTIONS, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
+import { VOICE_OPTIONS, isFishAudioVoice, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
 import { useNarration } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
@@ -627,7 +627,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     const cacheKey = `${voice}:${text.slice(0, 100)}:${text.length}`;
     const cached = audioCacheRef.current.get(cacheKey);
     if (cached) return cached;
-    const response = await fetch("/api/tts", {
+    const endpoint = isFishAudioVoice(voice) ? "/api/fish-tts" : "/api/tts";
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, voice }),
@@ -750,7 +751,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       try {
         audioDataUrl = await fetchAudio(cleanText, selectedVoice);
       } catch (fetchErr: any) {
-        console.warn("ElevenLabs TTS failed in reader, falling back to browser voice:", fetchErr.message);
+        console.warn("AI TTS failed in reader, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
         if (fallbackVoice) {
           stickyFallbackVoiceRef.current = fallbackVoice.id;
