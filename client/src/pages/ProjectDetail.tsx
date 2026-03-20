@@ -1178,6 +1178,65 @@ export default function ProjectDetail() {
             </CardContent>
           </Card>
 
+          {completedChapters.length > 0 && (
+            <Card className="border-border/20 bg-card/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-[11px] font-mono font-bold tracking-wider uppercase text-muted-foreground/50 flex items-center justify-between">
+                  <span><Music className="h-3 w-3 inline mr-1.5 text-cyan-400/50" />Audio Files</span>
+                  <span className="text-[9px] font-normal text-muted-foreground/30">
+                    {completedChapters.filter(c => c.audioUrl).length}/{completedChapters.length} generated
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-4">
+                <div className="space-y-0.5 mb-3">
+                  {completedChapters.map(chapter => (
+                    <div key={chapter.id} className="flex items-center gap-2 py-1.5 border-b border-border/10 last:border-0">
+                      <span className="text-[9px] font-mono text-muted-foreground/30 w-4 shrink-0 text-right">{chapter.chapterNumber}</span>
+                      <p className="text-[10px] font-mono text-muted-foreground/60 flex-1 truncate min-w-0">{chapter.title}</p>
+                      {chapter.audioUrl ? (
+                        <a href={`/api/projects/${projectId}/chapters/${chapter.id}/audio`} download onClick={e => e.stopPropagation()} data-testid={`audio-download-${chapter.id}`}>
+                          <Button size="sm" variant="outline" className="h-6 w-6 p-0 border-cyan-500/25 text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/5 shrink-0" aria-label="Download chapter audio">
+                            <Download className="h-2.5 w-2.5" />
+                          </Button>
+                        </a>
+                      ) : (
+                        <Button size="sm" variant="outline"
+                          className="h-6 w-6 p-0 border-purple-500/20 text-purple-400 hover:border-purple-500/40 hover:bg-purple-500/5 shrink-0"
+                          onClick={() => generateChapterAudio(chapter.id)}
+                          disabled={generatingAudioChapterId === chapter.id}
+                          aria-label="Generate chapter audio"
+                          data-testid={`audio-gen-${chapter.id}`}
+                        >
+                          {generatingAudioChapterId === chapter.id
+                            ? <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                            : <Zap className="h-2.5 w-2.5" />}
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {completedChapters.some(c => c.audioUrl) && (
+                  <Button
+                    variant="outline" size="sm"
+                    className="w-full border-cyan-500/20 bg-cyan-500/5 font-mono text-[10px] hover:border-cyan-500/40 text-cyan-300"
+                    onClick={downloadAudiobook}
+                    disabled={audiobookLoading}
+                    data-testid="button-download-full-audiobook"
+                  >
+                    {audiobookLoading
+                      ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                      : <Download className="h-3 w-3 mr-1.5 text-cyan-400" />}
+                    Download Full Audiobook
+                  </Button>
+                )}
+                {!completedChapters.some(c => c.audioUrl) && (
+                  <p className="text-[9px] text-muted-foreground/30 font-mono text-center">Hit <Zap className="h-2.5 w-2.5 inline text-purple-400" /> on any chapter to generate its MP3</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {trendReport && (
             <Card className="border-border/20 bg-card/30 glow-border-cyan">
               <CardHeader className="pb-3">
