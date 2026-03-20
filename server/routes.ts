@@ -378,6 +378,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           shortBlurb: marketing?.shortBlurb || null,
           chapterCount: chapterList.length,
           completedChapters: chapterList.filter(c => c.status === "complete").length,
+          chaptersWithAudio: chapterList.filter(c => !!c.audioUrl).length,
         };
       }));
       res.json(library);
@@ -584,6 +585,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           hasTrend: !!trend,
           hasCover: !!coverImageUrl,
           hasMarketing: !!marketing,
+          chaptersWithAudio: chapters.filter(c => !!c.audioUrl).length,
         };
       }));
       res.json(enriched);

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Library as LibraryIcon, Search, ArrowRight, Crown, BookOpen, Star, Filter,
-  ArrowUpDown, Hexagon, AlertCircle, Trophy, Medal, Share2, Copy, Trash2, Link as LinkIcon, Eye, Plus, Loader2,
+  ArrowUpDown, Hexagon, AlertCircle, Trophy, Medal, Share2, Copy, Trash2, Link as LinkIcon, Eye, Plus, Loader2, Music,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
@@ -19,7 +19,7 @@ import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import type { Project, InviteToken, Chapter } from "@shared/schema";
 
-type LibraryBook = Project & { shortBlurb: string | null; completedChapters: number };
+type LibraryBook = Project & { shortBlurb: string | null; completedChapters: number; chaptersWithAudio: number };
 
 type SortKey = "rank" | "title" | "words" | "quality" | "date";
 
@@ -340,6 +340,11 @@ export default function Library() {
                           </div>
                         </div>
                         <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
+                          {book.chaptersWithAudio > 0 && (
+                            <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/40 text-cyan-300 backdrop-blur-md bg-card/50">
+                              <Music className="h-2.5 w-2.5 mr-0.5" />{book.chaptersWithAudio} CH
+                            </Badge>
+                          )}
                           {book.publishedToStore && (
                             <Badge variant="outline" className="text-[9px] font-mono border-purple-500/30 text-purple-300 backdrop-blur-md bg-card/50">
                               STOREFRONT
@@ -363,6 +368,11 @@ export default function Library() {
                             <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/20 text-emerald-400">
                               COMPLETE
                             </Badge>
+                            {book.chaptersWithAudio > 0 && (
+                              <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/30 text-cyan-400">
+                                <Music className="h-2.5 w-2.5 mr-0.5" />{book.chaptersWithAudio} CH
+                              </Badge>
+                            )}
                             {book.publishedToStore && (
                               <Badge variant="outline" className="text-[9px] font-mono border-purple-500/20 text-purple-300">
                                 STOREFRONT

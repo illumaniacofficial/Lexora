@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Trash2, BookOpen, ArrowRight, Hexagon } from "lucide-react";
+import { Plus, Search, Trash2, BookOpen, ArrowRight, Hexagon, Music } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { AlertCircle } from "lucide-react";
 import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW } from "@/lib/utils";
@@ -24,6 +24,7 @@ interface EnrichedProject extends Project {
   hasTrend: boolean;
   hasCover: boolean;
   hasMarketing: boolean;
+  chaptersWithAudio: number;
 }
 
 function getLivePct(p: EnrichedProject): number {
@@ -208,6 +209,13 @@ export default function Projects() {
                           </div>
                         ))}
                       </div>
+                      {project.chaptersWithAudio > 0 && (
+                        <div className="flex items-center gap-1.5 pt-1">
+                          <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/30 text-cyan-400 bg-cyan-500/5">
+                            <Music className="h-2.5 w-2.5 mr-1" />{project.chaptersWithAudio}/{project.completedChapters} chapters with audio
+                          </Badge>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </Link>
