@@ -17,9 +17,10 @@ export type NarratorVoice = string;
 
 export const DEFAULT_VOICE_ID = "qJemC2CfKzP2DljOYBYj";
 
-export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string; isFree?: boolean }[] = [
+export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string; isFree?: boolean; isFishAudio?: boolean }[] = [
   { value: "qJemC2CfKzP2DljOYBYj", label: "Sergio", description: "Professional author voice", isFree: false },
   { value: "4MnJDVdLqUeSlssQcssu", label: "Sergio Instant", description: "Cloned author voice", isFree: false },
+  { value: "fabb918a343d4591b428083a35980dc4", label: "Sergio FA", description: "AI cloned voice · Fish Audio", isFree: false, isFishAudio: true },
   { value: "JBFqnCBsd6RMkjVDRZzb", label: "George", description: "Warm, captivating storyteller", isFree: false },
   { value: "nPczCjzI2devNBz1zQrb", label: "Brian", description: "Deep, resonant & comforting", isFree: false },
   { value: "pFZP5JQG7iQjIQuC4Bku", label: "Lily", description: "Velvety actress", isFree: false },
@@ -63,6 +64,10 @@ interface AudioMiniPlayerProps {
 
 export type { NarrationState };
 
+export function isFishAudioVoice(voiceId: string): boolean {
+  return VOICE_OPTIONS.some(v => v.value === voiceId && v.isFishAudio === true);
+}
+
 const audioCache = new Map<string, string>();
 function cacheKey(text: string, voice: string): string {
   return `${voice}:${text.slice(0, 100)}:${text.length}`;
@@ -73,7 +78,8 @@ async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<str
   const cached = audioCache.get(key);
   if (cached) return cached;
   const cleanText = stripMarkdown(text).slice(0, 4000);
-  const response = await fetch("/api/tts", {
+  const endpoint = isFishAudioVoice(voice) ? "/api/fish-tts" : "/api/tts";
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text: cleanText, voice }),
@@ -236,7 +242,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       try {
         audioData = await fetchAudioCached(text, voice);
       } catch (fetchErr: any) {
-        console.warn("ElevenLabs TTS failed, falling back to browser voice:", fetchErr.message);
+        console.warn("AI TTS failed, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
         if (fallbackVoice) {
           stickyFallbackRef.current = fallbackVoice.id;

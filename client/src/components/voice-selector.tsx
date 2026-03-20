@@ -26,7 +26,8 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
   });
 
   const freeVoices = filteredVoices.filter(v => v.isFree);
-  const premiumVoices = filteredVoices.filter(v => !v.isFree);
+  const fishVoices = filteredVoices.filter(v => v.isFishAudio && !v.isFree);
+  const premiumVoices = filteredVoices.filter(v => !v.isFree && !v.isFishAudio);
 
   return (
     <div className="relative w-full">
@@ -45,6 +46,9 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
           <span className="font-mono text-sm text-foreground truncate">
             {selectedVoice?.label || "Select voice..."}
           </span>
+          {selectedVoice?.isFishAudio && (
+            <span className="text-[9px] font-mono text-amber-400/70 flex-shrink-0">CLONED</span>
+          )}
           {selectedVoice?.isFree && (
             <span className="text-[9px] font-mono text-green-400/60 flex-shrink-0">FREE</span>
           )}
@@ -80,6 +84,37 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
               <div className="py-4 text-center text-[12px] text-muted-foreground">No voices found</div>
             ) : (
               <div className="space-y-3 max-h-80 overflow-y-auto">
+                {fishVoices.length > 0 && (
+                  <div>
+                    <div className="text-[9px] font-mono text-amber-400/70 px-2 py-1 uppercase tracking-wider">Your Cloned Voices</div>
+                    <div className="space-y-1">
+                      {fishVoices.map((voice) => (
+                        <button
+                          key={voice.value}
+                          onClick={() => {
+                            onChange(voice.value);
+                            setOpen(false);
+                            setSearch("");
+                          }}
+                          className={cn(
+                            "w-full text-left px-2 py-2 rounded-lg border border-transparent hover:border-amber-500/40 hover:bg-amber-500/10 transition-all",
+                            value === voice.value && "bg-amber-500/20 border-amber-500/40"
+                          )}
+                          data-testid={`voice-option-${voice.value}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-[12px] font-semibold">{voice.label}</span>
+                              <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-amber-500/20 text-amber-400/80 border border-amber-500/30">CLONED</span>
+                            </div>
+                            {value === voice.value && <div className="h-2 w-2 rounded-full bg-amber-400" />}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground/60 mt-0.5">{voice.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {premiumVoices.length > 0 && (
                   <div>
                     <div className="text-[9px] font-mono text-muted-foreground/60 px-2 py-1 uppercase tracking-wider">Premium Voices</div>

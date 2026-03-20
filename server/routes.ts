@@ -306,6 +306,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ];
     if (
       req.path === "/api/tts" ||
+      req.path === "/api/fish-tts" ||
       req.path === "/api/autopilot/run" ||
       aiPaths.some(p => p.test(req.path))
     ) {
@@ -1664,6 +1665,67 @@ Return JSON with:
     }
     return chunks.filter(c => c.length > 0);
   }
+
+  app.post("/api/fish-tts", async (req, res) => {
+    try {
+      const { text, voice } = req.body;
+      if (!text || typeof text !== "string" || text.trim().length === 0) {
+        return res.status(400).json({ error: "Text is required" });
+      }
+      const apiKey = process.env.FISH_AUDIO_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "Fish Audio not configured" });
+
+      const trimmed = text.slice(0, 4000);
+      const cacheKey = ttsCacheKey(trimmed, voice || "fish-default");
+
+      const cached = ttsCache.get(cacheKey);
+      if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
+        return res.json({ audio: cached.audio, format: "mp3" });
+      }
+
+      const diskFile = ttsDiskPath(`fish_${voice || "default"}`, cacheKey);
+      if (fs.existsSync(diskFile)) {
+        const base64Audio = fs.readFileSync(diskFile).toString("base64");
+        ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+        return res.json({ audio: base64Audio, format: "mp3" });
+      }
+
+      const response = await fetch("https://api.fish.audio/v1/tts", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "model": "s2-pro",
+        },
+        body: JSON.stringify({
+          text: trimmed,
+          reference_id: voice,
+          format: "mp3",
+          latency: "normal",
+          normalize: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "Unknown error");
+        console.error("Fish Audio TTS error:", response.status, errText);
+        return res.status(response.status).json({ error: `Fish Audio error: ${errText}` });
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
+      const base64Audio = audioBuffer.toString("base64");
+
+      fs.writeFileSync(diskFile, audioBuffer);
+      ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+      cleanTtsCache();
+
+      res.json({ audio: base64Audio, format: "mp3" });
+    } catch (err: any) {
+      console.error("Fish Audio TTS error:", err.message);
+      res.status(500).json({ error: "Failed to generate Fish Audio speech" });
+    }
+  });
 
   app.post("/api/tts/download", async (req, res) => {
     try {
