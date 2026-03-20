@@ -1695,7 +1695,6 @@ Return JSON with:
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "model": "s2-pro",
         },
         body: JSON.stringify({
           text: trimmed,
@@ -1703,6 +1702,7 @@ Return JSON with:
           format: "mp3",
           latency: "normal",
           normalize: true,
+          chunk_length: 200,
         }),
       });
 
