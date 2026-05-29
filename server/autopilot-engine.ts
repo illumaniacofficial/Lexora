@@ -289,6 +289,19 @@ Write the full chapter content only, no meta-commentary.`,
 async function runMarketing(projectId: number, bookTitle: string, vertical: string) {
   await storage.updateProject(projectId, { status: "marketing" });
 
+  const project = await storage.getProject(projectId);
+  const dna = await storage.getBookDna(projectId);
+  const guidanceContext: string[] = [];
+  if (project?.description) guidanceContext.push(`Book description & author guidance: ${project.description}`);
+  if (dna?.readerAvatar) guidanceContext.push(`Target reader: ${dna.readerAvatar}`);
+  if (dna?.corePromise) guidanceContext.push(`Core promise: ${dna.corePromise}`);
+  if (dna?.toneRules) guidanceContext.push(`Tone & voice: ${dna.toneRules}`);
+  if (dna?.transformationArc) guidanceContext.push(`Transformation arc: ${dna.transformationArc}`);
+  if (dna?.frameworkSummary) guidanceContext.push(`Framework: ${dna.frameworkSummary}`);
+  const guidanceBlock = guidanceContext.length > 0
+    ? `\n\nUse this book's specific guidance so the marketing matches the author's intent, stated audience, and tone:\n${guidanceContext.join("\n")}\n\nThe blurbs, hooks, ad angles, and emails MUST speak directly to the stated target audience and adopt the stated tone — not generic category copy.`
+    : "";
+
   const marketingResult = await runPipelineStep(projectId, "Marketing Suite", FAST_MODEL, async () => {
     const completion = await openai.chat.completions.create({
       model: FAST_MODEL,
@@ -297,7 +310,7 @@ async function runMarketing(projectId: number, bookTitle: string, vertical: stri
         content: "You are a book marketing expert. Respond ONLY with valid JSON.",
       }, {
         role: "user",
-        content: `Generate a complete marketing suite for the book "${bookTitle}" in the ${vertical} niche.
+        content: `Generate a complete marketing suite for the book "${bookTitle}" in the ${vertical} niche.${guidanceBlock}
 
 Return JSON with:
 - shortBlurb: string (50 words)
