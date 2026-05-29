@@ -168,8 +168,10 @@ export interface IStorage {
   updateLaunchSchedule(id: number, data: Partial<InsertLaunchSchedule>): Promise<LaunchSchedule>;
 
   getMediaAssets(projectId: number): Promise<MediaAsset[]>;
+  getMediaAsset(id: number): Promise<MediaAsset | undefined>;
   createMediaAsset(data: InsertMediaAsset): Promise<MediaAsset>;
   updateMediaAsset(id: number, data: Partial<InsertMediaAsset>): Promise<MediaAsset>;
+  deleteMediaAsset(id: number): Promise<void>;
 
   getNotifications(): Promise<Notification[]>;
   createNotification(data: InsertNotification): Promise<Notification>;
@@ -719,6 +721,10 @@ export class DatabaseStorage implements IStorage {
   async getMediaAssets(projectId: number) {
     return db.select().from(mediaAssets).where(eq(mediaAssets.projectId, projectId)).orderBy(desc(mediaAssets.createdAt));
   }
+  async getMediaAsset(id: number) {
+    const [asset] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, id));
+    return asset;
+  }
   async createMediaAsset(data: InsertMediaAsset) {
     const [created] = await db.insert(mediaAssets).values(data).returning();
     return created;
@@ -726,6 +732,9 @@ export class DatabaseStorage implements IStorage {
   async updateMediaAsset(id: number, data: Partial<InsertMediaAsset>) {
     const [updated] = await db.update(mediaAssets).set(data).where(eq(mediaAssets.id, id)).returning();
     return updated;
+  }
+  async deleteMediaAsset(id: number) {
+    await db.delete(mediaAssets).where(eq(mediaAssets.id, id));
   }
 
   async getNotifications() {

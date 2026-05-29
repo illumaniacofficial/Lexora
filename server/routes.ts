@@ -23,6 +23,7 @@ import {
 } from "./commerce";
 import crypto from "crypto";
 import { generateLaunchPlan, type LaunchItem } from "./launch";
+import { generateAudiobook, generateAudioTrailer, generateVideoTrailer, DEFAULT_NARRATOR_VOICE } from "./media";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { saveDbSeed } from "./seed";
 import { z } from "zod";
@@ -401,6 +402,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
+  });
+
+  // Studio media (audiobooks/trailers) is admin-only — block public static access.
+  // The admin browser carries a session cookie, so inline <audio>/<video> and the
+  // gated /api/media-assets/:id/download route still work for authenticated admins.
+  app.get(/^\/uploads\/media\/.*/, (req, res, next) => {
+    if (req.session?.role === "admin" && req.session?.adminId) return next();
+    return res.status(401).json({ error: "Authentication required" });
   });
 
   app.use("/uploads", express.static(path.resolve("uploads")));
@@ -1268,7 +1277,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const exportJobs = await storage.getExportJobs(id);
       const brandKit = project.brandKitId ? await storage.getBrandKit(project.brandKitId) : undefined;
       const launchSchedules = await storage.getLaunchSchedules(id);
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules });
+      const mediaAssets = await storage.getMediaAssets(id);
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules, mediaAssets });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2651,6 +2661,203 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
       storage.createAnalyticsEvent({ projectId, eventType: "listen", value: 1, metadata: { chapterId } }).catch(() => {});
       fs.createReadStream(filePath).pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const audiobookSchema = z.object({
+    narratorVoice: z.string().min(1).optional(),
+    voiceMap: z.record(z.string(), z.string()).optional(),
+    includeIntro: z.boolean().optional(),
+    musicBed: z.boolean().optional(),
+  });
+  const trailerSchema = z.object({
+    voiceId: z.string().min(1).optional(),
+    musicBed: z.boolean().optional(),
+  });
+
+  function mergeMeta(asset: { metadata: unknown }, extra: Record<string, unknown>): Record<string, unknown> {
+    const base = (asset.metadata && typeof asset.metadata === "object") ? asset.metadata as Record<string, unknown> : {};
+    return { ...base, ...extra };
+  }
+
+  const MEDIA_ROOT = path.resolve("uploads/media");
+  // Resolve a media url (/uploads/media/...) to an absolute path inside MEDIA_ROOT, or null.
+  function resolveMediaPath(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const abs = path.resolve("." + url);
+    const rel = path.relative(MEDIA_ROOT, abs);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+    return abs;
+  }
+  function removeMediaFile(url: string | null | undefined) {
+    const p = resolveMediaPath(url);
+    if (p && fs.existsSync(p)) { try { fs.rmSync(p, { force: true }); } catch { /* ignore */ } }
+  }
+  // Finalize a background media job race-safely: if the asset row was deleted while
+  // processing, discard the produced file instead of leaving an orphan.
+  async function finalizeMediaAsset(assetId: number, url: string, extraMeta: Record<string, unknown>) {
+    const current = await storage.getMediaAsset(assetId);
+    if (!current) { removeMediaFile(url); return; }
+    await storage.updateMediaAsset(assetId, { status: "ready", url, metadata: mergeMeta(current, extraMeta) });
+  }
+  async function failMediaAsset(assetId: number, message: string) {
+    const current = await storage.getMediaAsset(assetId);
+    if (!current) return;
+    await storage.updateMediaAsset(assetId, { status: "failed", metadata: mergeMeta(current, { error: message }) });
+  }
+  // Reject duplicate concurrent renders of the same kind for a project.
+  async function hasInflightMedia(projectId: number, kind: string): Promise<boolean> {
+    const existing = await storage.getMediaAssets(projectId);
+    return existing.some((a) => a.kind === kind && a.status === "processing");
+  }
+
+  app.post("/api/projects/:id/audiobook", aiRateLimit, async (req, res) => {
+    try {
+      const id = parseId(String(req.params.id));
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const parsed = audiobookSchema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+
+      const chapters = await storage.getChapters(id);
+      const completed = chapters.filter((c) => c.status === "complete" && c.content);
+      if (completed.length === 0) return res.status(400).json({ error: "No completed chapters to narrate" });
+      if (await hasInflightMedia(id, "audiobook")) return res.status(409).json({ error: "An audiobook is already rendering for this project" });
+
+      const narratorVoice = parsed.data.narratorVoice || DEFAULT_NARRATOR_VOICE;
+      const voiceMap = parsed.data.voiceMap || {};
+      const includeIntro = parsed.data.includeIntro ?? true;
+      const musicBed = parsed.data.musicBed ?? false;
+      const characters = (await storage.getStoryEntities({ projectId: id })).filter((c) => c.type === "character");
+
+      const asset = await storage.createMediaAsset({
+        projectId: id, kind: "audiobook", status: "processing",
+        metadata: { narratorVoice, voiceMap, includeIntro, musicBed, chapterCount: completed.length },
+      });
+      res.status(202).json({ asset });
+
+      (async () => {
+        try {
+          const out = await runStep(id, "audiobook", FAST_MODEL, async () => {
+            const r = await generateAudiobook({ project, chapters, narratorVoice, voiceMap, includeIntro, musicBed, characters });
+            return { result: r, tokens: r.tokens };
+          });
+          await finalizeMediaAsset(asset.id, out.url, { durationMs: out.durationMs, fileSize: out.fileSize, chapterCount: out.chapterCount, multiVoice: out.multiVoice });
+        } catch (e: any) {
+          console.error("Audiobook generation failed:", e.message);
+          await failMediaAsset(asset.id, e.message);
+        }
+      })();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/audio-trailer", aiRateLimit, async (req, res) => {
+    try {
+      const id = parseId(String(req.params.id));
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const parsed = trailerSchema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+
+      if (await hasInflightMedia(id, "audio_trailer")) return res.status(409).json({ error: "An audio trailer is already rendering for this project" });
+      const voiceId = parsed.data.voiceId || DEFAULT_NARRATOR_VOICE;
+      const musicBed = parsed.data.musicBed ?? true;
+      const marketing = await storage.getMarketingAsset(id);
+
+      const asset = await storage.createMediaAsset({
+        projectId: id, kind: "audio_trailer", status: "processing", metadata: { voiceId, musicBed },
+      });
+      res.status(202).json({ asset });
+
+      (async () => {
+        try {
+          const out = await runStep(id, "audio_trailer", FAST_MODEL, async () => {
+            const r = await generateAudioTrailer({ project, marketing, voiceId, musicBed });
+            return { result: r, tokens: r.tokens };
+          });
+          await finalizeMediaAsset(asset.id, out.url, { script: out.script, durationMs: out.durationMs, fileSize: out.fileSize });
+        } catch (e: any) {
+          console.error("Audio trailer generation failed:", e.message);
+          await failMediaAsset(asset.id, e.message);
+        }
+      })();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/video-trailer", aiRateLimit, async (req, res) => {
+    try {
+      const id = parseId(String(req.params.id));
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const parsed = trailerSchema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+
+      if (await hasInflightMedia(id, "video_trailer")) return res.status(409).json({ error: "A video trailer is already rendering for this project" });
+      const voiceId = parsed.data.voiceId || DEFAULT_NARRATOR_VOICE;
+      const marketing = await storage.getMarketingAsset(id);
+
+      const asset = await storage.createMediaAsset({
+        projectId: id, kind: "video_trailer", status: "processing", metadata: { voiceId },
+      });
+      res.status(202).json({ asset });
+
+      (async () => {
+        try {
+          const out = await runStep(id, "video_trailer", FAST_MODEL, async () => {
+            const r = await generateVideoTrailer({ project, marketing, voiceId });
+            return { result: r, tokens: r.tokens };
+          });
+          await finalizeMediaAsset(asset.id, out.url, { script: out.script, durationMs: out.durationMs, fileSize: out.fileSize });
+        } catch (e: any) {
+          console.error("Video trailer generation failed:", e.message);
+          await failMediaAsset(asset.id, e.message);
+        }
+      })();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/media-assets/:id/download", requireAdmin, async (req, res) => {
+    try {
+      const id = parseId(String(req.params.id));
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const asset = await storage.getMediaAsset(id);
+      if (!asset || !asset.url) return res.status(404).json({ error: "Media asset not found" });
+      if (asset.status !== "ready") return res.status(409).json({ error: "Media asset is not ready" });
+      const filePath = resolveMediaPath(asset.url);
+      if (!filePath || !fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      const project = await storage.getProject(asset.projectId);
+      const ext = path.extname(filePath) || ".bin";
+      const dlName = `${slugify(project?.title || "book")}-${asset.kind}${ext}`;
+      res.setHeader("Content-Type", ext === ".mp4" ? "video/mp4" : "audio/mpeg");
+      res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
+      fs.createReadStream(filePath).pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/media-assets/:id", async (req, res) => {
+    try {
+      const id = parseId(String(req.params.id));
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const asset = await storage.getMediaAsset(id);
+      if (!asset) return res.status(404).json({ error: "Media asset not found" });
+      removeMediaFile(asset.url);
+      await storage.deleteMediaAsset(id);
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

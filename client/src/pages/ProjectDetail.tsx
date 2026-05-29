@@ -27,7 +27,10 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset } from "@shared/schema";
+import { VOICE_OPTIONS, DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
+import { Switch } from "@/components/ui/switch";
+import { Headphones, Clapperboard, Radio, Mic2 } from "lucide-react";
 import { Network, Library, Fingerprint, Plus, Trash2, DollarSign, FlaskConical, Trophy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
@@ -49,6 +52,7 @@ interface ProjectDetailData {
   coverVariants?: CoverVariant[];
   exportJobs?: ExportJob[];
   brandKit?: BrandKit;
+  mediaAssets?: MediaAsset[];
 }
 
 interface ForecastMonthData { month: number; units: number; gross: number; royalty: number; cumulative: number }
@@ -1433,6 +1437,278 @@ function AbLabPanel({ projectId, tests, onChanged }: {
   );
 }
 
+const STUDIO_VOICES = VOICE_OPTIONS.filter(v => !v.isUnavailable);
+
+function formatDuration(ms?: number): string {
+  if (!ms || ms <= 0) return "—";
+  const total = Math.round(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+function formatSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return "—";
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
+}
+
+function VoicePicker({ value, onChange, testId }: { value: string; onChange: (v: string) => void; testId: string }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="h-8 text-[11px] font-mono bg-card/40 border-border/30" data-testid={testId}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {STUDIO_VOICES.map(v => (
+          <SelectItem key={v.value} value={v.value} className="text-[11px] font-mono" data-testid={`${testId}-option-${v.value}`}>
+            {v.label}{v.isFree ? " · Free" : ""}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function MediaAssetRow({ asset, onChanged }: { asset: MediaAsset; onChanged: () => void }) {
+  const { toast } = useToast();
+  const meta = (asset.metadata && typeof asset.metadata === "object" ? asset.metadata : {}) as Record<string, any>;
+  const deleteMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/media-assets/${asset.id}`),
+    onSuccess: () => { onChanged(); toast({ title: "Deleted" }); },
+    onError: (e: any) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+  });
+  const ts = asset.createdAt ? new Date(asset.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  const statusColor = asset.status === "ready" ? "text-emerald-400" : asset.status === "failed" ? "text-red-400" : "text-amber-400";
+  return (
+    <div className="border border-border/20 rounded-lg p-2.5 bg-card/30" data-testid={`media-asset-${asset.id}`}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          {asset.status === "processing" && <Loader2 className="h-3 w-3 animate-spin text-amber-400 shrink-0" />}
+          {asset.status === "ready" && <CheckCircle className="h-3 w-3 text-emerald-400 shrink-0" />}
+          {asset.status === "failed" && <AlertCircle className="h-3 w-3 text-red-400 shrink-0" />}
+          <span className={cn("text-[10px] font-mono font-bold uppercase tracking-wide", statusColor)} data-testid={`media-status-${asset.id}`}>{asset.status}</span>
+          <span className="text-[9px] font-mono text-muted-foreground/40">{ts}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {asset.status === "ready" && asset.url && (
+            <a href={`/api/media-assets/${asset.id}/download`} data-testid={`button-download-media-${asset.id}`}>
+              <Button size="sm" variant="outline" className="h-6 px-2 text-[9px] font-mono border-border/30">
+                <Download className="h-2.5 w-2.5 mr-1" /> Download
+              </Button>
+            </a>
+          )}
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400/60 hover:text-red-400" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending} data-testid={`button-delete-media-${asset.id}`}>
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+      {asset.status === "ready" && (asset.kind === "video_trailer") && asset.url && (
+        <video src={asset.url} controls className="w-full max-w-[220px] mt-2 rounded-md border border-border/20" data-testid={`video-media-${asset.id}`} />
+      )}
+      {asset.status === "ready" && (asset.kind === "audiobook" || asset.kind === "audio_trailer") && asset.url && (
+        <audio src={asset.url} controls className="w-full mt-2 h-8" data-testid={`audio-media-${asset.id}`} />
+      )}
+      <div className="flex items-center gap-2.5 mt-1.5 flex-wrap text-[9px] font-mono text-muted-foreground/50">
+        {meta.durationMs != null && <span>⏱ {formatDuration(meta.durationMs)}</span>}
+        {meta.fileSize != null && <span>{formatSize(meta.fileSize)}</span>}
+        {meta.chapterCount != null && <span>{meta.chapterCount} ch</span>}
+        {meta.multiVoice && <span className="text-fuchsia-400/70">multi-voice</span>}
+      </div>
+      {meta.script && (
+        <p className="text-[10px] text-muted-foreground/60 leading-snug mt-1.5 italic" data-testid={`media-script-${asset.id}`}>"{meta.script}"</p>
+      )}
+      {asset.status === "failed" && meta.error && (
+        <p className="text-[10px] text-red-400/70 font-mono mt-1.5" data-testid={`media-error-${asset.id}`}>{meta.error}</p>
+      )}
+    </div>
+  );
+}
+
+function StudioPanel({ projectId, mediaAssets, characters, completedCount, onChanged }: {
+  projectId: number;
+  mediaAssets: MediaAsset[];
+  characters: StoryEntity[];
+  completedCount: number;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [narratorVoice, setNarratorVoice] = useState<string>(DEFAULT_VOICE_ID);
+  const [voiceMap, setVoiceMap] = useState<Record<string, string>>({});
+  const [includeIntro, setIncludeIntro] = useState(true);
+  const [audiobookMusic, setAudiobookMusic] = useState(false);
+  const [trailerVoice, setTrailerVoice] = useState<string>(DEFAULT_VOICE_ID);
+  const [trailerMusic, setTrailerMusic] = useState(true);
+  const [videoVoice, setVideoVoice] = useState<string>(DEFAULT_VOICE_ID);
+
+  const audiobooks = mediaAssets.filter(a => a.kind === "audiobook");
+  const audioTrailers = mediaAssets.filter(a => a.kind === "audio_trailer");
+  const videoTrailers = mediaAssets.filter(a => a.kind === "video_trailer");
+  const hasChapters = completedCount > 0;
+
+  const audiobookMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/audiobook`, { narratorVoice, voiceMap, includeIntro, musicBed: audiobookMusic }),
+    onSuccess: () => { onChanged(); toast({ title: "Audiobook rendering started", description: "This runs in the background — it may take a few minutes." }); },
+    onError: (e: any) => toast({ title: "Audiobook failed", description: e.message, variant: "destructive" }),
+  });
+  const audioTrailerMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/audio-trailer`, { voiceId: trailerVoice, musicBed: trailerMusic }),
+    onSuccess: () => { onChanged(); toast({ title: "Audio trailer rendering started" }); },
+    onError: (e: any) => toast({ title: "Audio trailer failed", description: e.message, variant: "destructive" }),
+  });
+  const videoTrailerMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/video-trailer`, { voiceId: videoVoice }),
+    onSuccess: () => { onChanged(); toast({ title: "Video trailer rendering started" }); },
+    onError: (e: any) => toast({ title: "Video trailer failed", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Audiobook Studio */}
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-fuchsia-300">
+            <Headphones className="h-4 w-4" /> Multi-Voice Audiobook
+          </CardTitle>
+          <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+            Render a full audiobook with a narrator voice and optional distinct voices per character. Chapter intros + ambient bed optional.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/60 w-28 shrink-0">
+              <Mic2 className="h-3 w-3" /> Narrator
+            </div>
+            <div className="flex-1 max-w-[220px]"><VoicePicker value={narratorVoice} onChange={setNarratorVoice} testId="select-narrator-voice" /></div>
+          </div>
+
+          {characters.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 flex items-center gap-1.5">
+                <Users className="h-3 w-3" /> Character Voices
+              </p>
+              {characters.map(c => (
+                <div key={c.id} className="flex items-center gap-2" data-testid={`character-voice-row-${c.id}`}>
+                  <span className="text-[10px] font-mono text-muted-foreground/70 w-28 shrink-0 truncate" title={c.name}>{c.name}</span>
+                  <div className="flex-1 max-w-[220px]">
+                    <Select value={voiceMap[c.name] || "__narrator__"} onValueChange={(v) => setVoiceMap(prev => {
+                      const next = { ...prev };
+                      if (v === "__narrator__") delete next[c.name]; else next[c.name] = v;
+                      return next;
+                    })}>
+                      <SelectTrigger className="h-8 text-[11px] font-mono bg-card/40 border-border/30" data-testid={`select-character-voice-${c.id}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__narrator__" className="text-[11px] font-mono">Use narrator</SelectItem>
+                        {STUDIO_VOICES.map(v => (
+                          <SelectItem key={v.value} value={v.value} className="text-[11px] font-mono">{v.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ))}
+              <p className="text-[9px] font-mono text-muted-foreground/30 pt-0.5">Assigning character voices enables AI dialogue segmentation (adds a small cost).</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-5 pt-1">
+            <label className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/70 cursor-pointer">
+              <Switch checked={includeIntro} onCheckedChange={setIncludeIntro} data-testid="switch-include-intro" /> Title intro
+            </label>
+            <label className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/70 cursor-pointer">
+              <Switch checked={audiobookMusic} onCheckedChange={setAudiobookMusic} data-testid="switch-audiobook-music" /> Ambient bed
+            </label>
+          </div>
+
+          <Button
+            size="sm"
+            className="h-8 text-[10px] font-mono bg-fuchsia-500/20 text-fuchsia-200 hover:bg-fuchsia-500/30 border border-fuchsia-500/30"
+            onClick={() => audiobookMutation.mutate()}
+            disabled={audiobookMutation.isPending || !hasChapters}
+            data-testid="button-generate-audiobook"
+          >
+            {audiobookMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Headphones className="h-3 w-3 mr-1" />}
+            Render Audiobook
+          </Button>
+          {!hasChapters && <p className="text-[9px] font-mono text-muted-foreground/40">Complete at least one chapter first.</p>}
+
+          {audiobooks.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              {audiobooks.map(a => <MediaAssetRow key={a.id} asset={a} onChanged={onChanged} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Audio Trailer */}
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-cyan-300">
+            <Radio className="h-4 w-4" /> Audio Promo Trailer
+          </CardTitle>
+          <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+            ~60s spoken promo written from your marketing hook, voiced and mixed with an optional ambient bed.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex-1 max-w-[220px]"><VoicePicker value={trailerVoice} onChange={setTrailerVoice} testId="select-audio-trailer-voice" /></div>
+            <label className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/70 cursor-pointer">
+              <Switch checked={trailerMusic} onCheckedChange={setTrailerMusic} data-testid="switch-audio-trailer-music" /> Ambient bed
+            </label>
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-[10px] font-mono bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 border border-cyan-500/30"
+            onClick={() => audioTrailerMutation.mutate()}
+            disabled={audioTrailerMutation.isPending}
+            data-testid="button-generate-audio-trailer"
+          >
+            {audioTrailerMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Radio className="h-3 w-3 mr-1" />}
+            Render Audio Trailer
+          </Button>
+          {audioTrailers.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              {audioTrailers.map(a => <MediaAssetRow key={a.id} asset={a} onChanged={onChanged} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Video Trailer */}
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-violet-300">
+            <Clapperboard className="h-4 w-4" /> Video Book Trailer
+          </CardTitle>
+          <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+            Your cover + AI voiceover + burned-in captions, rendered to a downloadable vertical MP4.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex-1 max-w-[220px]"><VoicePicker value={videoVoice} onChange={setVideoVoice} testId="select-video-trailer-voice" /></div>
+          <Button
+            size="sm"
+            className="h-8 text-[10px] font-mono bg-violet-500/20 text-violet-200 hover:bg-violet-500/30 border border-violet-500/30"
+            onClick={() => videoTrailerMutation.mutate()}
+            disabled={videoTrailerMutation.isPending}
+            data-testid="button-generate-video-trailer"
+          >
+            {videoTrailerMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Clapperboard className="h-3 w-3 mr-1" />}
+            Render Video Trailer
+          </Button>
+          {videoTrailers.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              {videoTrailers.map(a => <MediaAssetRow key={a.id} asset={a} onChanged={onChanged} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function BusinessPanel({ projectId, forecasts, tests, onChanged }: {
   projectId: number;
   forecasts: RevenueForecast[];
@@ -2155,6 +2431,9 @@ export default function ProjectDetail() {
               <TabsTrigger value="business" data-testid="tab-business" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
                 <DollarSign className="h-3 w-3" /> Business
               </TabsTrigger>
+              <TabsTrigger value="studio" data-testid="tab-studio" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
+                <Headphones className="h-3 w-3" /> Studio
+              </TabsTrigger>
               <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
                 <FileText className="h-3 w-3" /> Logs
               </TabsTrigger>
@@ -2335,6 +2614,16 @@ export default function ProjectDetail() {
                 projectId={projectId}
                 forecasts={data.revenueForecasts || []}
                 tests={data.abTests || []}
+                onChanged={invalidate}
+              />
+            </TabsContent>
+
+            <TabsContent value="studio" className="mt-4">
+              <StudioPanel
+                projectId={projectId}
+                mediaAssets={data.mediaAssets || []}
+                characters={storyEntities.filter(e => e.type === "character")}
+                completedCount={completedChapters.length}
                 onChanged={invalidate}
               />
             </TabsContent>
