@@ -24,7 +24,8 @@ import {
 import crypto from "crypto";
 import { generateLaunchPlan, type LaunchItem } from "./launch";
 import { generateAudiobook, generateAudioTrailer, generateVideoTrailer, DEFAULT_NARRATOR_VOICE } from "./media";
-import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
+import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop, parseStrategy, selectNextVertical } from "./autopilot-engine";
+import { notify } from "./notify";
 import { saveDbSeed } from "./seed";
 import { z } from "zod";
 import fs from "fs";
@@ -547,7 +548,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const adminApiPaths = [
     "/api/dashboard", "/api/library", "/api/invites", "/api/projects",
     "/api/trends", "/api/autopilot", "/api/settings", "/api/book-requests",
-    "/api/conversations", "/api/elevenlabs",
+    "/api/conversations", "/api/elevenlabs", "/api/notifications",
   ];
 
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -3212,6 +3213,18 @@ Return JSON with:
         summary: parsed.summary,
       });
 
+      const greenlight = Number(parsed.greenlightScore) || 0;
+      if (greenlight >= 8) {
+        const label = vertical.charAt(0).toUpperCase() + vertical.slice(1);
+        await notify({
+          kind: "trend",
+          title: `High-demand trend: ${label}`,
+          body: `Greenlight ${greenlight}/10 — strong opportunity detected in the ${label} vertical.`,
+          link: "/trends",
+          metadata: { vertical, greenlight },
+        });
+      }
+
       res.json(report);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -3258,20 +3271,32 @@ Return JSON with:
       }
 
       const language = config.targetLanguages?.[0] || "english";
+      const strategy = parseStrategy(config.strategyData);
+      const vertical = await selectNextVertical(config.vertical, strategy);
 
       const run = await storage.createAutopilotRun({
-        vertical: config.vertical,
+        vertical,
         status: "pending",
       });
 
       executeAutopilotRun(
         run.id,
-        config.vertical,
+        vertical,
         language,
         config.minQualityScore,
-        config.budgetCapUsd
-      ).catch((err) => {
+        config.budgetCapUsd,
+        {
+          minGreenlight: strategy.guardrails.minGreenlight,
+          pauseOnLowQuality: strategy.guardrails.pauseOnLowQuality,
+          allowDuplicateVertical: strategy.mode === "portfolio",
+        }
+      ).catch(async (err) => {
         console.error("Autopilot run failed:", err.message);
+        await storage.updateAutopilotRun(run.id, {
+          status: "failed",
+          errorMessage: err.message,
+          completedAt: new Date(),
+        }).catch(() => {});
       });
 
       res.json(run);
@@ -3287,6 +3312,75 @@ Return JSON with:
         return res.status(400).json({ error: "No autopilot run is currently active" });
       }
       res.json({ success: true, message: "Stop signal sent. The run will stop after the current step completes." });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---- Notifications ----
+  app.get("/api/notifications", async (_req, res) => {
+    try {
+      res.json(await storage.getNotifications());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/notifications/digest", async (_req, res) => {
+    try {
+      const all = await storage.getNotifications();
+      const since = Date.now() - 24 * 60 * 60 * 1000;
+      const recent = all.filter(n => new Date(n.createdAt).getTime() >= since);
+      const unreadCount = all.filter(n => !n.isRead).length;
+      const grouped: Record<string, typeof recent> = {};
+      for (const n of recent) {
+        (grouped[n.kind] ||= []).push(n);
+      }
+      const kindLabel: Record<string, string> = {
+        pipeline: "Pipeline",
+        trend: "Trend Alerts",
+        sales: "Sales & Launches",
+        info: "Updates",
+      };
+      const lines: string[] = [`Lexora Digest — last 24 hours`, ``];
+      if (recent.length === 0) {
+        lines.push("No new activity in the last 24 hours.");
+      } else {
+        for (const kind of Object.keys(grouped)) {
+          lines.push(`${kindLabel[kind] || kind.toUpperCase()}:`);
+          for (const n of grouped[kind]) {
+            lines.push(`  • ${n.title}${n.body ? ` — ${n.body}` : ""}`);
+          }
+          lines.push("");
+        }
+      }
+      lines.push(`You have ${unreadCount} unread notification${unreadCount === 1 ? "" : "s"} in Lexora.`);
+      res.json({
+        subject: `Lexora Digest — ${recent.length} update${recent.length === 1 ? "" : "s"} in 24h`,
+        body: lines.join("\n"),
+        count: recent.length,
+        unreadCount,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/notifications/read-all", async (_req, res) => {
+    try {
+      await storage.markAllNotificationsRead();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/notifications/:id/read", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid notification ID" });
+      await storage.markNotificationRead(id);
+      res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

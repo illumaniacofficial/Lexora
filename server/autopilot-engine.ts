@@ -2,9 +2,57 @@ import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL } from "./openai";
 import { estimateCost } from "./cost";
 import { buildConsistencyContext } from "./consistency";
+import { notify } from "./notify";
 
 let isRunning = false;
 let shouldStop = false;
+
+export interface AutopilotStrategy {
+  mode: "single" | "portfolio";
+  portfolio: { vertical: string; priority: number }[];
+  guardrails: { minGreenlight: number; pauseOnLowQuality: boolean };
+}
+
+export const DEFAULT_STRATEGY: AutopilotStrategy = {
+  mode: "single",
+  portfolio: [],
+  guardrails: { minGreenlight: 0, pauseOnLowQuality: false },
+};
+
+export function parseStrategy(raw: unknown): AutopilotStrategy {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Partial<AutopilotStrategy>;
+  const portfolio = Array.isArray(s.portfolio)
+    ? s.portfolio
+        .filter((p): p is { vertical: string; priority: number } => !!p && typeof p.vertical === "string")
+        .map(p => ({ vertical: p.vertical, priority: Number(p.priority) || 5 }))
+    : [];
+  return {
+    mode: s.mode === "portfolio" ? "portfolio" : "single",
+    portfolio,
+    guardrails: {
+      minGreenlight: Number(s.guardrails?.minGreenlight) || 0,
+      pauseOnLowQuality: !!s.guardrails?.pauseOnLowQuality,
+    },
+  };
+}
+
+/**
+ * Picks the next vertical for a portfolio run: highest-priority verticals first,
+ * preferring those that don't yet have a completed book so the portfolio fills
+ * out evenly. Falls back to the single configured vertical.
+ */
+export async function selectNextVertical(fallbackVertical: string, strategy: AutopilotStrategy): Promise<string> {
+  if (strategy.mode !== "portfolio" || strategy.portfolio.length === 0) {
+    return fallbackVertical;
+  }
+  const allProjects = await storage.getProjects();
+  const completedVerticals = new Set(
+    allProjects.filter(p => p.status === "complete").map(p => p.vertical),
+  );
+  const sorted = [...strategy.portfolio].sort((a, b) => b.priority - a.priority);
+  const uncovered = sorted.find(p => !completedVerticals.has(p.vertical));
+  return (uncovered || sorted[0]).vertical;
+}
 
 async function runPipelineStep(
   projectId: number,
@@ -348,16 +396,19 @@ Return JSON with:
   await storage.updateProject(projectId, { status: "complete" });
 }
 
-export async function executeAutopilotRun(runId: number, vertical: string, language: string, minQuality: number, budgetCap: number): Promise<void> {
+export async function executeAutopilotRun(runId: number, vertical: string, language: string, minQuality: number, budgetCap: number, opts?: { minGreenlight?: number; pauseOnLowQuality?: boolean; allowDuplicateVertical?: boolean }): Promise<void> {
   if (isRunning) throw new Error("An autopilot run is already in progress");
   isRunning = true;
   shouldStop = false;
+  const minGreenlight = opts?.minGreenlight || 0;
+  const pauseOnLowQuality = !!opts?.pauseOnLowQuality;
+  const allowDuplicateVertical = !!opts?.allowDuplicateVertical;
+  let bookTitle = "Untitled";
 
   try {
     const existingProject = await findIncompleteProject(vertical);
 
     let projectId: number;
-    let bookTitle: string;
 
     if (existingProject) {
       projectId = existingProject.id;
@@ -370,7 +421,7 @@ export async function executeAutopilotRun(runId: number, vertical: string, langu
         currentStep: `Resuming: "${bookTitle}"`,
       });
     } else {
-      const alreadyCompleted = await hasCompletedBookInVertical(vertical);
+      const alreadyCompleted = !allowDuplicateVertical && await hasCompletedBookInVertical(vertical);
       if (alreadyCompleted) {
         await storage.updateAutopilotRun(runId, {
           status: "complete",
@@ -450,6 +501,13 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
       const currentProject = await storage.getProject(projectId);
       if (currentProject && currentProject.estimatedCost >= budgetCap) {
         await storage.updateAutopilotRun(runId, { status: "stopped", currentStep: "Budget cap reached after trend analysis", completedAt: new Date(), totalTokens: currentProject.totalTokens, estimatedCost: currentProject.estimatedCost });
+        await notify({ kind: "pipeline", title: "Autopilot stopped — budget cap", body: `"${bookTitle}" stopped after trend analysis: budget cap of $${budgetCap} reached.`, link: "/autopilot", metadata: { runId, reason: "budget" } });
+        return;
+      }
+
+      if (minGreenlight > 0 && currentProject && (currentProject.greenlightScore || 0) < minGreenlight) {
+        await storage.updateAutopilotRun(runId, { status: "stopped", currentStep: `Greenlight ${currentProject.greenlightScore}/10 below guardrail (${minGreenlight})`, completedAt: new Date(), totalTokens: currentProject.totalTokens, estimatedCost: currentProject.estimatedCost });
+        await notify({ kind: "pipeline", title: "Autopilot stopped — low greenlight", body: `"${bookTitle}" stopped: greenlight ${currentProject.greenlightScore}/10 is below your guardrail of ${minGreenlight}.`, link: "/autopilot", metadata: { runId, reason: "greenlight" } });
         return;
       }
     }
@@ -473,7 +531,29 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
 
     if (!allChaptersComplete) {
       const continued = await runChapterWriting(projectId, bookTitle, vertical, language, runId, minQuality, budgetCap);
-      if (!continued) return;
+      if (!continued) {
+        const stoppedRun = (await storage.getAutopilotRuns()).find(r => r.id === runId);
+        const isQualityStop = stoppedRun?.currentStep?.startsWith("Quality below threshold");
+        if (isQualityStop) {
+          if (pauseOnLowQuality) {
+            const cfg = await storage.getAutopilotConfig();
+            if (cfg) {
+              const { id: _id, ...cfgRest } = cfg as any;
+              await storage.upsertAutopilotConfig({ ...cfgRest, isActive: false });
+            }
+          }
+          await notify({
+            kind: "pipeline",
+            title: "Autopilot stopped — low quality",
+            body: pauseOnLowQuality
+              ? `"${bookTitle}" fell below the quality threshold. Autopilot has been paused.`
+              : `"${bookTitle}" fell below the quality threshold and the run was stopped.`,
+            link: "/autopilot",
+            metadata: { runId, projectId, reason: "quality" },
+          });
+        }
+        return;
+      }
     }
 
     if (shouldStop) {
@@ -495,12 +575,20 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
       totalTokens: finalProject?.totalTokens || 0,
       estimatedCost: finalProject?.estimatedCost || 0,
     });
+    await notify({
+      kind: "pipeline",
+      title: `Book published: ${bookTitle}`,
+      body: `Autopilot completed "${bookTitle}" (${finalProject?.wordCount || 0} words, $${(finalProject?.estimatedCost || 0).toFixed(2)}).`,
+      link: finalProject ? `/projects/${finalProject.id}` : "/autopilot",
+      metadata: { runId, projectId, vertical },
+    });
   } catch (err: any) {
     await storage.updateAutopilotRun(runId, {
       status: "failed",
       errorMessage: err.message,
       completedAt: new Date(),
     });
+    await notify({ kind: "pipeline", title: "Autopilot run failed", body: `"${bookTitle}" failed: ${err.message}`, link: "/autopilot", metadata: { runId, reason: "error" } });
     throw err;
   } finally {
     isRunning = false;

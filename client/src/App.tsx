@@ -9,6 +9,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import AudioMiniPlayer, { type NarrationState, type PlaybackState } from "@/components/audio-mini-player";
+import { NotificationCenter } from "@/components/notification-center";
 import { Loader2 } from "lucide-react";
 import Login from "@/pages/Login";
 
@@ -116,6 +117,7 @@ function AdminLayout() {
           <header className="flex items-center justify-between px-6 h-12 border-b border-border/30 glass-panel shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-purple-400 transition-colors" aria-label="Toggle sidebar" />
             <div className="flex items-center gap-3">
+              <NotificationCenter />
               <div className="h-1 w-8 rounded-full neon-glow opacity-60" />
               <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
             </div>

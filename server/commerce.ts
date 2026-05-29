@@ -1,5 +1,6 @@
 import { getUncachableStripeClient } from "./stripeClient";
 import { storage } from "./storage";
+import { notify } from "./notify";
 import type { Project, MembershipTier } from "@shared/schema";
 
 const USD = "usd";
@@ -210,6 +211,20 @@ export async function verifyAndFulfillSession(
         });
       }
       await creditReferralConversion(md.refCode, (session.amount_total || 0) / 100);
+      const total = (session.amount_total || 0) / 100;
+      const titles: string[] = [];
+      for (const pid of projectIds) {
+        const proj = await storage.getProject(pid);
+        if (proj) titles.push(proj.title);
+      }
+      const label = titles.length === 1 ? titles[0] : `${projectIds.length} books`;
+      await notify({
+        kind: "sales",
+        title: `New sale — $${total.toFixed(2)}`,
+        body: `${label} purchased${type === "bundle" ? " (bundle)" : ""}.`,
+        link: "/analytics",
+        metadata: { type, total, projectIds },
+      });
     }
   } else if (type === "membership") {
     const readerId = md.readerId ? parseInt(md.readerId, 10) : null;

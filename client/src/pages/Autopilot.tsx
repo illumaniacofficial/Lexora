@@ -11,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle, Play, Loader2, Clock, CheckCircle2, XCircle, StopCircle, Square } from "lucide-react";
+import { Bot, Zap, Shield, DollarSign, Star, Target, BookOpen, Check, Hexagon, Activity, AlertCircle, Play, Loader2, Clock, CheckCircle2, XCircle, StopCircle, Square, Layers, Plus, X, Gauge, TrendingUp } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -26,6 +26,10 @@ const schema = z.object({
   minQualityScore: z.number().min(1).max(10),
   targetLanguages: z.array(z.string()).min(1),
   isActive: z.boolean(),
+  strategyMode: z.enum(["single", "portfolio"]),
+  portfolio: z.array(z.object({ vertical: z.string(), priority: z.number().min(1).max(10) })),
+  minGreenlight: z.number().min(0).max(10),
+  pauseOnLowQuality: z.boolean(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -72,11 +76,12 @@ export default function Autopilot() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { vertical: "money", monthlyBookTarget: 2, budgetCapUsd: 50, minQualityScore: 7, targetLanguages: ["english"], isActive: false },
+    defaultValues: { vertical: "money", monthlyBookTarget: 2, budgetCapUsd: 50, minQualityScore: 7, targetLanguages: ["english"], isActive: false, strategyMode: "single", portfolio: [], minGreenlight: 0, pauseOnLowQuality: false },
   });
 
   useEffect(() => {
     if (config) {
+      const strat = (config.strategyData as any) || {};
       form.reset({
         vertical: (config.vertical as any) || "money",
         monthlyBookTarget: config.monthlyBookTarget,
@@ -84,12 +89,26 @@ export default function Autopilot() {
         minQualityScore: config.minQualityScore,
         targetLanguages: config.targetLanguages || ["english"],
         isActive: config.isActive,
+        strategyMode: strat.mode === "portfolio" ? "portfolio" : "single",
+        portfolio: Array.isArray(strat.portfolio) ? strat.portfolio.map((p: any) => ({ vertical: p.vertical, priority: Number(p.priority) || 5 })) : [],
+        minGreenlight: Number(strat.guardrails?.minGreenlight) || 0,
+        pauseOnLowQuality: !!strat.guardrails?.pauseOnLowQuality,
       });
     }
   }, [config]);
 
   const mutation = useMutation({
-    mutationFn: (data: FormData) => apiRequest("POST", "/api/autopilot", data),
+    mutationFn: (data: FormData) => {
+      const { strategyMode, portfolio, minGreenlight, pauseOnLowQuality, ...rest } = data;
+      return apiRequest("POST", "/api/autopilot", {
+        ...rest,
+        strategyData: {
+          mode: strategyMode,
+          portfolio,
+          guardrails: { minGreenlight, pauseOnLowQuality },
+        },
+      });
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/autopilot"] }); toast({ title: "Configuration saved" }); },
     onError: () => toast({ title: "Save failed", variant: "destructive" }),
   });
@@ -119,6 +138,9 @@ export default function Autopilot() {
   const budget = form.watch("budgetCapUsd");
   const quality = form.watch("minQualityScore");
   const langs = form.watch("targetLanguages");
+  const strategyMode = form.watch("strategyMode");
+  const portfolio = form.watch("portfolio");
+  const minGreenlight = form.watch("minGreenlight");
 
   const toggleLanguage = (lang: string) => {
     const current = form.getValues("targetLanguages") || [];
@@ -127,6 +149,18 @@ export default function Autopilot() {
     } else {
       form.setValue("targetLanguages", [...current, lang]);
     }
+  };
+
+  const addPortfolioVertical = (vertical: string) => {
+    const current = form.getValues("portfolio") || [];
+    if (current.some(p => p.vertical === vertical)) return;
+    form.setValue("portfolio", [...current, { vertical, priority: 5 }]);
+  };
+  const removePortfolioVertical = (vertical: string) => {
+    form.setValue("portfolio", (form.getValues("portfolio") || []).filter(p => p.vertical !== vertical));
+  };
+  const setPortfolioPriority = (vertical: string, priority: number) => {
+    form.setValue("portfolio", (form.getValues("portfolio") || []).map(p => p.vertical === vertical ? { ...p, priority } : p));
   };
 
   if (isLoading) {
@@ -233,11 +267,21 @@ export default function Autopilot() {
               <p className="text-[10px] font-mono text-muted-foreground/40">
                 Vertical: {VERTICAL_LABELS[activeRun.vertical] || activeRun.vertical}
               </p>
-              {activeRun.estimatedCost > 0 && (
-                <p className="text-[10px] font-mono text-muted-foreground/40">
-                  Cost so far: ${activeRun.estimatedCost.toFixed(4)}
-                </p>
-              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-purple-500/10">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-wider flex items-center gap-1.5"><DollarSign className="h-3 w-3" /> Spend vs Cap</span>
+                <span className="text-[10px] font-mono text-white/70" data-testid="text-active-spend">
+                  ${activeRun.estimatedCost.toFixed(4)} <span className="text-muted-foreground/40">/ ${budget}</span>
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-card/50 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${activeRun.estimatedCost / budget > 0.9 ? "bg-red-500" : "bg-gradient-to-r from-purple-500 to-cyan-400"}`}
+                  style={{ width: `${Math.min(100, (activeRun.estimatedCost / budget) * 100)}%` }}
+                  data-testid="bar-active-spend"
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -333,6 +377,75 @@ export default function Autopilot() {
           <Card className="border-border/20 bg-card/30">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 text-purple-400/70" /> Portfolio Strategy
+              </CardTitle>
+              <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Single vertical or a prioritized portfolio</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => form.setValue("strategyMode", "single")}
+                  className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${strategyMode === "single" ? "border-purple-500/50 bg-purple-500/10" : "border-border/30 bg-card/20 hover:border-border/50"}`}
+                  data-testid="button-mode-single"
+                >
+                  <Target className={`h-3.5 w-3.5 ${strategyMode === "single" ? "text-purple-400" : "text-muted-foreground/40"}`} />
+                  <span className="text-[11px] font-bold tracking-tight">Single</span>
+                  <span className="text-[9px] font-mono text-muted-foreground/40 leading-tight">Always use Target Config vertical</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => form.setValue("strategyMode", "portfolio")}
+                  className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${strategyMode === "portfolio" ? "border-purple-500/50 bg-purple-500/10" : "border-border/30 bg-card/20 hover:border-border/50"}`}
+                  data-testid="button-mode-portfolio"
+                >
+                  <Layers className={`h-3.5 w-3.5 ${strategyMode === "portfolio" ? "text-purple-400" : "text-muted-foreground/40"}`} />
+                  <span className="text-[11px] font-bold tracking-tight">Portfolio</span>
+                  <span className="text-[9px] font-mono text-muted-foreground/40 leading-tight">Rotate verticals by priority</span>
+                </button>
+              </div>
+
+              {strategyMode === "portfolio" && (
+                <div className="space-y-3" data-testid="portfolio-editor">
+                  {portfolio.length > 0 && (
+                    <div className="space-y-2">
+                      {[...portfolio].sort((a, b) => b.priority - a.priority).map(p => (
+                        <div key={p.vertical} className="flex items-center gap-3 rounded-lg border border-border/20 bg-card/20 px-3 py-2" data-testid={`portfolio-item-${p.vertical}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-semibold tracking-tight truncate">{VERTICAL_LABELS[p.vertical] || p.vertical}</p>
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <span className="text-[9px] font-mono text-muted-foreground/40 shrink-0">P{p.priority}</span>
+                              <Slider min={1} max={10} step={1} value={[p.priority]} onValueChange={([v]) => setPortfolioPriority(p.vertical, v)} className="flex-1" data-testid={`slider-priority-${p.vertical}`} />
+                            </div>
+                          </div>
+                          <button type="button" onClick={() => removePortfolioVertical(p.vertical)} className="shrink-0 text-muted-foreground/30 hover:text-red-400 transition-colors" data-testid={`button-remove-${p.vertical}`} aria-label="Remove vertical">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Select value="" onValueChange={(v) => addPortfolioVertical(v)}>
+                    <SelectTrigger className="h-9 bg-card/30 border-border/30 font-mono text-[11px]" data-testid="select-add-vertical">
+                      <span className="flex items-center gap-2 text-muted-foreground/50"><Plus className="h-3 w-3" /> Add vertical</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VERTICALS.filter(v => !portfolio.some(p => p.vertical === v)).map(v => (
+                        <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {portfolio.length === 0 && (
+                    <p className="text-[9px] font-mono text-amber-400/50">Add at least one vertical, or Target Config is used as fallback.</p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/20 bg-card/30">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
                 <Shield className="h-3.5 w-3.5 text-amber-400/70" /> Budget & Quality
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Auto-stop when thresholds exceeded</CardDescription>
@@ -361,6 +474,31 @@ export default function Autopilot() {
                     <Slider min={1} max={10} step={0.5} value={[field.value]} onValueChange={([v]) => field.onChange(v)} data-testid="slider-quality" />
                   </FormControl>
                   <div className="flex justify-between text-[9px] font-mono text-muted-foreground/30"><span>1.0</span><span>10.0</span></div>
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="minGreenlight" render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1.5"><Gauge className="h-3 w-3" /> Min Greenlight</FormLabel>
+                    <Badge variant="outline" className="font-mono text-[10px] border-border/30">{minGreenlight === 0 ? "Off" : `${minGreenlight}/10`}</Badge>
+                  </div>
+                  <FormControl>
+                    <Slider min={0} max={10} step={1} value={[field.value]} onValueChange={([v]) => field.onChange(v)} data-testid="slider-greenlight" />
+                  </FormControl>
+                  <p className="text-[9px] font-mono text-muted-foreground/30">Skip the run if trend greenlight score is below this</p>
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="pauseOnLowQuality" render={({ field }) => (
+                <FormItem className="flex items-center justify-between rounded-lg border border-border/20 bg-card/20 px-3 py-2.5">
+                  <div className="space-y-0.5">
+                    <FormLabel className="text-[11px] font-semibold tracking-tight">Pause on low quality</FormLabel>
+                    <p className="text-[9px] font-mono text-muted-foreground/40">Deactivate autopilot if a book is rejected</p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-pause-low-quality" />
+                  </FormControl>
                 </FormItem>
               )} />
             </CardContent>
