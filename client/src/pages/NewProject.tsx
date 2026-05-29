@@ -22,11 +22,45 @@ const schema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(200),
   authorName: z.string().min(1, "Author name is required").max(200),
   description: z.string().max(2000).optional(),
+  targetAudience: z.string().max(500).optional(),
+  toneStyle: z.string().max(500).optional(),
+  keyThemes: z.string().max(800).optional(),
+  comparableTitles: z.string().max(500).optional(),
+  avoid: z.string().max(500).optional(),
+  lengthDepth: z.enum(["auto", "concise", "standard", "comprehensive"]).optional(),
   vertical: z.enum(VERTICALS),
   targetLanguage: z.enum(LANGUAGES),
 });
 
 type FormData = z.infer<typeof schema>;
+
+const LENGTH_OPTIONS: { value: NonNullable<FormData["lengthDepth"]>; label: string }[] = [
+  { value: "auto", label: "Let AI decide" },
+  { value: "concise", label: "Concise — shorter, punchy" },
+  { value: "standard", label: "Standard — balanced depth" },
+  { value: "comprehensive", label: "Comprehensive — deep & thorough" },
+];
+
+const LENGTH_GUIDANCE: Record<string, string> = {
+  concise: "Concise and punchy — fewer chapters, tight and to-the-point.",
+  standard: "Standard length with balanced depth across chapters.",
+  comprehensive: "Comprehensive and thorough — maximum depth, detail, and chapter count.",
+};
+
+function composeGuidance(data: FormData): string | undefined {
+  const sections: string[] = [];
+  if (data.description?.trim()) sections.push(`CORE IDEA / PROMPT:\n${data.description.trim()}`);
+  if (data.targetAudience?.trim()) sections.push(`TARGET AUDIENCE:\n${data.targetAudience.trim()}`);
+  if (data.toneStyle?.trim()) sections.push(`TONE & WRITING STYLE:\n${data.toneStyle.trim()}`);
+  if (data.keyThemes?.trim()) sections.push(`KEY THEMES / TOPICS TO COVER:\n${data.keyThemes.trim()}`);
+  if (data.comparableTitles?.trim()) sections.push(`COMPARABLE / COMPETITOR TITLES:\n${data.comparableTitles.trim()}`);
+  if (data.avoid?.trim()) sections.push(`THINGS TO AVOID:\n${data.avoid.trim()}`);
+  if (data.lengthDepth && data.lengthDepth !== "auto" && LENGTH_GUIDANCE[data.lengthDepth]) {
+    sections.push(`DESIRED LENGTH / DEPTH:\n${LENGTH_GUIDANCE[data.lengthDepth]}`);
+  }
+  if (sections.length === 0) return undefined;
+  return sections.join("\n\n");
+}
 
 const QUICK_START_TEMPLATES: { id: string; label: string; vertical: FormData["vertical"]; title: string; description: string }[] = [
   {
@@ -77,7 +111,7 @@ export default function NewProject() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", vertical: "money", targetLanguage: "english" },
+    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", targetAudience: "", toneStyle: "", keyThemes: "", comparableTitles: "", avoid: "", lengthDepth: "auto", vertical: "money", targetLanguage: "english" },
   });
 
   const currentTitle = form.watch("title");
@@ -115,7 +149,14 @@ export default function NewProject() {
   }, [currentTitle]);
 
   const mutation = useMutation({
-    mutationFn: (data: FormData) => apiRequest("POST", "/api/projects", { ...data, status: "draft" }),
+    mutationFn: (data: FormData) => apiRequest("POST", "/api/projects", {
+      title: data.title,
+      authorName: data.authorName,
+      vertical: data.vertical,
+      targetLanguage: data.targetLanguage,
+      description: composeGuidance(data),
+      status: "draft",
+    }),
     onSuccess: async (res) => {
       const project = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
@@ -254,6 +295,70 @@ export default function NewProject() {
                     <FormControl><SelectTrigger data-testid="select-language" className="h-11 bg-card/30 border-border/30 font-mono text-sm"><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>{LANGUAGES.map(l => <SelectItem key={l} value={l}>{LANGUAGE_LABELS[l] || l}</SelectItem>)}</SelectContent>
                   </Select>
+                </FormItem>
+              )} />
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/30 bg-card/40">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-sm font-bold tracking-tight">Creative Direction <span className="text-muted-foreground/30 font-normal">(optional)</span></CardTitle>
+              <CardDescription className="text-[11px] font-mono text-muted-foreground/40">The more you share, the better the AI matches your intent across outline, chapters, and marketing</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <FormField control={form.control} name="targetAudience" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Target Audience</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} placeholder="Who is this book for? e.g., first-time entrepreneurs in their 20s-30s, busy parents, fans of cozy mysteries..." className="min-h-[70px] bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40 resize-y" data-testid="input-audience" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="toneStyle" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Tone & Writing Style</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} placeholder="e.g., warm and conversational, fast-paced and punchy, lyrical and literary, authoritative and data-driven..." className="min-h-[70px] bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40 resize-y" data-testid="input-tone" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="keyThemes" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Key Themes / Topics to Cover</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} placeholder="The main ideas, topics, plot points, or arguments the book must include..." className="min-h-[80px] bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40 resize-y" data-testid="input-themes" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="comparableTitles" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Comparable / Competitor Titles</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} placeholder="e.g., 'In the style of Atomic Habits meets Deep Work', or comparable novels readers love..." className="min-h-[60px] bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40 resize-y" data-testid="input-comps" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="avoid" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Things to Avoid</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} placeholder="Topics, clichés, tones, or content the AI should steer clear of..." className="min-h-[60px] bg-card/30 border-border/30 font-mono text-sm focus:border-purple-500/40 resize-y" data-testid="input-avoid" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="lengthDepth" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Length & Depth</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl><SelectTrigger data-testid="select-length" className="h-11 bg-card/30 border-border/30 font-mono text-sm"><SelectValue /></SelectTrigger></FormControl>
+                    <SelectContent>{LENGTH_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <FormMessage />
                 </FormItem>
               )} />
             </CardContent>

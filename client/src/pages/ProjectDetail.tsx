@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
-  Save, Edit3, Check, Music, ArrowRight, Globe,
+  Save, Edit3, Check, Music, ArrowRight, Globe, Wand2,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -44,7 +44,7 @@ function StepStatus({ status }: { status: string }) {
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -61,11 +61,36 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   onGenerateAudio: (id: number) => void;
   isGeneratingAudio: boolean;
   mostRecentEditId: number | null;
+  onRevise: (id: number, instruction: string) => void;
+  isRevising: boolean;
+  revisingChapterId: number | null;
+  onStartRevise: (id: number) => void;
+  onCancelRevise: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editContent, setEditContent] = useState("");
+  const [reviseInstruction, setReviseInstruction] = useState("");
 
   const isEditing = editingChapterId === chapter.id;
+  const isRevisingThis = revisingChapterId === chapter.id;
+
+  const startRevising = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setReviseInstruction("");
+    onStartRevise(chapter.id);
+    setExpanded(true);
+  };
+
+  const submitRevise = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRevise(chapter.id, reviseInstruction.trim());
+  };
+
+  const cancelRevise = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onCancelRevise();
+    setReviseInstruction("");
+  };
 
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -150,16 +175,27 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                       <Edit3 className="h-2.5 w-2.5 mr-0.5" /> EDIT
                     </Button>
                   ) : !isProjectComplete ? (
-                    <Button
-                      size="sm" variant="outline"
-                      className="h-6 text-[9px] font-mono border-border/30 hover:border-amber-500/30 hover:text-amber-300 px-1.5"
-                      onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
-                      disabled={isGenerating}
-                      data-testid={`button-regenerate-chapter-${chapter.id}`}
-                      aria-label="Regenerate chapter"
-                    >
-                      <RefreshCw className="h-2.5 w-2.5 mr-0.5" /> REGEN
-                    </Button>
+                    <>
+                      <Button
+                        size="sm" variant="outline"
+                        className="h-6 text-[9px] font-mono border-border/30 hover:border-amber-500/30 hover:text-amber-300 px-1.5"
+                        onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
+                        disabled={isGenerating}
+                        data-testid={`button-regenerate-chapter-${chapter.id}`}
+                        aria-label="Regenerate chapter"
+                      >
+                        <RefreshCw className="h-2.5 w-2.5 mr-0.5" /> REGEN
+                      </Button>
+                      <Button
+                        size="sm" variant="outline"
+                        className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 hover:text-purple-300 px-1.5"
+                        onClick={startRevising}
+                        data-testid={`button-revise-chapter-${chapter.id}`}
+                        aria-label="Revise chapter with AI"
+                      >
+                        <Wand2 className="h-2.5 w-2.5 mr-0.5" /> REVISE
+                      </Button>
+                    </>
                   ) : null}
                 </>
               ) : chapter.status === "generating" ? (
@@ -244,7 +280,48 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           </p>
         </div>
       )}
-      {expanded && !isEditing && chapter.content && (
+      {expanded && !isEditing && isRevisingThis && (
+        <div className="px-4 pb-4 border-t border-purple-500/15">
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-wider flex items-center gap-1">
+              <Wand2 className="h-2.5 w-2.5" /> Revise Chapter {chapter.chapterNumber} with AI
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm" variant="outline"
+                className="h-6 text-[9px] font-mono border-border/30 text-muted-foreground hover:text-foreground px-2"
+                onClick={cancelRevise}
+                disabled={isRevising}
+                data-testid={`button-cancel-revise-${chapter.id}`}
+              >
+                <X className="h-2.5 w-2.5 mr-0.5" /> Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="h-6 text-[9px] font-mono bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 px-2"
+                onClick={submitRevise}
+                disabled={isRevising}
+                data-testid={`button-submit-revise-${chapter.id}`}
+              >
+                {isRevising ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Wand2 className="h-2.5 w-2.5 mr-0.5" />}
+                {isRevising ? "Revising…" : "Revise"}
+              </Button>
+            </div>
+          </div>
+          <Textarea
+            value={reviseInstruction}
+            onChange={(e) => setReviseInstruction(e.target.value)}
+            disabled={isRevising}
+            placeholder="Optional instruction — e.g. 'make the opening more dramatic', 'rename the mentor to Elias', 'tighten the middle section'. Leave blank for a general polish."
+            className="min-h-[80px] text-[12px] bg-card/50 border-purple-500/15 font-mono resize-y focus:border-purple-500/30 leading-relaxed"
+            data-testid={`textarea-revise-chapter-${chapter.id}`}
+          />
+          <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">
+            The AI rewrites this chapter, staying consistent with the rest of the book. The current draft will be replaced.
+          </p>
+        </div>
+      )}
+      {expanded && !isEditing && !isRevisingThis && chapter.content && (
         <div className="px-4 pb-4 border-t border-border/15">
           <ScrollArea className="h-52 mt-3">
             <MarkdownRendererDark content={chapter.content} />
@@ -318,6 +395,13 @@ export default function ProjectDetail() {
       apiRequest("PATCH", `/api/projects/${projectId}/chapters/${chapterId}/edit`, { content }),
     onSuccess: () => { setEditingChapterId(null); invalidate(); toast({ title: "Chapter saved" }); },
     onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+  const [revisingChapterId, setRevisingChapterId] = useState<number | null>(null);
+  const reviseChapterMutation = useMutation({
+    mutationFn: ({ chapterId, instruction }: { chapterId: number; instruction: string }) =>
+      apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/revise`, { instruction }),
+    onSuccess: () => { setRevisingChapterId(null); invalidate(); toast({ title: "Chapter revised", description: "The AI rewrote this chapter." }); },
+    onError: (e: any) => toast({ title: "Revision failed", description: e.message, variant: "destructive" }),
   });
   const markCompleteMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/mark-complete`),
@@ -685,6 +769,11 @@ export default function ProjectDetail() {
                     onGenerateAudio={(cid) => generateChapterAudio(cid)}
                     isGeneratingAudio={generatingAudioChapterId === ch.id}
                     mostRecentEditId={mostRecentEditId}
+                    onRevise={(cid, instruction) => reviseChapterMutation.mutate({ chapterId: cid, instruction })}
+                    isRevising={reviseChapterMutation.isPending && revisingChapterId === ch.id}
+                    revisingChapterId={revisingChapterId}
+                    onStartRevise={(cid) => setRevisingChapterId(cid)}
+                    onCancelRevise={() => setRevisingChapterId(null)}
                   />
                 ))
               )}

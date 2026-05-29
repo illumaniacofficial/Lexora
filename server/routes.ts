@@ -3,6 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
+import { buildConsistencyContext } from "./consistency";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
@@ -301,6 +302,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const aiPaths = [
       /\/api\/projects\/\d+\/generate-outline/,
       /\/api\/projects\/\d+\/chapters\/\d+\/generate/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/revise/,
       /\/api\/projects\/\d+\/generate-cover/,
       /\/api\/projects\/\d+\/chapters\/\d+\/generate-audio/,
       /\/api\/projects\/\d+\/generate-audiobook/,
@@ -915,6 +917,9 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       activeChapterId = chapterId;
       await storage.updateChapter(chapterId, { status: "generating" });
 
+      const priorChapters = await storage.getChapters(projectId);
+      const consistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber);
+
       const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
         const fiction = isFiction(project.vertical);
         const systemPrompt = dna
@@ -961,7 +966,7 @@ Write the full chapter content only, no meta-commentary.`;
             content: systemPrompt,
           }, {
             role: "user",
-            content: chapterInstructions,
+            content: consistencyContext ? `${consistencyContext}\n\n---\n\n${chapterInstructions}` : chapterInstructions,
           }],
           max_completion_tokens: 8192,
         });
@@ -1037,6 +1042,94 @@ Write the full chapter content only, no meta-commentary.`;
       const totalWords = allChapters.reduce((s, c) => s + (c.id === chapterId ? wordCount : c.wordCount), 0);
       await storage.updateProject(projectId, { wordCount: totalWords });
       res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/chapters/:chapterId/revise", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+
+      const project = await storage.getProject(projectId);
+      const chapter = await storage.getChapter(chapterId);
+      if (!project || !chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Not found" });
+      if (project.status === "complete") return res.status(400).json({ error: "Cannot revise chapters of a completed book. Revert to editing first." });
+      if (chapter.status !== "complete" || !chapter.content) return res.status(400).json({ error: "Only completed chapters with content can be revised" });
+
+      const instruction = typeof req.body?.instruction === "string" ? req.body.instruction.trim().slice(0, 2000) : "";
+      const dna = await storage.getBookDna(projectId);
+      const allChapters = await storage.getChapters(projectId);
+      const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber);
+      const fiction = isFiction(project.vertical);
+
+      const result = await runStep(projectId, `Revise Ch.${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
+        const systemPrompt = dna
+          ? `You are a professional ${fiction ? "fiction author" : "author"} revising a chapter ${fiction ? `for a ${project.vertical} novel` : `in the ${project.vertical} niche`}.
+Book: "${project.title}"
+Core Promise: ${dna.corePromise}
+Reader Avatar: ${dna.readerAvatar}
+Tone Rules: ${dna.toneRules}
+Framework: ${dna.frameworkSummary}
+Transformation Arc: ${dna.transformationArc}
+Write in ${project.targetLanguage}.`
+          : `You are a professional ${fiction ? "fiction author" : "author"} revising a chapter of a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`;
+
+        const lengthHint = fiction ? "approximately 2000-3000 words" : "approximately 1500-2000 words";
+        const userPrompt = `${consistencyContext ? `${consistencyContext}\n\n---\n\n` : ""}You are revising Chapter ${chapter.chapterNumber}: "${chapter.title}".
+
+Blueprint: ${chapter.blueprint}
+
+CURRENT CHAPTER DRAFT:
+${chapter.content}
+
+${instruction
+  ? `REVISION INSTRUCTION FROM THE AUTHOR:
+"${instruction}"
+
+Apply this instruction faithfully. Rewrite the full chapter so the instruction is satisfied while preserving everything that is not affected by it.`
+  : `Rewrite and improve this chapter: strengthen prose, pacing, clarity, and impact while preserving the events, facts, characters, and intent of the existing draft.`}
+
+Stay 100% consistent with the rest of the book (names, facts, timeline, terminology, tone, and callbacks established in the story bible above). Keep the chapter ${lengthHint}. Return ONLY the full revised chapter content, no meta-commentary or notes.`;
+
+        const completion = await openai.chat.completions.create({
+          model: HIGH_MODEL,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_completion_tokens: 8192,
+        });
+        const content = completion.choices[0].message.content || "";
+        const tokens = completion.usage?.total_tokens || 3000;
+        return { result: content, tokens };
+      });
+
+      if (!result.trim()) return res.status(500).json({ error: "Revision produced no content" });
+
+      const wordCount = result.trim().split(/\s+/).filter(Boolean).length;
+      const qualityScore = await evaluateChapterQuality(result, chapter.title, project.vertical);
+
+      const updated = await storage.updateChapter(chapterId, {
+        content: result,
+        wordCount,
+        qualityScore,
+        status: "complete",
+        lastEditedAt: new Date(),
+      });
+
+      const refreshed = await storage.getChapters(projectId);
+      const totalWords = refreshed.reduce((s, c) => s + c.wordCount, 0);
+      const completed = refreshed.filter(c => c.status === "complete");
+      const avgQuality = completed.length > 0
+        ? completed.reduce((s, c) => s + (c.qualityScore || 0), 0) / completed.length
+        : 0;
+      await storage.updateProject(projectId, { wordCount: totalWords, qualityScore: avgQuality });
+
+      res.json(updated);
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

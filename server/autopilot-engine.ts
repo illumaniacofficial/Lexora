@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL } from "./openai";
 import { estimateCost } from "./cost";
+import { buildConsistencyContext } from "./consistency";
 
 let isRunning = false;
 let shouldStop = false;
@@ -207,6 +208,9 @@ async function runChapterWriting(projectId: number, bookTitle: string, vertical:
     await storage.updateAutopilotRun(runId, { currentStep: `Writing Ch.${chapter.chapterNumber}: ${chapter.title}` });
     await storage.updateChapter(chapter.id, { status: "generating" });
 
+    const priorChapters = await storage.getChapters(projectId);
+    const consistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber);
+
     const systemPrompt = dna
       ? `You are a professional author writing in the ${vertical} niche.
 Book: "${bookTitle}"
@@ -225,7 +229,7 @@ Write in ${language}.`
           content: systemPrompt,
         }, {
           role: "user",
-          content: `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
+          content: `${consistencyContext ? `${consistencyContext}\n\n---\n\n` : ""}Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
 
 Blueprint: ${chapter.blueprint}
 
