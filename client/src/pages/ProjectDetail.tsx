@@ -1305,7 +1305,7 @@ function AbLabPanel({ projectId, tests, onChanged }: {
   onChanged: () => void;
 }) {
   const { toast } = useToast();
-  const [testType, setTestType] = useState<"title" | "blurb" | "hook">("title");
+  const [testType, setTestType] = useState<"title" | "blurb" | "cover">("title");
 
   const genMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/ab-test`, { testType }),
@@ -1319,7 +1319,7 @@ function AbLabPanel({ projectId, tests, onChanged }: {
     onError: (e: any) => toast({ title: "Apply failed", description: e.message, variant: "destructive" }),
   });
 
-  const typeLabel: Record<string, string> = { title: "Title", blurb: "Blurb", hook: "Hook" };
+  const typeLabel: Record<string, string> = { title: "Title", blurb: "Blurb", cover: "Cover" };
 
   return (
     <div className="space-y-4">
@@ -1341,7 +1341,7 @@ function AbLabPanel({ projectId, tests, onChanged }: {
               <SelectContent>
                 <SelectItem value="title">Title</SelectItem>
                 <SelectItem value="blurb">Blurb</SelectItem>
-                <SelectItem value="hook">Hook</SelectItem>
+                <SelectItem value="cover">Cover</SelectItem>
               </SelectContent>
             </Select>
             <Button

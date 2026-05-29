@@ -1895,7 +1895,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       const project = await storage.getProject(projectId);
       if (!project) return res.status(404).json({ error: "Not found" });
       const { testType } = z.object({
-        testType: z.enum(["title", "blurb", "hook"]).default("title"),
+        testType: z.enum(["title", "blurb", "cover"]).default("title"),
       }).parse(req.body || {});
       const dna = await storage.getBookDna(projectId);
       const marketing = await storage.getMarketingAsset(projectId);
@@ -1947,15 +1947,14 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       if (winnerText) {
         if (test.testType === "title") {
           await storage.updateProject(projectId, { title: winnerText });
-        } else if (test.testType === "blurb" || test.testType === "hook") {
+        } else if (test.testType === "cover") {
+          await storage.updateProject(projectId, { coverPrompt: winnerText });
+        } else if (test.testType === "blurb") {
           const marketing = await storage.getMarketingAsset(projectId);
-          const existingHooks = Array.isArray(marketing?.hooks) ? marketing!.hooks : [];
           const payload = insertMarketingAssetSchema.parse({
             ...(marketing || {}),
             projectId,
-            ...(test.testType === "blurb"
-              ? { shortBlurb: winnerText }
-              : { hooks: [winnerText, ...existingHooks.filter(h => h !== winnerText)] }),
+            shortBlurb: winnerText,
           });
           await storage.upsertMarketingAsset(payload);
         }

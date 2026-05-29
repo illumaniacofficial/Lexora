@@ -102,7 +102,7 @@ export interface AbVariant {
 const AB_TEST_LABELS: Record<string, string> = {
   title: "book title",
   blurb: "back-cover blurb / description",
-  hook: "one-line marketing hook",
+  cover: "cover art-direction concept",
 };
 
 function bookDnaContext(bookDna?: BookDna | null): string {
@@ -124,8 +124,8 @@ export async function generateAbVariants(
   const currentRef =
     testType === "blurb"
       ? marketing?.shortBlurb || marketing?.mediumBlurb || ""
-      : testType === "hook"
-        ? marketing?.hooks?.[0] || ""
+      : testType === "cover"
+        ? project.coverPrompt || ""
         : project.title;
 
   const completion = await openai.chat.completions.create({
@@ -146,7 +146,7 @@ Return JSON with:
     "ctr": <number, estimated click-through rate as a percentage, e.g. 4.2>,
     "rationale": "<one sentence on why this variant works>"
   }
-Make the variants genuinely different in angle/tone. ${testType === "title" ? "Keep titles concise and punchy." : ""}`,
+Make the variants genuinely different in angle/tone. ${testType === "title" ? "Keep titles concise and punchy." : ""}${testType === "cover" ? "Each variant's text should be a concise cover art-direction concept (imagery, color palette, typography mood) that could be handed to a cover designer." : ""}`,
     }],
     max_completion_tokens: 2048,
     response_format: { type: "json_object" },
