@@ -28,6 +28,44 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+const QUICK_START_TEMPLATES: { id: string; label: string; vertical: FormData["vertical"]; title: string; description: string }[] = [
+  {
+    id: "wealth",
+    label: "Wealth & Money",
+    vertical: "money",
+    title: "The Wealth Blueprint: Building Lasting Financial Freedom",
+    description: "A practical, step-by-step guide to building wealth from scratch — covering budgeting, investing, passive income, and a millionaire mindset for everyday readers.",
+  },
+  {
+    id: "self-help",
+    label: "Mindset & Self-Help",
+    vertical: "mindset",
+    title: "Unbreakable: Master Your Mind and Transform Your Life",
+    description: "An actionable self-help book on building mental resilience, daily habits, and unstoppable confidence, with exercises and real-world frameworks.",
+  },
+  {
+    id: "fantasy",
+    label: "Epic Fantasy",
+    vertical: "fantasy",
+    title: "The Ember Crown: A Tale of Magic and Betrayal",
+    description: "An epic fantasy novel following a reluctant hero who discovers ancient magic, navigates court intrigue, and must unite warring kingdoms against a rising darkness.",
+  },
+  {
+    id: "thriller",
+    label: "Mystery Thriller",
+    vertical: "thriller",
+    title: "The Silent Witness: A Gripping Psychological Thriller",
+    description: "A fast-paced psychological thriller about a detective unraveling a series of impossible crimes, full of twists, red herrings, and a shocking final reveal.",
+  },
+  {
+    id: "romance",
+    label: "Contemporary Romance",
+    vertical: "romance",
+    title: "Second Chances in Summer Bay",
+    description: "A heartwarming contemporary romance about two former sweethearts reunited in a coastal town, navigating old wounds, family ties, and the pull of true love.",
+  },
+];
+
 
 
 export default function NewProject() {
@@ -115,6 +153,39 @@ export default function NewProject() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-6">
+          <Card className="border-purple-500/20 bg-card/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-400/70" /> Quick-Start Templates
+              </CardTitle>
+              <CardDescription className="text-[11px] font-mono text-muted-foreground/40">Pre-fill the form with a proven genre starting point</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {QUICK_START_TEMPLATES.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => {
+                      form.setValue("title", tpl.title, { shouldValidate: true });
+                      form.setValue("vertical", tpl.vertical, { shouldValidate: true });
+                      form.setValue("description", tpl.description, { shouldValidate: true });
+                      toast({ title: "Template applied", description: tpl.label });
+                    }}
+                    className="text-left p-3 rounded-xl bg-purple-500/[0.04] border border-purple-500/20 hover:border-purple-400/40 hover:bg-purple-500/10 transition-all group"
+                    data-testid={`button-template-${tpl.id}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base">{VERTICAL_ICONS[tpl.vertical] || "📖"}</span>
+                      <span className="text-[11px] font-mono font-bold text-purple-300/80 group-hover:text-purple-200 truncate">{tpl.label}</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/40 leading-snug line-clamp-2">{tpl.description}</p>
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-border/30 bg-card/40">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight">Manuscript Identity</CardTitle>

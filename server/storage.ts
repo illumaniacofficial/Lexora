@@ -369,11 +369,13 @@ export class DatabaseStorage implements IStorage {
     const result = await db.select({
       totalProjects: sql<number>`count(*)::int`,
       completedProjects: sql<number>`count(*) filter (where ${projects.status} = 'complete')::int`,
+      activeProjects: sql<number>`count(*) filter (where ${projects.status} not in ('complete', 'failed'))::int`,
       totalWords: sql<number>`coalesce(sum(${projects.wordCount}), 0)::int`,
       totalCost: sql<number>`coalesce(sum(${projects.estimatedCost}), 0)::real`,
+      costThisMonth: sql<number>`coalesce(sum(${projects.estimatedCost}) filter (where ${projects.createdAt} >= date_trunc('month', now())), 0)::real`,
       avgQuality: sql<number>`coalesce(avg(${projects.qualityScore}) filter (where ${projects.qualityScore} is not null), 0)::real`,
     }).from(projects);
-    const row = result[0] || { totalProjects: 0, completedProjects: 0, totalWords: 0, totalCost: 0, avgQuality: 0 };
+    const row = result[0] || { totalProjects: 0, completedProjects: 0, activeProjects: 0, totalWords: 0, totalCost: 0, costThisMonth: 0, avgQuality: 0 };
     return row;
   }
 }

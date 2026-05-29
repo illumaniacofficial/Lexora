@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,13 +7,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon, AlertCircle } from "lucide-react";
+import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon, AlertCircle, ArrowUpDown } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { formatScore, VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VERTICALS } from "@shared/schema";
 import type { TrendReport } from "@shared/schema";
+
+const FICTION_VERTICALS = new Set([
+  "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery", "literary-fiction", "dystopian", "erotica",
+  "adventure", "young-adult", "children", "poetry", "drama", "western", "novel", "comedy",
+]);
+
+type TrendSortKey = "greenlight" | "demand" | "competition" | "recent";
 
 function ScoreBar({ label, score }: { label: string; score: number | null | undefined }) {
   const pct = score != null ? (score / 10) * 100 : 0;
@@ -130,6 +137,8 @@ export default function TrendIntelligence() {
   const [selectedVertical, setSelectedVertical] = useState<string>("all");
   const [analyzeVertical, setAnalyzeVertical] = useState("money");
   const [keywords, setKeywords] = useState("");
+  const [sortBy, setSortBy] = useState<TrendSortKey>("greenlight");
+  const [category, setCategory] = useState<"all" | "fiction" | "nonfiction">("all");
 
   const { data: reports = [], isLoading, error } = useQuery<TrendReport[]>({
     queryKey: ["/api/trends", selectedVertical],
@@ -139,6 +148,21 @@ export default function TrendIntelligence() {
       return res.json();
     },
   });
+
+  const displayReports = useMemo(() => {
+    let result = category === "all" ? reports : reports.filter(r =>
+      category === "fiction" ? FICTION_VERTICALS.has(r.vertical) : !FICTION_VERTICALS.has(r.vertical)
+    );
+    const byScore = (key: "demandScore" | "competitionScore" | "greenlightScore") =>
+      [...result].sort((a, b) => (b[key] || 0) - (a[key] || 0));
+    switch (sortBy) {
+      case "demand": result = byScore("demandScore"); break;
+      case "competition": result = byScore("competitionScore"); break;
+      case "recent": result = [...result].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); break;
+      default: result = byScore("greenlightScore");
+    }
+    return result;
+  }, [reports, category, sortBy]);
 
   const analyzeMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/trends/analyze", { vertical: analyzeVertical, keywords }),
@@ -208,14 +232,44 @@ export default function TrendIntelligence() {
       </Card>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">Reports ({reports.length})</h2>
-        <Select value={selectedVertical} onValueChange={setSelectedVertical}>
-          <SelectTrigger className="w-44 h-9 bg-card/30 border-border/30 font-mono text-[11px]" data-testid="select-filter-vertical"><SelectValue placeholder="All Verticals" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Verticals</SelectItem>
-            {VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">Reports ({displayReports.length})</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center rounded-lg border border-border/30 bg-card/30 p-0.5" data-testid="filter-category">
+            {([
+              { key: "all", label: "All" },
+              { key: "fiction", label: "Fiction" },
+              { key: "nonfiction", label: "Non-Fiction" },
+            ] as const).map(c => (
+              <button
+                key={c.key}
+                onClick={() => setCategory(c.key)}
+                className={`px-2.5 h-8 rounded-md font-mono text-[10px] uppercase tracking-wider transition-all ${category === c.key ? "bg-cyan-500/20 text-cyan-300" : "text-muted-foreground/40 hover:text-muted-foreground/70"}`}
+                data-testid={`button-category-${c.key}`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as TrendSortKey)}>
+            <SelectTrigger className="w-40 h-9 bg-card/30 border-border/30 font-mono text-[11px]" data-testid="select-sort-trends">
+              <ArrowUpDown className="h-3 w-3 mr-1 text-muted-foreground/40" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="greenlight">Greenlight Score</SelectItem>
+              <SelectItem value="demand">Demand Score</SelectItem>
+              <SelectItem value="competition">Competition</SelectItem>
+              <SelectItem value="recent">Most Recent</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={selectedVertical} onValueChange={setSelectedVertical}>
+            <SelectTrigger className="w-44 h-9 bg-card/30 border-border/30 font-mono text-[11px]" data-testid="select-filter-vertical"><SelectValue placeholder="All Verticals" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Verticals</SelectItem>
+              {VERTICALS.map(v => <SelectItem key={v} value={v}>{VERTICAL_LABELS[v] || v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {analyzeMutation.isPending && (
@@ -236,7 +290,7 @@ export default function TrendIntelligence() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-96 rounded-xl bg-muted/20" />)}
         </div>
-      ) : reports.length === 0 ? (
+      ) : displayReports.length === 0 ? (
         <Card className="border-border/20 bg-card/30">
           <CardContent className="flex flex-col items-center justify-center py-20">
             <div className="relative">
@@ -249,7 +303,7 @@ export default function TrendIntelligence() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {reports.map(r => <TrendReportCard key={r.id} report={r} />)}
+          {displayReports.map(r => <TrendReportCard key={r.id} report={r} />)}
         </div>
       )}
     </div>

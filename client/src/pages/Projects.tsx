@@ -9,10 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Search, Trash2, BookOpen, ArrowRight, Hexagon, Music } from "lucide-react";
+import { Plus, Search, Trash2, BookOpen, ArrowRight, Hexagon, Music, Clock } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { AlertCircle } from "lucide-react";
 import { formatNumber, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW } from "@/lib/utils";
+import { formatReadTime } from "@/lib/reading";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -209,13 +210,18 @@ export default function Projects() {
                           </div>
                         ))}
                       </div>
-                      {project.chaptersWithAudio > 0 && (
-                        <div className="flex items-center gap-1.5 pt-1">
-                          <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/30 text-cyan-400 bg-cyan-500/5">
-                            <Music className="h-2.5 w-2.5 mr-1" />{project.chaptersWithAudio}/{project.completedChapters} chapters with audio
+                      <div className="flex items-center gap-2 flex-wrap pt-1">
+                        {project.wordCount > 0 && (
+                          <Badge variant="outline" className="text-[9px] font-mono border-border/20 text-muted-foreground/50 bg-white/[0.02]" data-testid={`badge-readtime-${project.id}`}>
+                            <Clock className="h-2.5 w-2.5 mr-1" />{formatReadTime(project.wordCount)} read
                           </Badge>
-                        </div>
-                      )}
+                        )}
+                        {project.chaptersWithAudio > 0 && (
+                          <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/30 text-cyan-400 bg-cyan-500/5">
+                            <Music className="h-2.5 w-2.5 mr-1" />{project.chaptersWithAudio}/{project.completedChapters} with audio
+                          </Badge>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 </Link>

@@ -23,7 +23,7 @@ interface DashboardProject extends Project {
 }
 
 interface DashboardData {
-  stats: { totalProjects: number; completedProjects: number; totalWords: number; totalCost: number; avgQuality: number };
+  stats: { totalProjects: number; completedProjects: number; activeProjects: number; totalWords: number; totalCost: number; costThisMonth: number; avgQuality: number };
   recentProjects: DashboardProject[];
   recentTrends: TrendReport[];
 }
@@ -69,10 +69,10 @@ function useAnimatedCounter(end: number, duration = 800) {
 }
 
 const statConfig = [
-  { icon: BookOpen, label: "PROJECTS", glowClass: "neon-glow", textGlow: "glow-text", accent: "purple" },
-  { icon: FileText, label: "WORDS", glowClass: "neon-glow-cool", textGlow: "glow-text-cyan", accent: "cyan" },
-  { icon: DollarSign, label: "AI SPEND", glowClass: "neon-glow-nature", textGlow: "", accent: "emerald" },
-  { icon: Star, label: "QUALITY", glowClass: "neon-glow-warm", textGlow: "glow-text-pink", accent: "pink" },
+  { icon: BookOpen, label: "BOOKS COMPLETE", glowClass: "neon-glow", textGlow: "glow-text", accent: "purple" },
+  { icon: FileText, label: "WORDS WRITTEN", glowClass: "neon-glow-cool", textGlow: "glow-text-cyan", accent: "cyan" },
+  { icon: DollarSign, label: "COST THIS MONTH", glowClass: "neon-glow-nature", textGlow: "", accent: "emerald" },
+  { icon: Activity, label: "ACTIVE PROJECTS", glowClass: "neon-glow-warm", textGlow: "glow-text-pink", accent: "pink" },
 ];
 
 function StatCard({ label, value, sub, index }: { label: string; value: string; sub?: string; index: number }) {
@@ -129,9 +129,10 @@ export default function Dashboard() {
 
   const unreadCount = bookRequests.filter(r => !r.isRead).length;
 
-  const stats = data?.stats || { totalProjects: 0, completedProjects: 0, totalWords: 0, totalCost: 0, avgQuality: 0 };
+  const stats = data?.stats || { totalProjects: 0, completedProjects: 0, activeProjects: 0, totalWords: 0, totalCost: 0, costThisMonth: 0, avgQuality: 0 };
   const animatedWords = useAnimatedCounter(stats.totalWords);
-  const animatedProjects = useAnimatedCounter(stats.totalProjects);
+  const animatedComplete = useAnimatedCounter(stats.completedProjects);
+  const animatedActive = useAnimatedCounter(stats.activeProjects);
 
   if (isLoading) {
     return (
@@ -181,10 +182,10 @@ export default function Dashboard() {
       <div className="line-glow" />
 
       <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-        <StatCard label="PROJECTS" value={animatedProjects.toString()} sub={`${stats.completedProjects} complete`} index={0} />
-        <StatCard label="WORDS" value={formatNumber(animatedWords)} sub="generated" index={1} />
-        <StatCard label="AI SPEND" value={formatCost(stats.totalCost)} sub="total cost" index={2} />
-        <StatCard label="QUALITY" value={stats.avgQuality > 0 ? `${stats.avgQuality.toFixed(1)}` : "\u2014"} sub="avg score" index={3} />
+        <StatCard label="BOOKS COMPLETE" value={animatedComplete.toString()} sub={`of ${stats.totalProjects} total`} index={0} />
+        <StatCard label="WORDS WRITTEN" value={formatNumber(animatedWords)} sub="all-time" index={1} />
+        <StatCard label="COST THIS MONTH" value={formatCost(stats.costThisMonth)} sub={`${formatCost(stats.totalCost)} all-time`} index={2} />
+        <StatCard label="ACTIVE PROJECTS" value={animatedActive.toString()} sub="in progress" index={3} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">

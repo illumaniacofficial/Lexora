@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save } from "lucide-react";
+import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -20,7 +20,10 @@ import { useToast } from "@/hooks/use-toast";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
 import type { AppSettings } from "@shared/schema";
 import { VoiceSelector } from "@/components/voice-selector";
-import { DEFAULT_VOICE_ID, VOICE_OPTIONS } from "@/components/audio-mini-player";
+import { DEFAULT_VOICE_ID, VOICE_OPTIONS, isFishAudioVoice } from "@/components/audio-mini-player";
+import { isBrowserVoice, browserTTSSpeak, browserTTSStop } from "@/lib/browser-tts";
+
+const PREVIEW_SAMPLE = "This is a preview of the selected narrator voice. Lexora brings your books to life with natural, expressive narration.";
 
 const schema = z.object({
   defaultAuthorName: z.string().min(1, "Author name is required").max(200),
@@ -50,6 +53,55 @@ const exportFormatOptions = [
 export default function Settings() {
   const { toast } = useToast();
   const { data: settings, isLoading, error } = useQuery<AppSettings | null>({ queryKey: ["/api/settings"] });
+  const [previewState, setPreviewState] = useState<"idle" | "loading" | "playing">("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previewTokenRef = useRef(0);
+
+  const stopPreview = () => {
+    previewTokenRef.current++;
+    browserTTSStop();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPreviewState("idle");
+  };
+
+  useEffect(() => () => stopPreview(), []);
+
+  const playPreview = async (voiceId: string) => {
+    if (previewState !== "idle") {
+      stopPreview();
+      return;
+    }
+    if (isBrowserVoice(voiceId)) {
+      setPreviewState("playing");
+      browserTTSSpeak(PREVIEW_SAMPLE, voiceId, 1, {
+        onEnd: () => setPreviewState("idle"),
+        onError: () => { setPreviewState("idle"); toast({ title: "Preview failed", variant: "destructive" }); },
+      });
+      return;
+    }
+    const token = ++previewTokenRef.current;
+    setPreviewState("loading");
+    try {
+      const endpoint = isFishAudioVoice(voiceId) ? "/api/fish-tts" : "/api/tts";
+      const res = await apiRequest("POST", endpoint, { text: PREVIEW_SAMPLE, voice: voiceId });
+      const data = await res.json();
+      if (token !== previewTokenRef.current) return;
+      if (!data.audio) throw new Error("No audio returned");
+      const audio = new Audio(`data:audio/${data.format || "mp3"};base64,${data.audio}`);
+      audioRef.current = audio;
+      audio.onended = () => setPreviewState("idle");
+      audio.onerror = () => { setPreviewState("idle"); toast({ title: "Preview failed", variant: "destructive" }); };
+      await audio.play();
+      setPreviewState("playing");
+    } catch (err: any) {
+      if (token !== previewTokenRef.current) return;
+      setPreviewState("idle");
+      toast({ title: "Preview unavailable", description: err?.message || "Could not generate voice sample", variant: "destructive" });
+    }
+  };
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -284,9 +336,21 @@ export default function Settings() {
               <FormField control={form.control} name="ttsDefaultVoice" render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">Default Narrator Voice</FormLabel>
-                  <FormControl>
-                    <VoiceSelector value={field.value} onChange={field.onChange} />
-                  </FormControl>
+                  <div className="flex items-center gap-2">
+                    <FormControl>
+                      <div className="flex-1"><VoiceSelector value={field.value} onChange={field.onChange} /></div>
+                    </FormControl>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => playPreview(field.value)}
+                      className="h-10 shrink-0 border-emerald-500/30 bg-emerald-500/5 text-emerald-300 hover:bg-emerald-500/10 font-mono text-[11px]"
+                      data-testid="button-preview-voice"
+                    >
+                      {previewState === "loading" ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : previewState === "playing" ? <Square className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
+                      {previewState === "loading" ? "LOADING" : previewState === "playing" ? "STOP" : "PREVIEW"}
+                    </Button>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )} />

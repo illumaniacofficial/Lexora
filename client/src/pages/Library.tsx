@@ -7,13 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   Library as LibraryIcon, Search, ArrowRight, Crown, BookOpen, Star, Filter,
   ArrowUpDown, Hexagon, AlertCircle, Trophy, Medal, Share2, Copy, Trash2, Link as LinkIcon, Eye, Plus, Loader2, Music,
+  Download, FileText, FileCode, FileDown,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { exportBookPdf, downloadBookFile } from "@/lib/export-book";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
@@ -35,6 +38,65 @@ function getRankBorder(rank: number) {
   if (rank === 2) return "border-slate-400/20 hover:border-slate-300/30";
   if (rank === 3) return "border-amber-700/20 hover:border-amber-600/30";
   return "border-purple-500/15 hover:border-purple-400/25";
+}
+
+function ExportMenu({ book, variant }: { book: LibraryBook; variant: "card" | "row" }) {
+  const { toast } = useToast();
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
+
+  const handlePdf = async (e: React.MouseEvent) => {
+    stop(e);
+    setExportingPdf(true);
+    try {
+      const res = await apiRequest("GET", `/api/projects/${book.id}`);
+      const data = await res.json();
+      await exportBookPdf(
+        { id: book.id, title: book.title, authorName: book.authorName, coverImageUrl: data.project?.coverImageUrl || `/api/projects/${book.id}/cover-image` },
+        data.chapters || [],
+      );
+      toast({ title: "PDF exported" });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err?.message || "Could not export PDF", variant: "destructive" });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild onClick={stop}>
+        {variant === "card" ? (
+          <Button
+            size="sm" variant="outline"
+            className="mt-3 px-2.5 border-border/20 bg-card/40 text-muted-foreground/70 hover:text-purple-300 hover:bg-purple-500/10 font-mono text-[10px] h-8 shrink-0"
+            data-testid={`button-export-library-${book.id}`}
+          >
+            {exportingPdf ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+          </Button>
+        ) : (
+          <Button
+            size="sm" variant="ghost"
+            className="h-7 px-2 text-[10px] font-mono text-muted-foreground/50 hover:text-purple-300 hover:bg-purple-500/10 shrink-0"
+            data-testid={`button-export-list-${book.id}`}
+          >
+            {exportingPdf ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+          </Button>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-md border-border/30">
+        <DropdownMenuItem onClick={handlePdf} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-pdf-${book.id}`}>
+          <FileDown className="h-3.5 w-3.5 mr-2 text-amber-400/70" /> Export PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { stop(e); downloadBookFile(book.id, "txt"); }} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-txt-${book.id}`}>
+          <FileText className="h-3.5 w-3.5 mr-2 text-cyan-400/70" /> Export TXT
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { stop(e); downloadBookFile(book.id, "html"); }} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-html-${book.id}`}>
+          <FileCode className="h-3.5 w-3.5 mr-2 text-purple-400/70" /> Export HTML
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export default function Library() {
@@ -401,16 +463,19 @@ export default function Library() {
                           </span>
                         )}
                       </div>
-                      <Button
-                        size="sm"
-                        className="w-full mt-3 neon-glow-nature text-white border-0 font-mono text-[10px] h-8 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)] transition-shadow"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
-                        disabled={loadingReaderId === book.id}
-                        data-testid={`button-read-library-${book.id}`}
-                      >
-                        {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Eye className="h-3 w-3 mr-1.5" />}
-                        READ BOOK
-                      </Button>
+                      <div className="flex items-center gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          className="flex-1 neon-glow-nature text-white border-0 font-mono text-[10px] h-8 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)] transition-shadow"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
+                          disabled={loadingReaderId === book.id}
+                          data-testid={`button-read-library-${book.id}`}
+                        >
+                          {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Eye className="h-3 w-3 mr-1.5" />}
+                          READ BOOK
+                        </Button>
+                        <ExportMenu book={book} variant="card" />
+                      </div>
                     </CardContent>
                   </Card>
                 </Link>
@@ -464,6 +529,7 @@ export default function Library() {
                         >
                           {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Eye className="h-3 w-3 mr-1" /> Read</>}
                         </Button>
+                        <ExportMenu book={book} variant="row" />
                         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/15 group-hover:text-purple-400/50 group-hover:translate-x-1 transition-all duration-300 shrink-0" />
                       </div>
                     </Link>

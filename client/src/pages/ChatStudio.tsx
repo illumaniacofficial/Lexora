@@ -115,9 +115,15 @@ const suggestions = [
   { icon: Sparkles, title: "Full Book Prompt", desc: "Send a complete structure to auto-generate", prompt: "Help me full book prompt: " },
 ];
 
+const ACTIVE_CONV_KEY = "lexora.chat.activeConvId";
+const DRAFT_KEY = "lexora.chat.draft";
+
 export default function ChatStudio() {
-  const [activeConvId, setActiveConvId] = useState<number | null>(null);
-  const [input, setInput] = useState("");
+  const [activeConvId, setActiveConvId] = useState<number | null>(() => {
+    const stored = localStorage.getItem(ACTIVE_CONV_KEY);
+    return stored ? Number(stored) : null;
+  });
+  const [input, setInput] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -174,6 +180,22 @@ export default function ChatStudio() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sendMessage.isPending]);
+
+  useEffect(() => {
+    if (activeConvId) localStorage.setItem(ACTIVE_CONV_KEY, String(activeConvId));
+    else localStorage.removeItem(ACTIVE_CONV_KEY);
+  }, [activeConvId]);
+
+  useEffect(() => {
+    if (input) localStorage.setItem(DRAFT_KEY, input);
+    else localStorage.removeItem(DRAFT_KEY);
+  }, [input]);
+
+  useEffect(() => {
+    if (!convsLoading && activeConvId && !conversations.some(c => c.id === activeConvId)) {
+      setActiveConvId(null);
+    }
+  }, [convsLoading, conversations, activeConvId]);
 
   const handleSend = async () => {
     const trimmed = input.trim();

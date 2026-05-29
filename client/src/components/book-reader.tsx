@@ -1008,7 +1008,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 </button>
               </div>
             )}
-            <span className={cn("font-mono text-[10px]", "text-stone-500")}>
+            {(page.type === "text" || page.type === "chapter-title") && (
+              <span className="hidden md:inline font-serif text-xs text-stone-400 max-w-[200px] truncate" data-testid="text-reader-chapter-title" title={`Chapter ${page.chapterNumber}: ${page.chapterTitle}`}>
+                Ch. {page.chapterNumber} · {page.chapterTitle}
+              </span>
+            )}
+            <span className={cn("font-mono text-[10px]", "text-stone-500")} data-testid="text-reader-page-indicator">
               {currentPage + 1}{showDual && rightPage ? `–${currentPage + 2}` : ""} / {pages.length}
             </span>
             <Button size="icon" variant="ghost" onClick={handleClose}
