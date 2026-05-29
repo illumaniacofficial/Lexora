@@ -232,36 +232,70 @@ function relMediaUrl(absPath: string): string {
 
 export interface SpeakerSegment { speaker: string; text: string }
 
+// Split text into windows on paragraph/sentence boundaries so no chapter content
+// is dropped before segmentation. Each window stays within the model's input budget.
+function windowText(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+  const windows: string[] = [];
+  let rest = text;
+  while (rest.length > maxLen) {
+    let cut = rest.lastIndexOf("\n\n", maxLen);
+    if (cut < maxLen * 0.5) cut = rest.lastIndexOf("\n", maxLen);
+    if (cut < maxLen * 0.5) cut = rest.lastIndexOf(". ", maxLen);
+    if (cut < maxLen * 0.5) cut = maxLen;
+    windows.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) windows.push(rest);
+  return windows.filter(Boolean);
+}
+
+async function segmentWindow(passage: string, characterNames: string[]): Promise<{ segments: SpeakerSegment[]; tokens: number }> {
+  const completion = await openai.chat.completions.create({
+    model: FAST_MODEL,
+    messages: [
+      {
+        role: "system",
+        content: "You segment book prose into an ordered list of speaker turns for a multi-voice audiobook. Narration and unattributed text use speaker \"narrator\". Spoken dialogue uses the speaking character's name when it can be confidently attributed; otherwise \"narrator\". Preserve the original wording exactly and in order. Respond ONLY with valid JSON.",
+      },
+      {
+        role: "user",
+        content: `Known characters: ${characterNames.join(", ")}.\n\nReturn JSON: { "segments": [{ "speaker": "narrator"|<character name>, "text": "..." }] } covering the full passage in order.\n\nPassage:\n${passage}`,
+      },
+    ],
+    max_completion_tokens: 4000,
+    response_format: { type: "json_object" },
+  });
+  const tokens = completion.usage?.total_tokens || 0;
+  const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+  const segs: SpeakerSegment[] = Array.isArray(parsed.segments) ? parsed.segments : [];
+  const valid = segs.filter((s) => s && typeof s.text === "string" && s.text.trim());
+  return { segments: valid, tokens };
+}
+
 async function segmentChapter(content: string, characterNames: string[]): Promise<{ segments: SpeakerSegment[]; tokens: number }> {
   const clean = stripForNarration(content);
   if (characterNames.length === 0) {
     return { segments: [{ speaker: "narrator", text: clean }], tokens: 0 };
   }
+  // Process the ENTIRE chapter in ordered windows so no tail content is dropped.
+  const windows = windowText(clean, 8000);
   try {
-    const completion = await openai.chat.completions.create({
-      model: FAST_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: "You segment book prose into an ordered list of speaker turns for a multi-voice audiobook. Narration and unattributed text use speaker \"narrator\". Spoken dialogue uses the speaking character's name when it can be confidently attributed; otherwise \"narrator\". Preserve the original wording exactly and in order. Respond ONLY with valid JSON.",
-        },
-        {
-          role: "user",
-          content: `Known characters: ${characterNames.join(", ")}.\n\nReturn JSON: { "segments": [{ "speaker": "narrator"|<character name>, "text": "..." }] } covering the full passage in order.\n\nPassage:\n${clean.slice(0, 8000)}`,
-        },
-      ],
-      max_completion_tokens: 4000,
-      response_format: { type: "json_object" },
-    });
-    const tokens = completion.usage?.total_tokens || 0;
-    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
-    const segs: SpeakerSegment[] = Array.isArray(parsed.segments) ? parsed.segments : [];
-    const valid = segs.filter((s) => s && typeof s.text === "string" && s.text.trim());
-    if (valid.length === 0) return { segments: [{ speaker: "narrator", text: clean }], tokens };
-    // If the model dropped a lot of content, fall back to plain narration to avoid truncated audio.
-    const covered = valid.reduce((sum, s) => sum + s.text.length, 0);
-    if (covered < clean.length * 0.6) return { segments: [{ speaker: "narrator", text: clean }], tokens };
-    return { segments: valid, tokens };
+    const all: SpeakerSegment[] = [];
+    let tokens = 0;
+    for (const w of windows) {
+      const { segments, tokens: t } = await segmentWindow(w, characterNames);
+      tokens += t;
+      // If any window comes back materially short, the segmentation is unreliable —
+      // fall back to plain narration of the full chapter to guarantee completeness.
+      const wCovered = segments.reduce((sum, s) => sum + s.text.length, 0);
+      if (segments.length === 0 || wCovered < w.length * 0.85) {
+        return { segments: [{ speaker: "narrator", text: clean }], tokens };
+      }
+      all.push(...segments);
+    }
+    if (all.length === 0) return { segments: [{ speaker: "narrator", text: clean }], tokens };
+    return { segments: all, tokens };
   } catch {
     return { segments: [{ speaker: "narrator", text: clean }], tokens: 0 };
   }
