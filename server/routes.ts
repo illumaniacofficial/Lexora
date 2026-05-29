@@ -6,6 +6,7 @@ import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
+import { saveDbSeed } from "./seed";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
@@ -627,6 +628,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const data = insertProjectSchema.parse(req.body);
       const project = await storage.createProject(data);
       res.status(201).json(project);
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -687,6 +689,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       await storage.deleteProject(id);
       res.status(204).send();
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -991,6 +994,7 @@ Write the full chapter content only, no meta-commentary.`;
       });
 
       res.json({ chapterId, wordCount, qualityScore, status: "complete" });
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
       if (activeChapterId) {
         await storage.updateChapter(activeChapterId, { status: "pending" }).catch(() => {});
@@ -1050,6 +1054,7 @@ Write the full chapter content only, no meta-commentary.`;
       if (!allComplete) return res.status(400).json({ error: "All chapters must be complete" });
       const updated = await storage.updateProject(id, { status: "complete" });
       res.json(updated);
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

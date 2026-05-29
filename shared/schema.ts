@@ -194,7 +194,7 @@ export const appSettings = pgTable("app_settings", {
   chapterWordTarget: integer("chapter_word_target").notNull().default(3000),
   autoGenerateCover: boolean("auto_generate_cover").notNull().default(true),
   autoGenerateMarketing: boolean("auto_generate_marketing").notNull().default(true),
-  ttsDefaultVoice: text("tts_default_voice").notNull().default("alloy"),
+  ttsDefaultVoice: text("tts_default_voice").notNull().default("fabb918a343d4591b428083a35980dc4"),
   storefrontTitle: text("storefront_title").notNull().default("Lexora Book Collection"),
   exportFormat: text("export_format").notNull().default("html"),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),

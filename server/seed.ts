@@ -8,6 +8,10 @@ function toSnake(s: string): string {
   return s.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
 }
 
+function toCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
 function escapeStr(s: string): string {
   return s.replace(/'/g, "''").replace(/\\/g, "\\\\");
 }
@@ -51,6 +55,42 @@ const SEED_ORDER = [
   "runSteps", "appSettings", "inviteTokens", "bookRequests",
   "chatConversations", "chatMessages", "autopilotConfig", "autopilotRuns",
 ];
+
+let _savePending = false;
+
+export async function saveDbSeed(): Promise<void> {
+  if (_savePending) return;
+  _savePending = true;
+  setTimeout(async () => {
+    _savePending = false;
+    try {
+      const seedPath = path.join(process.cwd(), "db-seed.json");
+      const snapshot: Record<string, any[]> = {};
+
+      for (const key of SEED_ORDER) {
+        const tableName = TABLE_MAP[key];
+        try {
+          const result = await db.execute(sql.raw(`SELECT * FROM "${tableName}" ORDER BY id`));
+          const rows = (result as any).rows ?? [];
+          snapshot[key] = rows.map((row: any) => {
+            const out: any = {};
+            for (const [k, v] of Object.entries(row)) {
+              out[toCamel(k)] = v;
+            }
+            return out;
+          });
+        } catch {
+          snapshot[key] = [];
+        }
+      }
+
+      fs.writeFileSync(seedPath, JSON.stringify(snapshot, null, 2));
+      console.log(`[seed] Auto-saved db-seed.json (${(fs.statSync(seedPath).size / 1024).toFixed(1)} KB)`);
+    } catch (err) {
+      console.error("[seed] Auto-save failed:", err);
+    }
+  }, 3000);
+}
 
 export async function seedDatabase() {
   try {
