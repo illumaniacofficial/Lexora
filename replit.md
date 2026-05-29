@@ -48,6 +48,8 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Per-Voice Audio Caching**: Audio files stored in voice-specific folders (`uploads/audio/{voiceId}/project-{id}-chapter-{id}.mp3`). TTS page-level audio cached to disk (`uploads/audio/tts-cache/{voiceId}/`). Existing files served instantly without regenerating.
 - **Editing Stage**: Provides an inline chapter editor with save/cancel, timestamps, and status management. REGEN blocked when project is complete.
 - **Chat Studio**: A conversational AI interface for planning and writing books.
+- **Pacing & Tension Analyzer**: A "Pacing" tab on the project page that uses AI (FAST_MODEL) to score tension and pacing per completed chapter, renders an SVG tension/pacing curve, and flags slow/rushed chapters with rationale. Persisted as a `chapter_analyses` row with `kind="pacing_curve"` (chapterId null). Requires at least 2 completed chapters.
+- **Live AI Co-Writer**: Inline co-writing inside the chapter editor (editing stage). "Continue from cursor" and "Rewrite selection" actions (HIGH_MODEL) produce a suggestion preview with accept/reject; accepting splices the text into the draft, saved via the existing edit path. The editor is locked read-only while a suggestion is pending so captured cursor/selection offsets stay valid. Blocked when the project is complete.
 
 **Security & Auth**:
 - Admin authentication via express-session + connect-pg-simple. Seeded admin user (username: `admin`, password: `lexora2026`). Login page at `/login`, all `/api/*` routes (except `/api/auth/*`, `/api/storefront-auth/*`, `/api/store/*`) require admin session.
@@ -78,6 +80,7 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Express**: Web application framework for Node.js.
 - **Zod**: TypeScript-first schema declaration and validation library. `shared/schema.ts` and `shared/models/chat.ts` import `zod/v4` to stay type-compatible with drizzle-zod 0.8.x (which emits zod v4 schema types). Frontend form schemas still use the classic `zod` (v3) import via `@hookform/resolvers/zod`.
 - **drizzle-zod**: Generates Zod insert schemas from Drizzle tables (v0.8.x). Note: it auto-excludes auto-generated identity columns from insert schemas, so `.omit()` calls must not list `id` for `generatedAlwaysAsIdentity` columns.
+- **Schema note — audio_tracks uniqueness**: Null-safe uniqueness on `(project_id, scope, voice_id, chapter_id, page_index)` uses a `unique(...).nullsNotDistinct()` constraint (Postgres 15+/16). An earlier `coalesce()` expression-based unique index caused the Publish migration generator to emit mismatched operator classes (`operator class "text_ops" does not accept data type integer`), which blocked production publishes; the constraint form emits clean migration SQL. App-level dedup uses a transactional check-then-write in `storage.createAudioTrack`, so no code references the index by name.
 - **react-helmet-async**: For managing document head tags.
 - **bcryptjs**: Password hashing for admin and reader accounts.
 - **express-session + connect-pg-simple**: Session management backed by PostgreSQL.

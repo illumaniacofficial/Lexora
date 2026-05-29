@@ -557,7 +557,11 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
             ref={editTextareaRef}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
-            className="min-h-[300px] text-[12px] bg-card/50 border-amber-500/15 font-mono resize-y focus:border-amber-500/30 leading-relaxed"
+            readOnly={cowriteBusy !== null || suggestion !== null}
+            className={cn(
+              "min-h-[300px] text-[12px] bg-card/50 border-amber-500/15 font-mono resize-y focus:border-amber-500/30 leading-relaxed",
+              (cowriteBusy !== null || suggestion !== null) && "opacity-80 cursor-not-allowed",
+            )}
             data-testid={`textarea-edit-chapter-${chapter.id}`}
           />
           <div className="flex items-center justify-between mt-1">
@@ -1042,7 +1046,8 @@ function PacingPanel({ analysis, onAnalyze, isPending, canAnalyze, chapterCount 
   canAnalyze: boolean;
   chapterCount: number;
 }) {
-  const result = (analysis?.data as any)?.result as { chapters?: PacingPoint[]; summary?: string } | undefined;
+  const raw = analysis?.data as any;
+  const result = (raw?.result ?? raw) as { chapters?: PacingPoint[]; summary?: string } | undefined;
   const points = result?.chapters || [];
   const flagged = points.filter(p => p.flag !== "balanced");
   return (
