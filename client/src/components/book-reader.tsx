@@ -15,6 +15,7 @@ interface BookReaderProps {
   authorName: string;
   chapters: Chapter[];
   coverImageUrl?: string | null;
+  projectId?: number;
   onClose: () => void;
   onStartNarration?: (narration: NarrationState) => void;
 }
@@ -24,7 +25,7 @@ type PageContent =
   | { type: "toc"; chapters: { number: number; title: string }[] }
   | { type: "intro"; title: string; author: string; chapterCount: number }
   | { type: "chapter-title"; chapterNumber: number; chapterTitle: string }
-  | { type: "text"; chapterNumber: number; chapterTitle: string; text: string; pageInChapter: number; totalPagesInChapter: number }
+  | { type: "text"; chapterNumber: number; chapterTitle: string; text: string; pageInChapter: number; totalPagesInChapter: number; chapterId: number }
   | { type: "outro"; title: string; author: string };
 
 type PageTheme = "parchment" | "cream" | "white" | "sepia" | "dark" | "midnight";
@@ -111,7 +112,7 @@ function buildPages(title: string, authorName: string, chapters: Chapter[], cove
     if (ch.content) {
       const textPages = splitTextIntoPages(ch.content, linesPerPage, charsPerLine);
       textPages.forEach((text, i) => {
-        pages.push({ type: "text", chapterNumber: ch.chapterNumber, chapterTitle: ch.title, text, pageInChapter: i + 1, totalPagesInChapter: textPages.length });
+        pages.push({ type: "text", chapterNumber: ch.chapterNumber, chapterTitle: ch.title, text, pageInChapter: i + 1, totalPagesInChapter: textPages.length, chapterId: ch.id });
       });
     }
   }
@@ -438,7 +439,7 @@ function BookPage({ page, theme, fontSize, side, pageNum, totalPages, isFlipping
   );
 }
 
-export default function BookReader({ title, authorName, chapters, coverImageUrl, onClose, onStartNarration }: BookReaderProps) {
+export default function BookReader({ title, authorName, chapters, coverImageUrl, projectId, onClose, onStartNarration }: BookReaderProps) {
   const { toast } = useToast();
   const completedChapters = chapters.filter(c => c.status === "complete" && c.content);
   const [currentPage, setCurrentPage] = useState(0);
@@ -489,7 +490,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   );
 
   const textPages = useMemo(() => {
-    const result: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string; globalPageIndex: number }[] = [];
+    const result: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string; globalPageIndex: number; chapterId?: number }[] = [];
     pages.forEach((p, idx) => {
       if (p.type === "intro") {
         result.push({ chapterNumber: 0, chapterTitle: "Introduction", pageInChapter: 1, totalPagesInChapter: 1, text: `${p.title}. Written by ${p.author}. ${p.chapterCount} ${p.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`, globalPageIndex: idx });
@@ -497,7 +498,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         result.push({ chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`, globalPageIndex: idx });
       } else if (p.type === "text") {
         const tp = p as Extract<PageContent, { type: "text" }>;
-        result.push({ chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text, globalPageIndex: idx });
+        result.push({ chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text, globalPageIndex: idx, chapterId: tp.chapterId });
       }
     });
     return result;
@@ -628,7 +629,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx };
   }, [pages, showDual, getPageNarrationText]);
 
-  const fetchAudio = useCallback(async (text: string, voice: NarratorVoice): Promise<string> => {
+  const pageAudioContext = useCallback((pageIdx: number) => {
+    const pg = pages[pageIdx];
+    if (!projectId || !pg || pg.type !== "text") return undefined;
+    return { projectId, chapterId: pg.chapterId, pageIndex: Math.max(0, pg.pageInChapter - 1) };
+  }, [pages, projectId]);
+
+  const fetchAudio = useCallback(async (text: string, voice: NarratorVoice, ctx?: { projectId: number; chapterId: number; pageIndex: number }): Promise<string> => {
     const cacheKey = `${voice}:${text.slice(0, 100)}:${text.length}`;
     const cached = audioCacheRef.current.get(cacheKey);
     if (cached) return cached;
@@ -636,7 +643,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice }),
+      body: JSON.stringify({ text, voice, ...(ctx || {}) }),
     });
     if (!response.ok) {
       const errBody = await response.text().catch(() => "Unknown error");
@@ -663,9 +670,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     if (nextIdx >= pages.length) return;
     const nextData = getPageText(nextIdx);
     if (nextData) {
-      fetchAudio(nextData.text, selectedVoice).catch(() => {});
+      fetchAudio(nextData.text, selectedVoice, pageAudioContext(nextIdx)).catch(() => {});
     }
-  }, [pages, getPageText, fetchAudio, selectedVoice, isNarratablePage]);
+  }, [pages, getPageText, fetchAudio, selectedVoice, isNarratablePage, pageAudioContext]);
 
   const playPageRef = useRef<(pageIdx: number) => Promise<void>>();
 
@@ -756,7 +763,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
 
       let audioDataUrl: string;
       try {
-        audioDataUrl = await fetchAudio(cleanText, selectedVoice);
+        audioDataUrl = await fetchAudio(cleanText, selectedVoice, pageAudioContext(pageIdx));
       } catch (fetchErr: any) {
         console.warn("AI TTS failed in reader, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
@@ -868,11 +875,12 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         bookTitle: title, chapterTitle: firstPage.chapterTitle, chapterNumber: firstPage.chapterNumber,
         pageInChapter: firstPage.pageInChapter, totalPagesInChapter: firstPage.totalPagesInChapter,
         text: firstPage.text, voice: selectedVoice, allPages: textPages, currentPageIndex: 0,
+        projectId,
       });
     }
     stopNarration();
     onClose();
-  }, [currentPage, pages, isNarrating, narrationProgress, onStartNarration, title, selectedVoice, textPages, stopNarration, onClose]);
+  }, [currentPage, pages, isNarrating, narrationProgress, onStartNarration, title, selectedVoice, textPages, stopNarration, onClose, projectId]);
 
   useEffect(() => {
     return () => {

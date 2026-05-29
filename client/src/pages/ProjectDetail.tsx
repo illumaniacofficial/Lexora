@@ -3527,6 +3527,7 @@ export default function ProjectDetail() {
           authorName={project.authorName || "Unknown Author"}
           chapters={chapters}
           coverImageUrl={project.coverImageUrl}
+          projectId={project.id}
           onClose={() => setShowReader(false)}
           onStartNarration={startNarration}
         />

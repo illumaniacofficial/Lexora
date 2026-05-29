@@ -2900,6 +2900,10 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       if (fs.existsSync(filePath)) {
         const stat = fs.statSync(filePath);
         const audioUrl = `/uploads/audio/${safeVoice}/${filename}`;
+        linkChapterAudioTrack({
+          projectId, chapterId, pageIndex: null, scope: "chapter",
+          voiceId, audioUrl, fileSize: stat.size, wordCount: chapter.wordCount ?? 0,
+        }).catch(() => {});
         return res.json({ audioUrl, chapterId, size: stat.size, cached: true });
       }
 
@@ -2919,6 +2923,10 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
 
       const audioUrl = `/uploads/audio/${safeVoice}/${filename}`;
       await storage.updateChapter(chapterId, { audioUrl });
+      linkChapterAudioTrack({
+        projectId, chapterId, pageIndex: null, scope: "chapter",
+        voiceId, audioUrl, fileSize: combined.length, wordCount: chapter.wordCount ?? 0,
+      }).catch(() => {});
 
       res.json({ audioUrl, chapterId, size: combined.length });
     } catch (err: any) {
@@ -4078,6 +4086,56 @@ Return JSON with:
   const TTS_DISK_DIR = path.resolve("uploads/audio/tts-cache");
   fs.mkdirSync(TTS_DISK_DIR, { recursive: true });
 
+  // Convert an absolute path under uploads/ into a public /uploads/... URL.
+  function uploadsUrl(absPath: string): string {
+    const rel = path.relative(path.resolve("uploads"), absPath).split(path.sep).join("/");
+    return `/uploads/${rel}`;
+  }
+
+  // Best-effort: associate generated audio with a book's chapter via the
+  // audio_tracks table so the audio "sticks" to the book profile and can be
+  // discovered/reused later. Never throws into the request path.
+  async function linkChapterAudioTrack(opts: {
+    projectId: number;
+    chapterId: number;
+    pageIndex: number | null;
+    scope: "page" | "chapter";
+    voiceId: string;
+    audioUrl: string;
+    fileSize?: number | null;
+    wordCount?: number;
+  }) {
+    try {
+      const chapter = await storage.getChapter(opts.chapterId);
+      if (!chapter || chapter.projectId !== opts.projectId) return;
+      await storage.upsertAudioTrack({
+        projectId: opts.projectId,
+        chapterId: opts.chapterId,
+        scope: opts.scope,
+        pageIndex: opts.pageIndex,
+        voiceId: opts.voiceId,
+        audioUrl: opts.audioUrl,
+        fileSize: opts.fileSize ?? null,
+        wordCount: opts.wordCount ?? 0,
+      });
+    } catch (err) {
+      console.error("linkChapterAudioTrack failed:", err);
+    }
+  }
+
+  // Parse optional book/chapter/page context from a TTS request body so reader
+  // narration can be tied back to the originating book.
+  function parseAudioContext(body: any): { projectId: number; chapterId: number; pageIndex: number | null } | null {
+    const projectId = parseId(body?.projectId == null ? undefined : String(body.projectId));
+    const chapterId = parseId(body?.chapterId == null ? undefined : String(body.chapterId));
+    if (!projectId || !chapterId) return null;
+    const rawPage = body?.pageIndex;
+    const pageIndex = typeof rawPage === "number" && Number.isFinite(rawPage) && rawPage >= 0
+      ? Math.floor(rawPage)
+      : null;
+    return { projectId, chapterId, pageIndex };
+  }
+
   function ttsDiskPath(voiceId: string, textHash: string): string {
     const safeVoice = voiceId.replace(/[^a-zA-Z0-9_-]/g, "");
     const dir = path.join(TTS_DISK_DIR, safeVoice);
@@ -4097,16 +4155,32 @@ Return JSON with:
       const trimmed = text.slice(0, 4000);
       const voiceId = voice || "fabb918a343d4591b428083a35980dc4";
       const cacheKey = ttsCacheKey(trimmed, voiceId);
+      const ctx = parseAudioContext(req.body);
+      const diskFile = ttsDiskPath(voiceId, cacheKey);
+      const linkTrack = () => {
+        if (ctx) {
+          linkChapterAudioTrack({
+            projectId: ctx.projectId,
+            chapterId: ctx.chapterId,
+            pageIndex: ctx.pageIndex,
+            scope: "page",
+            voiceId,
+            audioUrl: uploadsUrl(diskFile),
+            wordCount: trimmed.split(/\s+/).filter(Boolean).length,
+          }).catch(() => {});
+        }
+      };
 
       const cached = ttsCache.get(cacheKey);
       if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
+        linkTrack();
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      const diskFile = ttsDiskPath(voiceId, cacheKey);
       if (fs.existsSync(diskFile)) {
         const base64Audio = fs.readFileSync(diskFile).toString("base64");
         ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+        linkTrack();
         return res.json({ audio: base64Audio, format: "mp3" });
       }
 
@@ -4116,6 +4190,7 @@ Return JSON with:
       fs.writeFileSync(diskFile, audioBuffer);
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
       cleanTtsCache();
+      linkTrack();
 
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
@@ -4156,16 +4231,32 @@ Return JSON with:
 
       const trimmed = text.slice(0, 4000);
       const cacheKey = ttsCacheKey(trimmed, voice || "fish-default");
+      const ctx = parseAudioContext(req.body);
+      const diskFile = ttsDiskPath(`fish_${voice || "default"}`, cacheKey);
+      const linkTrack = () => {
+        if (ctx) {
+          linkChapterAudioTrack({
+            projectId: ctx.projectId,
+            chapterId: ctx.chapterId,
+            pageIndex: ctx.pageIndex,
+            scope: "page",
+            voiceId: `fish_${voice || "default"}`,
+            audioUrl: uploadsUrl(diskFile),
+            wordCount: trimmed.split(/\s+/).filter(Boolean).length,
+          }).catch(() => {});
+        }
+      };
 
       const cached = ttsCache.get(cacheKey);
       if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
+        linkTrack();
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      const diskFile = ttsDiskPath(`fish_${voice || "default"}`, cacheKey);
       if (fs.existsSync(diskFile)) {
         const base64Audio = fs.readFileSync(diskFile).toString("base64");
         ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+        linkTrack();
         return res.json({ audio: base64Audio, format: "mp3" });
       }
 
@@ -4198,6 +4289,7 @@ Return JSON with:
       fs.writeFileSync(diskFile, audioBuffer);
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
       cleanTtsCache();
+      linkTrack();
 
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
@@ -4221,16 +4313,59 @@ Return JSON with:
       if (chapters.length === 0) return res.status(400).json({ error: "No completed chapters to narrate" });
 
       const voiceId = voice || "fabb918a343d4591b428083a35980dc4";
+      const dir = voiceAudioDir(voiceId);
       const audioChunks: Buffer[] = [];
 
       for (const chapter of chapters.sort((a, b) => a.chapterNumber - b.chapterNumber)) {
+        const filePath = path.join(dir, chapterAudioFilename(projectId, chapter.id));
+
+        // Reuse the chapter's already-saved per-voice audio file when present so
+        // we don't re-spend TTS credits regenerating it.
+        if (fs.existsSync(filePath)) {
+          const reused = fs.readFileSync(filePath);
+          const audioUrl = uploadsUrl(filePath);
+          if (!chapter.audioUrl) {
+            await storage.updateChapter(chapter.id, { audioUrl });
+          }
+          linkChapterAudioTrack({
+            projectId,
+            chapterId: chapter.id,
+            pageIndex: null,
+            scope: "chapter",
+            voiceId,
+            audioUrl,
+            fileSize: reused.length,
+            wordCount: chapter.wordCount ?? 0,
+          }).catch(() => {});
+          audioChunks.push(reused);
+          continue;
+        }
+
         const cleanText = (chapter.content || "").replace(/[#*_`~>\[\]()]/g, "");
         if (!cleanText.trim()) continue;
         const textChunks = chunkText(cleanText);
+        const chapterBufs: Buffer[] = [];
         for (const chunk of textChunks) {
-          const buf = await elevenLabsTTS(chunk, voiceId);
-          audioChunks.push(buf);
+          chapterBufs.push(await elevenLabsTTS(chunk, voiceId));
         }
+        if (chapterBufs.length === 0) continue;
+
+        // Persist the freshly generated chapter audio to the book profile.
+        const chapterCombined = Buffer.concat(chapterBufs);
+        fs.writeFileSync(filePath, chapterCombined);
+        const audioUrl = uploadsUrl(filePath);
+        await storage.updateChapter(chapter.id, { audioUrl });
+        linkChapterAudioTrack({
+          projectId,
+          chapterId: chapter.id,
+          pageIndex: null,
+          scope: "chapter",
+          voiceId,
+          audioUrl,
+          fileSize: chapterCombined.length,
+          wordCount: chapter.wordCount ?? 0,
+        }).catch(() => {});
+        audioChunks.push(chapterCombined);
       }
 
       if (audioChunks.length === 0) return res.status(400).json({ error: "No audio generated" });

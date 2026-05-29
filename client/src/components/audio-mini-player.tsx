@@ -49,8 +49,24 @@ interface NarrationState {
   totalPagesInChapter: number;
   text: string;
   voice: NarratorVoice;
-  allPages: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string; globalPageIndex?: number }[];
+  projectId?: number;
+  allPages: { chapterNumber: number; chapterTitle: string; pageInChapter: number; totalPagesInChapter: number; text: string; globalPageIndex?: number; chapterId?: number }[];
   currentPageIndex: number;
+}
+
+interface AudioContext {
+  projectId: number;
+  chapterId: number;
+  pageIndex: number;
+}
+
+// Derive the book/chapter/page context for a page so generated audio can be
+// persisted server-side to the originating book. Returns undefined for pages
+// without a real chapter (intro/outro) or when projectId is unknown.
+function pageAudioContext(narration: NarrationState, pageIdx: number): AudioContext | undefined {
+  const p = narration.allPages[pageIdx];
+  if (!narration.projectId || !p || p.chapterId == null) return undefined;
+  return { projectId: narration.projectId, chapterId: p.chapterId, pageIndex: Math.max(0, p.pageInChapter - 1) };
 }
 
 interface AudioMiniPlayerProps {
@@ -74,7 +90,7 @@ function cacheKey(text: string, voice: string): string {
   return `${voice}:${text.slice(0, 100)}:${text.length}`;
 }
 
-async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<string> {
+async function fetchAudioCached(text: string, voice: NarratorVoice, ctx?: AudioContext): Promise<string> {
   const key = cacheKey(text, voice);
   const cached = audioCache.get(key);
   if (cached) return cached;
@@ -83,7 +99,7 @@ async function fetchAudioCached(text: string, voice: NarratorVoice): Promise<str
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: cleanText, voice }),
+    body: JSON.stringify({ text: cleanText, voice, ...(ctx || {}) }),
   });
   if (!response.ok) {
     const errBody = await response.text().catch(() => "Unknown error");
@@ -159,7 +175,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   const prefetchNext = useCallback((currentIdx: number, voice: NarratorVoice, allPages: NarrationState["allPages"]) => {
     const nextIdx = currentIdx + 1;
     if (nextIdx < allPages.length) {
-      fetchAudioCached(allPages[nextIdx].text, voice).catch(() => {});
+      fetchAudioCached(allPages[nextIdx].text, voice, pageAudioContext(narrationRef.current, nextIdx)).catch(() => {});
     }
   }, []);
 
@@ -259,7 +275,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
 
       let audioData: string;
       try {
-        audioData = await fetchAudioCached(text, voice);
+        audioData = await fetchAudioCached(text, voice, pageAudioContext(narrationRef.current, expectedIdx));
       } catch (fetchErr: any) {
         console.warn("AI TTS failed, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();

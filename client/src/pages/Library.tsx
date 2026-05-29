@@ -571,6 +571,7 @@ export default function Library() {
           authorName={readerBook.authorName || "Unknown Author"}
           chapters={readerChapters}
           coverImageUrl={readerBook.coverImageUrl}
+          projectId={readerBook.id}
           onClose={() => { setReaderBook(null); setReaderChapters([]); }}
           onStartNarration={startNarration}
         />

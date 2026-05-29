@@ -534,6 +534,7 @@ function StorefrontContent({ token }: { token: string }) {
             authorName={bookDetail.authorName || "Unknown Author"}
             chapters={bookDetail.chapters as any}
             coverImageUrl={bookDetail.coverImageUrl ? `/api/store/${token}/cover/${bookDetail.id}` : null}
+            projectId={bookDetail.id}
             onClose={() => setShowReader(false)}
             onStartNarration={(narration) => setNarrationState(narration)}
           />
