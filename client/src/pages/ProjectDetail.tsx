@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,17 +22,19 @@ import {
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { exportBookPdf, TRIM_SIZES } from "@/lib/export-book";
+import { exportBookPdf, TRIM_SIZES, downloadEditionFile } from "@/lib/export-book";
+import { LANGUAGE_LABELS } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter } from "@shared/schema";
 import { VOICE_OPTIONS, DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
 import { Switch } from "@/components/ui/switch";
 import { Headphones, Clapperboard, Radio, Mic2 } from "lucide-react";
 import { Network, Library, Fingerprint, Plus, Trash2, DollarSign, FlaskConical, Trophy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface ProjectDetailData {
@@ -53,7 +55,12 @@ interface ProjectDetailData {
   exportJobs?: ExportJob[];
   brandKit?: BrandKit;
   mediaAssets?: MediaAsset[];
+  editions?: EditionWithChapters[];
 }
+
+type EditionWithChapters = BookEdition & { chapters: EditionChapter[] };
+
+const LANGUAGES = ["english", "spanish", "portuguese", "french", "german"] as const;
 
 interface ForecastMonthData { month: number; units: number; gross: number; royalty: number; cumulative: number }
 interface ForecastScenarioData { name: string; multiplier: number; totalRoyalty: number; totalUnits: number; months: ForecastMonthData[] }
@@ -1924,6 +1931,211 @@ function MarketPanel({ projectId, reports, hasOutline, onChanged }: {
   );
 }
 
+const EDITION_EXPORT_FORMATS: { format: "txt" | "html" | "epub" | "docx" | "mobi"; label: string; icon: typeof FileText }[] = [
+  { format: "epub", label: "EPUB", icon: BookOpen },
+  { format: "docx", label: "DOCX", icon: FileText },
+  { format: "mobi", label: "MOBI", icon: FileDown },
+  { format: "html", label: "HTML", icon: FileText },
+  { format: "txt", label: "TXT", icon: FileText },
+];
+
+function EditionChapterRow({ projectId, edition, chapter }: { projectId: number; edition: BookEdition; chapter: EditionChapter }) {
+  const { toast } = useToast();
+  const [voice, setVoice] = useState<string>(DEFAULT_VOICE_ID);
+  const [generating, setGenerating] = useState(false);
+  const [hasAudio, setHasAudio] = useState<boolean>(!!chapter.audioUrl);
+
+  const generate = async () => {
+    setGenerating(true);
+    try {
+      await apiRequest("POST", `/api/projects/${projectId}/editions/${edition.id}/chapters/${chapter.id}/generate-audio`, { voice });
+      setHasAudio(true);
+      toast({ title: "Edition audio saved", description: "MP3 ready for download" });
+    } catch (err: any) {
+      toast({ title: "Audio generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = `/api/projects/${projectId}/editions/${edition.id}/chapters/${chapter.id}/audio?voice=${encodeURIComponent(voice)}`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-card/40" data-testid={`row-edition-chapter-${chapter.id}`}>
+      <span className="text-[10px] font-mono text-muted-foreground/50 w-8 shrink-0">#{chapter.chapterNumber}</span>
+      <span className="text-[11px] font-mono truncate flex-1">{chapter.title}</span>
+      <span className="text-[9px] font-mono text-muted-foreground/40 shrink-0 hidden sm:inline">{chapter.wordCount ?? 0}w</span>
+      <Select value={voice} onValueChange={setVoice}>
+        <SelectTrigger className="h-6 w-[120px] text-[9px] font-mono bg-card/40 border-border/20" data-testid={`select-edition-voice-${chapter.id}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STUDIO_VOICES.map(v => (
+            <SelectItem key={v.value} value={v.value} className="text-[10px] font-mono">{v.label}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button size="sm" variant="outline" className="h-6 px-2 text-[9px] font-mono border-border/20 bg-card/40" onClick={generate} disabled={generating} data-testid={`button-edition-gen-audio-${chapter.id}`}>
+        {generating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Volume2 className="h-3 w-3" />}
+      </Button>
+      {hasAudio && (
+        <Button size="sm" variant="outline" className="h-6 px-2 text-[9px] font-mono border-cyan-500/30 text-cyan-300 bg-card/40" onClick={download} data-testid={`button-edition-dl-audio-${chapter.id}`}>
+          <Music className="h-3 w-3" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function EditionsPanel({ projectId, project, editions, completedCount }: { projectId: number; project: Project; editions: EditionWithChapters[]; completedCount: number }) {
+  const { toast } = useToast();
+  const [addLang, setAddLang] = useState<string>("");
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const sourceLang = (project.targetLanguage || "english").toLowerCase();
+  const existingLangs = new Set(editions.map(e => e.language));
+  const availableLangs = LANGUAGES.filter(l => l !== sourceLang && !existingLangs.has(l));
+  const isTranslating = editions.some(e => e.status === "translating");
+  // Status/chapters refresh automatically via the parent project query's 5s
+  // refetchInterval, so no separate polling loop is needed here.
+
+  const translateMutation = useMutation({
+    mutationFn: (language: string) => apiRequest("POST", `/api/projects/${projectId}/editions`, { language }),
+    onSuccess: () => {
+      setAddLang("");
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
+      toast({ title: "Translation started", description: "Chapters are being translated in the background" });
+    },
+    onError: (err: any) => toast({ title: "Could not start translation", description: err.message, variant: "destructive" }),
+  });
+
+  const statusBadge = (status: string) => {
+    if (status === "complete") return <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400">COMPLETE</Badge>;
+    if (status === "translating") return <Badge variant="outline" className="text-[9px] font-mono border-amber-500/30 text-amber-300"><Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" />TRANSLATING</Badge>;
+    if (status === "failed") return <Badge variant="outline" className="text-[9px] font-mono border-red-500/30 text-red-400">FAILED</Badge>;
+    return <Badge variant="outline" className="text-[9px] font-mono border-border/30 text-muted-foreground/60">{status.toUpperCase()}</Badge>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono flex items-center gap-2">
+            <Globe className="h-4 w-4 text-blue-400" /> Translated Editions
+          </CardTitle>
+          <p className="text-[10px] font-mono text-muted-foreground/50">
+            Original language: <span className="text-blue-300">{LANGUAGE_LABELS[sourceLang] || sourceLang}</span>. Translate completed chapters into new languages with terminology & tone QA.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {completedCount === 0 ? (
+            <p className="text-[11px] font-mono text-muted-foreground/50">Complete at least one chapter before translating.</p>
+          ) : availableLangs.length === 0 ? (
+            <p className="text-[11px] font-mono text-muted-foreground/50">All supported languages already have an edition.</p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Select value={addLang} onValueChange={setAddLang}>
+                <SelectTrigger className="h-8 w-[180px] text-[11px] font-mono bg-card/40 border-border/20" data-testid="select-add-language">
+                  <SelectValue placeholder="Select language…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLangs.map(l => (
+                    <SelectItem key={l} value={l} className="text-[11px] font-mono">{LANGUAGE_LABELS[l] || l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                className="h-8 neon-glow text-white border-0 font-mono text-[10px]"
+                disabled={!addLang || translateMutation.isPending}
+                onClick={() => addLang && translateMutation.mutate(addLang)}
+                data-testid="button-translate-edition"
+              >
+                {translateMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Globe className="h-3 w-3 mr-1" />}
+                TRANSLATE
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {editions.length === 0 ? (
+        <Card className="border-border/20 bg-card/30">
+          <CardContent className="flex flex-col items-center justify-center py-10">
+            <Globe className="h-9 w-9 text-blue-500/30" />
+            <p className="font-bold mt-3 tracking-tight text-sm">No translated editions yet</p>
+            <p className="text-[10px] text-muted-foreground/40 font-mono mt-1">Pick a language above to create one</p>
+          </CardContent>
+        </Card>
+      ) : (
+        editions.map(edition => (
+          <Card key={edition.id} className="border-border/20 bg-card/30" data-testid={`card-edition-${edition.id}`}>
+            <CardContent className="py-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-7 px-1.5"
+                  onClick={() => setExpanded(expanded === edition.id ? null : edition.id)}
+                  disabled={edition.chapters.length === 0}
+                  data-testid={`button-expand-edition-${edition.id}`}
+                >
+                  {expanded === edition.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </Button>
+                <Globe className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                <span className="text-[12px] font-mono font-bold" data-testid={`text-edition-language-${edition.id}`}>{LANGUAGE_LABELS[edition.language] || edition.language}</span>
+                {statusBadge(edition.status)}
+                <span className="text-[9px] font-mono text-muted-foreground/40">{edition.chapters.length} ch</span>
+                <div className="flex-1" />
+                {edition.status === "complete" && edition.chapters.length > 0 && (
+                  <>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="h-7 px-2 text-[9px] font-mono border-border/20 bg-card/40" data-testid={`button-export-edition-${edition.id}`}>
+                          <Download className="h-3 w-3 mr-1" /> EXPORT
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {EDITION_EXPORT_FORMATS.map(f => (
+                          <DropdownMenuItem key={f.format} onClick={() => downloadEditionFile(projectId, edition.id, f.format)} className="text-[11px] font-mono" data-testid={`menuitem-export-edition-${edition.id}-${f.format}`}>
+                            <f.icon className="h-3 w-3 mr-2" /> {f.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 px-2 text-[9px] font-mono border-border/20 bg-card/40"
+                      onClick={() => translateMutation.mutate(edition.language)}
+                      disabled={translateMutation.isPending}
+                      data-testid={`button-retranslate-edition-${edition.id}`}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" /> RE-RUN
+                    </Button>
+                  </>
+                )}
+              </div>
+              {expanded === edition.id && edition.chapters.length > 0 && (
+                <div className="mt-3 space-y-0.5 border-t border-border/10 pt-2">
+                  {edition.chapters.map(ch => (
+                    <EditionChapterRow key={ch.id} projectId={projectId} edition={edition} chapter={ch} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
+  );
+}
+
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -2434,6 +2646,9 @@ export default function ProjectDetail() {
               <TabsTrigger value="studio" data-testid="tab-studio" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
                 <Headphones className="h-3 w-3" /> Studio
               </TabsTrigger>
+              <TabsTrigger value="languages" data-testid="tab-languages" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
+                <Globe className="h-3 w-3" /> Languages
+              </TabsTrigger>
               <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
                 <FileText className="h-3 w-3" /> Logs
               </TabsTrigger>
@@ -2625,6 +2840,15 @@ export default function ProjectDetail() {
                 characters={storyEntities.filter(e => e.type === "character")}
                 completedCount={completedChapters.length}
                 onChanged={invalidate}
+              />
+            </TabsContent>
+
+            <TabsContent value="languages" className="mt-4">
+              <EditionsPanel
+                projectId={projectId}
+                project={project}
+                editions={data.editions || []}
+                completedCount={completedChapters.length}
               />
             </TabsContent>
 

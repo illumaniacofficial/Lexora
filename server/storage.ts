@@ -179,10 +179,14 @@ export interface IStorage {
   markAllNotificationsRead(): Promise<void>;
 
   getBookEditions(projectId: number): Promise<BookEdition[]>;
+  getBookEdition(id: number): Promise<BookEdition | undefined>;
   createBookEdition(data: InsertBookEdition): Promise<BookEdition>;
   updateBookEdition(id: number, data: Partial<InsertBookEdition>): Promise<BookEdition>;
   getEditionChapters(editionId: number): Promise<EditionChapter[]>;
+  getEditionChapter(id: number): Promise<EditionChapter | undefined>;
   createEditionChapter(data: InsertEditionChapter): Promise<EditionChapter>;
+  updateEditionChapter(id: number, data: Partial<InsertEditionChapter>): Promise<EditionChapter>;
+  deleteEditionChapters(editionId: number): Promise<void>;
 
   getWorkspaceMembers(): Promise<WorkspaceMember[]>;
   createWorkspaceMember(data: InsertWorkspaceMember): Promise<WorkspaceMember>;
@@ -754,6 +758,10 @@ export class DatabaseStorage implements IStorage {
   async getBookEditions(projectId: number) {
     return db.select().from(bookEditions).where(eq(bookEditions.projectId, projectId)).orderBy(desc(bookEditions.createdAt));
   }
+  async getBookEdition(id: number) {
+    const [edition] = await db.select().from(bookEditions).where(eq(bookEditions.id, id));
+    return edition;
+  }
   async createBookEdition(data: InsertBookEdition) {
     const [created] = await db.insert(bookEditions).values(data).returning();
     return created;
@@ -765,9 +773,20 @@ export class DatabaseStorage implements IStorage {
   async getEditionChapters(editionId: number) {
     return db.select().from(editionChapters).where(eq(editionChapters.editionId, editionId)).orderBy(editionChapters.chapterNumber);
   }
+  async getEditionChapter(id: number) {
+    const [chapter] = await db.select().from(editionChapters).where(eq(editionChapters.id, id));
+    return chapter;
+  }
   async createEditionChapter(data: InsertEditionChapter) {
     const [created] = await db.insert(editionChapters).values(data).returning();
     return created;
+  }
+  async updateEditionChapter(id: number, data: Partial<InsertEditionChapter>) {
+    const [updated] = await db.update(editionChapters).set(data).where(eq(editionChapters.id, id)).returning();
+    return updated;
+  }
+  async deleteEditionChapters(editionId: number) {
+    await db.delete(editionChapters).where(eq(editionChapters.editionId, editionId));
   }
 
   async getWorkspaceMembers() {

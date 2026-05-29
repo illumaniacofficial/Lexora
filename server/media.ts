@@ -110,7 +110,7 @@ async function synthSegment(text: string, voiceId: string): Promise<Buffer> {
 }
 
 // Synthesize arbitrary-length text to a single mp3 buffer.
-async function synthText(text: string, voiceId: string): Promise<Buffer> {
+export async function synthText(text: string, voiceId: string): Promise<Buffer> {
   const clean = stripForNarration(text);
   if (!clean) return Buffer.alloc(0);
   const parts: Buffer[] = [];

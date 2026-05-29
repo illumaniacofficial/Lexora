@@ -10,7 +10,7 @@ import { extractStoryEntities } from "./graph";
 import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
-import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema } from "@shared/schema";
+import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema, LANGUAGES } from "@shared/schema";
 import { buildEpub } from "./epub";
 import { buildDocx } from "./docx";
 import { buildMobi } from "./mobi";
@@ -23,7 +23,7 @@ import {
 } from "./commerce";
 import crypto from "crypto";
 import { generateLaunchPlan, type LaunchItem } from "./launch";
-import { generateAudiobook, generateAudioTrailer, generateVideoTrailer, DEFAULT_NARRATOR_VOICE } from "./media";
+import { generateAudiobook, generateAudioTrailer, generateVideoTrailer, DEFAULT_NARRATOR_VOICE, synthText } from "./media";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop, parseStrategy, selectNextVertical } from "./autopilot-engine";
 import { notify } from "./notify";
 import { saveDbSeed } from "./seed";
@@ -391,6 +391,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // have predictable paths, so re-check book access before serving for paid books.
   app.get(/^\/uploads\/audio\/.*\.mp3$/, async (req, res, next) => {
     try {
+      // Edition (translated) audio is admin-only — block public static access.
+      if (/edition-\d+-chapter-\d+\.mp3$/.test(req.path)) {
+        if (req.session?.role === "admin" && req.session?.adminId) return next();
+        return res.status(401).json({ error: "Authentication required" });
+      }
       const m = req.path.match(/project-(\d+)-chapter-\d+\.mp3$/);
       if (!m) return next();
       const project = await storage.getProject(parseInt(m[1], 10));
@@ -606,6 +611,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const library = await Promise.all(completed.map(async (project) => {
         const marketing = await storage.getMarketingAsset(project.id);
         const chapterList = await storage.getChapters(project.id);
+        const editionList = await storage.getBookEditions(project.id);
         const { coverImageUrl, ...rest } = project;
         return {
           ...rest,
@@ -614,6 +620,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           chapterCount: chapterList.length,
           completedChapters: chapterList.filter(c => c.status === "complete").length,
           chaptersWithAudio: chapterList.filter(c => !!c.audioUrl).length,
+          editionLanguages: editionList.filter(e => e.status === "complete").map(e => e.language),
         };
       }));
       res.json(library);
@@ -1279,7 +1286,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const brandKit = project.brandKitId ? await storage.getBrandKit(project.brandKitId) : undefined;
       const launchSchedules = await storage.getLaunchSchedules(id);
       const mediaAssets = await storage.getMediaAssets(id);
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules, mediaAssets });
+      const editionList = await storage.getBookEditions(id);
+      const editions = await Promise.all(editionList.map(async (e) => ({
+        ...e,
+        chapters: await storage.getEditionChapters(e.id),
+      })));
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules, mediaAssets, editions });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2661,6 +2673,316 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
       storage.createAnalyticsEvent({ projectId, eventType: "listen", value: 1, metadata: { chapterId } }).catch(() => {});
+      fs.createReadStream(filePath).pipe(res);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ===================================================================
+  // Localization: translated editions (translate / export / narrate)
+  // ===================================================================
+
+  const LANG_BCP47: Record<string, string> = {
+    english: "en", spanish: "es", portuguese: "pt", french: "fr", german: "de",
+  };
+  const LANG_DISPLAY: Record<string, string> = {
+    english: "English", spanish: "Spanish", portuguese: "Portuguese", french: "French", german: "German",
+  };
+
+  function editionAudioFilename(editionId: number, chapterId: number): string {
+    return `edition-${editionId}-chapter-${chapterId}.mp3`;
+  }
+
+  // In-process guard against duplicate concurrent translation jobs for the
+  // same project+language (closes the read-then-write race in POST /editions).
+  const editionJobs = new Set<string>();
+
+  // Translate every completed chapter of a project into the target language,
+  // preserving terminology/tone via a shared glossary, then run a QA pass.
+  async function translateEdition(projectId: number, editionId: number, sourceLang: string, targetLang: string) {
+    const project = await storage.getProject(projectId);
+    if (!project) throw new Error("Project not found");
+    const dna = await storage.getBookDna(projectId);
+    const chapters = (await storage.getChapters(projectId)).filter(c => c.status === "complete" && c.content);
+    if (chapters.length === 0) throw new Error("No completed chapters to translate");
+
+    const srcName = LANG_DISPLAY[sourceLang] || sourceLang;
+    const tgtName = LANG_DISPLAY[targetLang] || targetLang;
+
+    // 1) Build a terminology glossary so names/terms stay consistent across chapters.
+    let glossary = "";
+    try {
+      glossary = await runStep(projectId, `Translation glossary — ${tgtName}`, FAST_MODEL, async () => {
+        const completion = await openai.chat.completions.create({
+          model: FAST_MODEL,
+          messages: [{
+            role: "system",
+            content: `You are a localization lead preparing a translation glossary for translating a book from ${srcName} into ${tgtName}.`,
+          }, {
+            role: "user",
+            content: `Book: "${project.title}" by ${project.authorName || "Unknown"}
+${dna ? `Core Promise: ${dna.corePromise}\nTone Rules: ${dna.toneRules}\n` : ""}Chapters: ${chapters.map(c => c.title).join("; ")}
+
+List the key proper nouns, character names, recurring terminology and brand terms that must be translated consistently. For each, give the preferred ${tgtName} rendering (keep names untranslated where appropriate). Output a concise plain-text glossary, one term per line as "source -> target". No commentary.`,
+          }],
+          max_completion_tokens: 1500,
+        });
+        const text = completion.choices[0].message.content || "";
+        return { result: text, tokens: completion.usage?.total_tokens || 800 };
+      });
+    } catch {
+      glossary = "";
+    }
+
+    // 2) Translate each chapter, preserving structure, tone and the glossary.
+    for (const ch of chapters) {
+      const translated = await runStep(projectId, `Translate Ch ${ch.chapterNumber} — ${tgtName}`, HIGH_MODEL, async () => {
+        const completion = await openai.chat.completions.create({
+          model: HIGH_MODEL,
+          messages: [{
+            role: "system",
+            content: `You are a professional literary translator translating a ${project.vertical} book from ${srcName} into ${tgtName}.
+Preserve the author's voice, tone and meaning. Keep Markdown structure (headings, lists, blockquotes) intact. Translate naturally and idiomatically — do not translate word-for-word. Do not add notes or commentary.${glossary ? `\n\nUse this glossary for consistent terminology:\n${glossary}` : ""}`,
+          }, {
+            role: "user",
+            content: `Translate this chapter into ${tgtName}. Return only the translated chapter text.\n\n# ${ch.title}\n\n${ch.content}`,
+          }],
+          max_completion_tokens: 8192,
+        });
+        const text = completion.choices[0].message.content || "";
+        return { result: text, tokens: completion.usage?.total_tokens || 4000 };
+      });
+
+      // Translate the chapter title separately so the TOC reads naturally.
+      let translatedTitle = ch.title;
+      try {
+        const tc = await openai.chat.completions.create({
+          model: FAST_MODEL,
+          messages: [{ role: "system", content: `Translate the following book chapter title from ${srcName} into ${tgtName}. Return only the translated title, no quotes.` }, { role: "user", content: ch.title }],
+          max_completion_tokens: 100,
+        });
+        translatedTitle = (tc.choices[0].message.content || ch.title).trim() || ch.title;
+      } catch {
+        /* fall back to source title */
+      }
+
+      const wordCount = translated.split(/\s+/).filter(Boolean).length;
+      await storage.createEditionChapter({
+        editionId,
+        chapterNumber: ch.chapterNumber,
+        title: translatedTitle,
+        content: translated,
+        wordCount,
+      });
+    }
+
+    // 3) QA pass — terminology/consistency/tone review recorded as a run step.
+    try {
+      const editionChapterList = await storage.getEditionChapters(editionId);
+      const sample = editionChapterList.slice(0, 3).map(c => `## ${c.title}\n${(c.content || "").slice(0, 1200)}`).join("\n\n");
+      await runStep(projectId, `Translation QA — ${tgtName}`, FAST_MODEL, async () => {
+        const completion = await openai.chat.completions.create({
+          model: FAST_MODEL,
+          messages: [{
+            role: "system",
+            content: `You are a localization QA reviewer for a ${tgtName} translation. Check terminology consistency, tone fidelity and fluency.`,
+          }, {
+            role: "user",
+            content: `Glossary:\n${glossary || "(none)"}\n\nTranslated sample:\n${sample}\n\nGive a short QA report: terminology consistency, tone match, and any issues to fix. Keep it under 150 words.`,
+          }],
+          max_completion_tokens: 600,
+        });
+        const text = completion.choices[0].message.content || "";
+        return { result: text, tokens: completion.usage?.total_tokens || 400 };
+      });
+    } catch {
+      /* QA is best-effort */
+    }
+  }
+
+  app.post("/api/projects/:id/editions", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      const language = String(req.body?.language || "").toLowerCase();
+      if (!LANGUAGES.includes(language as any)) {
+        return res.status(400).json({ error: "Invalid language" });
+      }
+      const sourceLang = (project.targetLanguage || "english").toLowerCase();
+      if (language === sourceLang) {
+        return res.status(400).json({ error: "Target language matches the book's original language" });
+      }
+      const completed = (await storage.getChapters(projectId)).filter(c => c.status === "complete" && c.content);
+      if (completed.length === 0) {
+        return res.status(400).json({ error: "Book has no completed chapters to translate" });
+      }
+
+      const jobKey = `${projectId}:${language}`;
+      if (editionJobs.has(jobKey)) {
+        return res.status(409).json({ error: "Translation already in progress" });
+      }
+
+      // Reuse an existing edition for re-translation; otherwise create one.
+      const existing = (await storage.getBookEditions(projectId)).find(e => e.language === language);
+      let edition = existing;
+      if (edition) {
+        if (edition.status === "translating") return res.status(409).json({ error: "Translation already in progress" });
+        await storage.deleteEditionChapters(edition.id);
+        edition = await storage.updateBookEdition(edition.id, { status: "translating" });
+      } else {
+        edition = await storage.createBookEdition({ projectId, language, status: "translating" });
+      }
+
+      editionJobs.add(jobKey);
+      res.status(202).json({ edition });
+
+      // Run translation in the background so the request returns promptly.
+      (async () => {
+        try {
+          await translateEdition(projectId, edition!.id, sourceLang, language);
+          await storage.updateBookEdition(edition!.id, { status: "complete" });
+        } catch (e: any) {
+          console.error("Edition translation failed:", e?.message);
+          await storage.updateBookEdition(edition!.id, { status: "failed" }).catch(() => {});
+        } finally {
+          editionJobs.delete(jobKey);
+        }
+      })();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/editions/:editionId/export", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const editionId = parseId(req.params.editionId);
+      if (!projectId || !editionId) return res.status(400).json({ error: "Invalid ID" });
+      const format = (req.query.format as string) || "txt";
+      const allowedFormats = ["txt", "html", "epub", "docx", "mobi"];
+      if (!allowedFormats.includes(format)) {
+        return res.status(400).json({ error: "Invalid format" });
+      }
+      const project = await storage.getProject(projectId);
+      const edition = await storage.getBookEdition(editionId);
+      if (!project || !edition || edition.projectId !== projectId) return res.status(404).json({ error: "Edition not found" });
+      if (edition.status !== "complete") return res.status(409).json({ error: "Edition is not ready to export yet" });
+      const editionChapterList = (await storage.getEditionChapters(editionId)).filter(c => c.content);
+      if (editionChapterList.length === 0) return res.status(400).json({ error: "No translated chapters to export" });
+
+      const authorName = project.authorName || "Unknown Author";
+      const title = project.title;
+      const bcp47 = LANG_BCP47[edition.language] || "en";
+      const fileBase = `${slugify(title)}-${edition.language}`;
+
+      if (format === "epub") {
+        const epub = buildEpub({ title, authorName, language: bcp47, chapters: editionChapterList });
+        await storage.createExportJob({ projectId, format: "epub", language: edition.language, status: "complete" });
+        res.setHeader("Content-Type", "application/epub+zip");
+        res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.epub"`);
+        return res.send(epub);
+      }
+      if (format === "docx") {
+        const docx = buildDocx({ title, authorName, chapters: editionChapterList });
+        await storage.createExportJob({ projectId, format: "docx", language: edition.language, status: "complete" });
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.docx"`);
+        return res.send(docx);
+      }
+      if (format === "mobi") {
+        const mobi = buildMobi({ title, authorName, chapters: editionChapterList });
+        await storage.createExportJob({ projectId, format: "mobi", language: edition.language, status: "complete" });
+        res.setHeader("Content-Type", "application/x-mobipocket-ebook");
+        res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.mobi"`);
+        return res.send(mobi);
+      }
+      if (format === "html") {
+        const html = buildHtmlExport(title, authorName, editionChapterList);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.html"`);
+        return res.send(html);
+      }
+
+      const lines: string[] = [];
+      lines.push("=".repeat(60), "", title.toUpperCase(), "", `by ${authorName}`, "", "=".repeat(60), "", "");
+      lines.push("TABLE OF CONTENTS", "-".repeat(40));
+      editionChapterList.forEach(ch => lines.push(`  Chapter ${ch.chapterNumber}: ${ch.title}`));
+      lines.push("", "");
+      editionChapterList.forEach(ch => {
+        lines.push("=".repeat(60), `CHAPTER ${ch.chapterNumber}`, ch.title.toUpperCase(), "=".repeat(60), "", ch.content || "", "", "");
+      });
+      lines.push("=".repeat(60), "END", "=".repeat(60));
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileBase}.txt"`);
+      res.send(lines.join("\n"));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/editions/:editionId/chapters/:chapterId/generate-audio", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const editionId = parseId(req.params.editionId);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !editionId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const edition = await storage.getBookEdition(editionId);
+      if (!edition || edition.projectId !== projectId) return res.status(404).json({ error: "Edition not found" });
+      const chapter = await storage.getEditionChapter(chapterId);
+      if (!chapter || chapter.editionId !== editionId) return res.status(404).json({ error: "Chapter not found" });
+      if (!chapter.content) return res.status(400).json({ error: "Chapter has no content" });
+
+      const voiceId = (req.body?.voice as string) || DEFAULT_NARRATOR_VOICE;
+      const dir = voiceAudioDir(voiceId);
+      const filename = editionAudioFilename(editionId, chapterId);
+      const filePath = path.join(dir, filename);
+      const safeVoice = voiceId.replace(/[^a-zA-Z0-9_-]/g, "");
+
+      if (fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        const audioUrl = `/uploads/audio/${safeVoice}/${filename}`;
+        if (chapter.audioUrl !== audioUrl) await storage.updateEditionChapter(chapterId, { audioUrl });
+        return res.json({ audioUrl, chapterId, size: stat.size, cached: true });
+      }
+
+      const combined = await synthText(chapter.content, voiceId);
+      if (!combined || combined.length === 0) return res.status(400).json({ error: "No audio generated" });
+      fs.writeFileSync(filePath, combined);
+      const audioUrl = `/uploads/audio/${safeVoice}/${filename}`;
+      await storage.updateEditionChapter(chapterId, { audioUrl });
+      res.json({ audioUrl, chapterId, size: combined.length });
+    } catch (err: any) {
+      console.error("Edition audio generation error:", err.message);
+      res.status(500).json({ error: "Failed to generate edition audio" });
+    }
+  });
+
+  app.get("/api/projects/:id/editions/:editionId/chapters/:chapterId/audio", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const editionId = parseId(req.params.editionId);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !editionId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const edition = await storage.getBookEdition(editionId);
+      if (!edition || edition.projectId !== projectId) return res.status(404).json({ error: "Edition not found" });
+      const chapter = await storage.getEditionChapter(chapterId);
+      if (!chapter || chapter.editionId !== editionId) return res.status(404).json({ error: "Chapter not found" });
+
+      const voiceId = (req.query.voice as string) || DEFAULT_NARRATOR_VOICE;
+      const dir = voiceAudioDir(voiceId);
+      const filename = editionAudioFilename(editionId, chapterId);
+      const filePath = path.join(dir, filename);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "No audio generated for this chapter with this voice" });
+
+      const project = await storage.getProject(projectId);
+      const dlName = `${slugify(project?.title || "book")}-${edition.language}-ch${chapter.chapterNumber}.mp3`;
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
+      storage.createAnalyticsEvent({ projectId, eventType: "listen", value: 1, metadata: { editionId, chapterId } }).catch(() => {});
       fs.createReadStream(filePath).pipe(res);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

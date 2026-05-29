@@ -25,6 +25,15 @@ export function downloadBookFile(projectId: number, format: "txt" | "html" | "ep
   a.remove();
 }
 
+export function downloadEditionFile(projectId: number, editionId: number, format: "txt" | "html" | "epub" | "docx" | "mobi") {
+  const a = document.createElement("a");
+  a.href = `/api/projects/${projectId}/editions/${editionId}/export?format=${format}`;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export interface TrimSize {
   id: string;
   label: string;

@@ -150,4 +150,14 @@ export async function seedDatabase() {
   } catch (error) {
     console.error("Seeding error:", error);
   }
+
+  // Recover interrupted translations: background translation tasks do not survive
+  // a server restart, so any edition still marked "translating" at boot is stale.
+  try {
+    const res: any = await db.execute(sql.raw(`UPDATE book_editions SET status = 'failed' WHERE status = 'translating'`));
+    const count = res?.rowCount ?? 0;
+    if (count > 0) console.log(`Recovered ${count} interrupted translation edition(s) → failed`);
+  } catch (error) {
+    console.error("Edition recovery error:", error);
+  }
 }
