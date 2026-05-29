@@ -847,7 +847,7 @@ export default function ProjectDetail() {
                       </div>
                     </CardContent></Card>
                   )}
-                  {marketing.pricingMatrix && (
+                  {!!marketing.pricingMatrix && (
                     <Card className="border-border/20 bg-card/30"><CardContent className="pt-4 pb-4">
                       <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-3">Pricing Matrix</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">

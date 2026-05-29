@@ -1480,8 +1480,8 @@ Return JSON with:
           n: 1,
         });
 
-        const imageB64 = (completion.data[0] as any)?.b64_json;
-        let url = (completion.data[0] as any)?.url;
+        const imageB64 = (completion.data?.[0] as any)?.b64_json;
+        let url = (completion.data?.[0] as any)?.url;
 
         if (imageB64) {
           url = `data:image/png;base64,${imageB64}`;

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+import { z } from "zod/v4";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -208,7 +208,7 @@ export const storefrontReaders = pgTable("storefront_readers", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
-export const insertStorefrontReaderSchema = createInsertSchema(storefrontReaders).omit({ id: true, createdAt: true });
+export const insertStorefrontReaderSchema = createInsertSchema(storefrontReaders).omit({ createdAt: true });
 export type StorefrontReader = typeof storefrontReaders.$inferSelect;
 export type InsertStorefrontReader = z.infer<typeof insertStorefrontReaderSchema>;
 
@@ -232,28 +232,28 @@ export const chatMessages = pgTable("chat_messages", {
   index("chat_messages_conversation_idx").on(table.conversationId),
 ]);
 
-export const insertChatConversationSchema = createInsertSchema(chatConversations).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, createdAt: true });
+export const insertChatConversationSchema = createInsertSchema(chatConversations).omit({ createdAt: true, updatedAt: true });
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ createdAt: true });
 export type ChatConversation = typeof chatConversations.$inferSelect;
 export type InsertChatConversation = z.infer<typeof insertChatConversationSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 
-export const insertAppSettingsSchema = createInsertSchema(appSettings).omit({ id: true, updatedAt: true });
+export const insertAppSettingsSchema = createInsertSchema(appSettings).omit({ updatedAt: true });
 export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = z.infer<typeof insertAppSettingsSchema>;
 
-export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({ id: true, startedAt: true, completedAt: true });
-export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ id: true, createdAt: true, viewCount: true });
-export const insertBookRequestSchema = createInsertSchema(bookRequests).omit({ id: true, createdAt: true, isRead: true });
+export const insertAutopilotRunSchema = createInsertSchema(autopilotRuns).omit({ startedAt: true, completedAt: true });
+export const insertInviteTokenSchema = createInsertSchema(inviteTokens).omit({ createdAt: true, viewCount: true });
+export const insertBookRequestSchema = createInsertSchema(bookRequests).omit({ createdAt: true, isRead: true });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, updatedAt: true, publishedToStore: true });
-export const insertChapterSchema = createInsertSchema(chapters).omit({ id: true, createdAt: true, updatedAt: true });
-export const insertTrendReportSchema = createInsertSchema(trendReports).omit({ id: true, createdAt: true });
-export const insertMarketingAssetSchema = createInsertSchema(marketingAssets).omit({ id: true, createdAt: true });
-export const insertRunStepSchema = createInsertSchema(runSteps).omit({ id: true, createdAt: true });
-export const insertBookDnaSchema = createInsertSchema(bookDna).omit({ id: true, createdAt: true });
-export const insertAutopilotConfigSchema = createInsertSchema(autopilotConfig).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ createdAt: true, updatedAt: true, publishedToStore: true });
+export const insertChapterSchema = createInsertSchema(chapters).omit({ createdAt: true, updatedAt: true });
+export const insertTrendReportSchema = createInsertSchema(trendReports).omit({ createdAt: true });
+export const insertMarketingAssetSchema = createInsertSchema(marketingAssets).omit({ createdAt: true });
+export const insertRunStepSchema = createInsertSchema(runSteps).omit({ createdAt: true });
+export const insertBookDnaSchema = createInsertSchema(bookDna).omit({ createdAt: true });
+export const insertAutopilotConfigSchema = createInsertSchema(autopilotConfig).omit({ createdAt: true, updatedAt: true });
 
 export type Project = typeof projects.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;

@@ -80,9 +80,9 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
               <>
                 <div className="flex items-center gap-4 mt-3 text-[10px] font-mono text-muted-foreground/30 flex-wrap">
                   {marketing.hooks && marketing.hooks.length > 0 && <span className="flex items-center gap-1"><Target className="h-3 w-3 text-purple-400/40" /> {marketing.hooks.length} Hooks</span>}
-                  {marketing.emailSequence && <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-cyan-400/40" /> Email Seq</span>}
-                  {marketing.socialCalendar && <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-emerald-400/40" /> Social Cal</span>}
-                  {marketing.pricingMatrix && <span className="flex items-center gap-1"><DollarSign className="h-3 w-3 text-amber-400/40" /> Pricing</span>}
+                  {!!marketing.emailSequence && <span className="flex items-center gap-1"><Mail className="h-3 w-3 text-cyan-400/40" /> Email Seq</span>}
+                  {!!marketing.socialCalendar && <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-emerald-400/40" /> Social Cal</span>}
+                  {!!marketing.pricingMatrix && <span className="flex items-center gap-1"><DollarSign className="h-3 w-3 text-amber-400/40" /> Pricing</span>}
                 </div>
 
                 {marketing.shortBlurb && (
@@ -125,7 +125,7 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
                         </div>
                       </div>
                     )}
-                    {marketing.emailSequence && Array.isArray(marketing.emailSequence) && (
+                    {Array.isArray(marketing.emailSequence) && (
                       <div>
                         <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2">Email Sequence</p>
                         <div className="space-y-1">
@@ -139,7 +139,7 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
                         </div>
                       </div>
                     )}
-                    {marketing.pricingMatrix && (
+                    {!!marketing.pricingMatrix && (
                       <div>
                         <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2">Pricing Matrix</p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">

@@ -20,7 +20,7 @@ export function registerAudioRoutes(app: Express): void {
   // Get single conversation with messages
   app.get("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(String(req.params.id), 10);
       if (isNaN(id) || id < 1) return res.status(400).json({ error: "Invalid conversation ID" });
       const conversation = await chatStorage.getConversation(id);
       if (!conversation) {
@@ -49,7 +49,7 @@ export function registerAudioRoutes(app: Express): void {
   // Delete conversation
   app.delete("/api/conversations/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(String(req.params.id), 10);
       if (isNaN(id) || id < 1) return res.status(400).json({ error: "Invalid conversation ID" });
       await chatStorage.deleteConversation(id);
       res.status(204).send();
@@ -64,7 +64,7 @@ export function registerAudioRoutes(app: Express): void {
   // Uses gpt-4o-mini-transcribe for STT, gpt-audio for voice response
   app.post("/api/conversations/:id/messages", audioBodyParser, async (req: Request, res: Response) => {
     try {
-      const conversationId = parseInt(req.params.id, 10);
+      const conversationId = parseInt(String(req.params.id), 10);
       if (isNaN(conversationId) || conversationId < 1) return res.status(400).json({ error: "Invalid conversation ID" });
       const { audio, voice = "alloy" } = req.body;
 

@@ -119,7 +119,7 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async updateProject(id: number, data: Partial<InsertProject>) {
+  async updateProject(id: number, data: Partial<InsertProject> & { publishedToStore?: boolean }) {
     const [updated] = await db.update(projects)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(projects.id, id))

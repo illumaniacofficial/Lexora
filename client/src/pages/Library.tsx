@@ -22,7 +22,7 @@ import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import type { Project, InviteToken, Chapter } from "@shared/schema";
 
-type LibraryBook = Project & { shortBlurb: string | null; completedChapters: number; chaptersWithAudio: number };
+type LibraryBook = Omit<Project, "coverImageUrl"> & { hasCover: boolean; shortBlurb: string | null; completedChapters: number; chaptersWithAudio: number };
 
 type SortKey = "rank" | "title" | "words" | "quality" | "date";
 

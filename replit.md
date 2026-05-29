@@ -76,7 +76,8 @@ Lexora employs a modern web architecture with a clear separation of concerns.
 - **Wouter**: A small routing library for React.
 - **Shadcn UI**: UI component library.
 - **Express**: Web application framework for Node.js.
-- **Zod**: TypeScript-first schema declaration and validation library.
+- **Zod**: TypeScript-first schema declaration and validation library. `shared/schema.ts` and `shared/models/chat.ts` import `zod/v4` to stay type-compatible with drizzle-zod 0.8.x (which emits zod v4 schema types). Frontend form schemas still use the classic `zod` (v3) import via `@hookform/resolvers/zod`.
+- **drizzle-zod**: Generates Zod insert schemas from Drizzle tables (v0.8.x). Note: it auto-excludes auto-generated identity columns from insert schemas, so `.omit()` calls must not list `id` for `generatedAlwaysAsIdentity` columns.
 - **react-helmet-async**: For managing document head tags.
 - **bcryptjs**: Password hashing for admin and reader accounts.
 - **express-session + connect-pg-simple**: Session management backed by PostgreSQL.
