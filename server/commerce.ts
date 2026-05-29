@@ -152,7 +152,12 @@ export async function verifyAndFulfillSession(
   const session = await stripe.checkout.sessions.retrieve(sessionId);
   const md = (session.metadata || {}) as Record<string, string>;
   const type = md.type || null;
-  const paid = session.payment_status === "paid" || session.status === "complete";
+  // Only treat funds as settled when Stripe confirms payment. `session.status`
+  // can be "complete" while payment is still processing (async payment methods),
+  // so we must gate on payment_status, never on session.status alone.
+  const paid =
+    session.payment_status === "paid" ||
+    session.payment_status === "no_payment_required";
   if (!paid) return { status: session.payment_status || "pending", type };
 
   if (type === "book" || type === "bundle") {
@@ -189,14 +194,18 @@ export async function verifyAndFulfillSession(
         // Fallback to ~31 days so a failed subscription lookup never grants
         // perpetual access (access check treats null period end as indefinite).
         let currentPeriodEnd: Date = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+        let subActive = !subId; // free/no-sub cases already passed the paid gate
         if (subId) {
           try {
             const sub: any = await stripe.subscriptions.retrieve(subId);
             if (sub?.current_period_end) currentPeriodEnd = new Date(sub.current_period_end * 1000);
+            subActive = sub?.status === "active" || sub?.status === "trialing";
           } catch {
             /* non-fatal: keep the bounded fallback period */
           }
         }
+        // Don't grant entitlement unless the subscription is genuinely active.
+        if (!subActive) return { status: "pending", type };
         await storage.createReaderMembership({
           readerId,
           tierId,
