@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
 import type { AppSettings } from "@shared/schema";
 import { VoiceSelector } from "@/components/voice-selector";
-import { DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
+import { DEFAULT_VOICE_ID, VOICE_OPTIONS } from "@/components/audio-mini-player";
 
 const schema = z.object({
   defaultAuthorName: z.string().min(1, "Author name is required").max(200),
@@ -77,7 +77,9 @@ export default function Settings() {
         chapterWordTarget: settings.chapterWordTarget,
         autoGenerateCover: settings.autoGenerateCover,
         autoGenerateMarketing: settings.autoGenerateMarketing,
-        ttsDefaultVoice: settings.ttsDefaultVoice,
+        ttsDefaultVoice: VOICE_OPTIONS.find(v => v.value === settings.ttsDefaultVoice)?.isUnavailable
+          ? DEFAULT_VOICE_ID
+          : settings.ttsDefaultVoice,
         storefrontTitle: settings.storefrontTitle,
         exportFormat: settings.exportFormat,
       });

@@ -3,7 +3,7 @@ import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Load
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
-import { VOICE_OPTIONS, isFishAudioVoice, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
+import { VOICE_OPTIONS, DEFAULT_VOICE_ID, isFishAudioVoice, type NarratorVoice, type NarrationState } from "@/components/audio-mini-player";
 import { useNarration } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
@@ -460,7 +460,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       return v && v in THEMES ? (v as PageTheme) : "parchment";
     } catch { return "parchment"; }
   });
-  const [selectedVoice, setSelectedVoice] = useState<NarratorVoice>("qJemC2CfKzP2DljOYBYj");
+  const [selectedVoice, setSelectedVoice] = useState<NarratorVoice>(DEFAULT_VOICE_ID);
   const [isNarrating, setIsNarrating] = useState(false);
   const [narrationLoading, setNarrationLoading] = useState(false);
   const [narrationProgress, setNarrationProgress] = useState(0);
@@ -1060,15 +1060,44 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               </div>
               <button onClick={() => setShowNarrator(false)} className="h-5 w-5 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close narrator panel" data-testid="button-close-narrator"><X className="h-3 w-3" /></button>
             </div>
-            <p className="text-[10px] text-stone-400 mb-3">Choose a voice, then hit play. Narrator auto-turns pages when done.</p>
             {readerUsingFallback && (
               <div className="mb-3 px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
                 <p className="text-[9px] text-amber-300 font-mono">Fell back to free browser voice — premium credits may be exhausted.</p>
               </div>
             )}
-            <p className="text-[9px] font-mono text-stone-500 uppercase tracking-wider mb-1.5">Premium Voices</p>
+
+            {isNarratableCurrentPage ? (
+              <div className="flex gap-2 mb-3">
+                <Button size="sm" onClick={() => playCurrentPage()} disabled={narrationLoading}
+                  className={cn("flex-1 text-[12px] font-mono h-10 border",
+                    isBrowserVoice(selectedVoice)
+                      ? "bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/30"
+                      : "bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border-purple-500/30")}
+                  data-testid="button-narrator-play">
+                  {narrationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : isNarrating ? <Pause className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
+                  {narrationLoading ? "Generating..." : isNarrating ? "Playing…" : isBrowserVoice(selectedVoice) ? "Play (Free)" : "Play This Page"}
+                </Button>
+                {isNarrating && (
+                  <Button size="icon" variant="ghost" onClick={() => stopNarration()}
+                    className="h-10 w-10 text-stone-400 hover:text-red-400"
+                    data-testid="button-narrator-stop" aria-label="Stop narration"><X className="h-4 w-4" /></Button>
+                )}
+              </div>
+            ) : (
+              <p className="text-[10px] text-stone-500 italic text-center mb-3">Navigate to a text page to enable narration</p>
+            )}
+
+            <label className="flex items-center gap-2 mb-3 cursor-pointer group">
+              <input type="checkbox" checked={autoNarrate} onChange={e => setAutoNarrate(e.target.checked)}
+                className="accent-purple-500 w-3.5 h-3.5" data-testid="checkbox-auto-narrate" />
+              <span className="text-[10px] text-stone-400 group-hover:text-stone-300 transition-colors">Continuous reading (auto-advance pages)</span>
+            </label>
+
+            <p className="text-[10px] text-stone-400 mb-2">Choose a voice below.</p>
+
+            <p className="text-[9px] font-mono text-purple-400/70 uppercase tracking-wider mb-1.5">Working Voices</p>
             <div className="space-y-1.5 mb-3">
-              {VOICE_OPTIONS.map(v => (
+              {VOICE_OPTIONS.filter(v => v.isFishAudio).map(v => (
                 <button key={v.value} onClick={() => { setSelectedVoice(v.value); stopNarration(); }} data-testid={`voice-${v.value}`}
                   className={cn("w-full text-left px-3 py-2 rounded-lg border transition-all flex items-center justify-between",
                     v.value === selectedVoice ? "border-purple-500/40 bg-purple-500/10 text-purple-200" : "border-stone-600 hover:border-stone-500 text-stone-400")}>
@@ -1101,30 +1130,22 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 </div>
               </>
             )}
-            <label className="flex items-center gap-2 mb-3 cursor-pointer group">
-              <input type="checkbox" checked={autoNarrate} onChange={e => setAutoNarrate(e.target.checked)}
-                className="accent-purple-500 w-3.5 h-3.5" data-testid="checkbox-auto-narrate" />
-              <span className="text-[10px] text-stone-400 group-hover:text-stone-300 transition-colors">Continuous reading (auto-advance pages)</span>
-            </label>
-            {isNarratableCurrentPage ? (
-              <div className="flex gap-2">
-                <Button size="sm" onClick={playCurrentPage} disabled={narrationLoading}
-                  className={cn("flex-1 text-[11px] font-mono h-8 border",
-                    isBrowserVoice(selectedVoice)
-                      ? "bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/30"
-                      : "bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border-purple-500/30")}
-                  data-testid="button-narrator-play">
-                  {narrationLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1.5" /> : <Play className="h-3 w-3 mr-1.5" />}
-                  {narrationLoading ? "Generating..." : isBrowserVoice(selectedVoice) ? "Read (Free)" : "Read This Page"}
-                </Button>
-                {isNarrating && (
-                  <Button size="icon" variant="ghost" onClick={stopNarration}
-                    className="h-8 w-8 text-stone-400 hover:text-red-400"
-                    data-testid="button-narrator-stop" aria-label="Stop narration"><X className="h-3.5 w-3.5" /></Button>
-                )}
-              </div>
-            ) : (
-              <p className="text-[10px] text-stone-500 italic text-center">Navigate to a text page to enable narration</p>
+            {VOICE_OPTIONS.some(v => v.isUnavailable) && (
+              <>
+                <p className="text-[9px] font-mono text-stone-600 uppercase tracking-wider mb-1.5">Unavailable (ElevenLabs)</p>
+                <div className="space-y-1.5">
+                  {VOICE_OPTIONS.filter(v => v.isUnavailable).map(v => (
+                    <div key={v.value} data-testid={`voice-unavailable-${v.value}`}
+                      className="w-full text-left px-3 py-2 rounded-lg border border-stone-700/50 bg-stone-900/30 flex items-center justify-between opacity-50 cursor-not-allowed">
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-mono font-bold text-stone-500 line-through">{v.label}</span>
+                        <span className="text-[9px] text-stone-600 ml-2">{v.description}</span>
+                      </div>
+                      <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-stone-700/40 text-stone-500 border border-stone-700/50 shrink-0">UNAVAILABLE</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

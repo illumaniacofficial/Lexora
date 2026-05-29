@@ -16,27 +16,27 @@ export interface PlaybackState {
 
 export type NarratorVoice = string;
 
-export const DEFAULT_VOICE_ID = "qJemC2CfKzP2DljOYBYj";
+export const DEFAULT_VOICE_ID = "fabb918a343d4591b428083a35980dc4";
 
-export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string; isFree?: boolean; isFishAudio?: boolean }[] = [
-  { value: "qJemC2CfKzP2DljOYBYj", label: "Sergio", description: "Professional author voice", isFree: false },
-  { value: "4MnJDVdLqUeSlssQcssu", label: "Sergio Instant", description: "Cloned author voice", isFree: false },
-  { value: "fabb918a343d4591b428083a35980dc4", label: "Sergio FA", description: "AI cloned voice · Fish Audio", isFree: false, isFishAudio: true },
-  { value: "JBFqnCBsd6RMkjVDRZzb", label: "George", description: "Warm, captivating storyteller", isFree: false },
-  { value: "nPczCjzI2devNBz1zQrb", label: "Brian", description: "Deep, resonant & comforting", isFree: false },
-  { value: "pFZP5JQG7iQjIQuC4Bku", label: "Lily", description: "Velvety actress", isFree: false },
-  { value: "EXAVITQu4vr4xnSDxMaL", label: "Sarah", description: "Mature, reassuring & confident", isFree: false },
-  { value: "Xb7hH8MSUJpSbSDYk0k2", label: "Alice", description: "Clear, engaging educator", isFree: false },
-  { value: "onwK4e9ZLuTAKqWW03F9", label: "Daniel", description: "Steady broadcaster", isFree: false },
-  { value: "21m00Tcm4TlvDq8ikWAM", label: "Ryan", description: "Charismatic & energetic", isFree: false },
-  { value: "EL1pdha4gnod3UqmYErz", label: "Emma", description: "Warm & friendly narrator", isFree: false },
-  { value: "cgSgspJ2msm4sxwbEZho", label: "Chris", description: "Commanding voice", isFree: false },
-  { value: "jsCqWAovK2LkVrpSxHGf", label: "Jessica", description: "Engaging & conversational", isFree: false },
-  { value: "alloy", label: "Alloy", description: "Free browser voice", isFree: true },
-  { value: "echo", label: "Echo", description: "Free browser voice", isFree: true },
-  { value: "fable", label: "Fable", description: "Free browser voice", isFree: true },
-  { value: "onyx", label: "Onyx", description: "Free browser voice", isFree: true },
-  { value: "nova", label: "Nova", description: "Free browser voice", isFree: true },
+export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string; isFree?: boolean; isFishAudio?: boolean; isUnavailable?: boolean }[] = [
+  { value: "fabb918a343d4591b428083a35980dc4", label: "Sergio FA", description: "AI cloned author voice · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "bbb58d698b5f46719fd04688dfac7359", label: "Nathan", description: "Warm US audiobook narrator · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "f6a19fe5ab494e1fa51bb1476d583a44", label: "Abby", description: "Smooth US audiobook narrator · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "e686ae649ee44f219a108aacba206c1a", label: "Marcus", description: "Calm, deep storyteller · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "72324f5951924b2eb27faaf5630153b4", label: "David", description: "Warm British storyteller · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "30c0f62e3e6d45d88387d1b8f84e1685", label: "Liam", description: "Calm British narrator · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "qJemC2CfKzP2DljOYBYj", label: "Sergio", description: "Professional author voice", isFree: false, isUnavailable: true },
+  { value: "4MnJDVdLqUeSlssQcssu", label: "Sergio Instant", description: "Cloned author voice", isFree: false, isUnavailable: true },
+  { value: "JBFqnCBsd6RMkjVDRZzb", label: "George", description: "Warm, captivating storyteller", isFree: false, isUnavailable: true },
+  { value: "nPczCjzI2devNBz1zQrb", label: "Brian", description: "Deep, resonant & comforting", isFree: false, isUnavailable: true },
+  { value: "pFZP5JQG7iQjIQuC4Bku", label: "Lily", description: "Velvety actress", isFree: false, isUnavailable: true },
+  { value: "EXAVITQu4vr4xnSDxMaL", label: "Sarah", description: "Mature, reassuring & confident", isFree: false, isUnavailable: true },
+  { value: "Xb7hH8MSUJpSbSDYk0k2", label: "Alice", description: "Clear, engaging educator", isFree: false, isUnavailable: true },
+  { value: "onwK4e9ZLuTAKqWW03F9", label: "Daniel", description: "Steady broadcaster", isFree: false, isUnavailable: true },
+  { value: "21m00Tcm4TlvDq8ikWAM", label: "Ryan", description: "Charismatic & energetic", isFree: false, isUnavailable: true },
+  { value: "EL1pdha4gnod3UqmYErz", label: "Emma", description: "Warm & friendly narrator", isFree: false, isUnavailable: true },
+  { value: "cgSgspJ2msm4sxwbEZho", label: "Chris", description: "Commanding voice", isFree: false, isUnavailable: true },
+  { value: "jsCqWAovK2LkVrpSxHGf", label: "Jessica", description: "Engaging & conversational", isFree: false, isUnavailable: true },
 ];
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5, 2];

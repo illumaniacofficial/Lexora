@@ -1119,7 +1119,7 @@ Write the full chapter content only, no meta-commentary.`;
       if (chapter.status !== "complete" || !chapter.content) return res.status(400).json({ error: "Chapter must be complete with content" });
 
       const { voice } = req.body || {};
-      const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const voiceId = voice || "fabb918a343d4591b428083a35980dc4";
       const dir = voiceAudioDir(voiceId);
       const filename = chapterAudioFilename(projectId, chapterId);
       const filePath = path.join(dir, filename);
@@ -1163,7 +1163,7 @@ Write the full chapter content only, no meta-commentary.`;
       const chapter = await storage.getChapter(chapterId);
       if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
 
-      const voiceId = (req.query.voice as string) || "qJemC2CfKzP2DljOYBYj";
+      const voiceId = (req.query.voice as string) || "fabb918a343d4591b428083a35980dc4";
       const dir = voiceAudioDir(voiceId);
       const filename = chapterAudioFilename(projectId, chapterId);
       const filePath = path.join(dir, filename);
@@ -1623,7 +1623,7 @@ Return JSON with:
         return res.status(400).json({ error: "Text too long (max 4000 characters)" });
       }
       const trimmed = text.slice(0, 4000);
-      const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const voiceId = voice || "fabb918a343d4591b428083a35980dc4";
       const cacheKey = ttsCacheKey(trimmed, voiceId);
 
       const cached = ttsCache.get(cacheKey);
@@ -1748,7 +1748,7 @@ Return JSON with:
 
       if (chapters.length === 0) return res.status(400).json({ error: "No completed chapters to narrate" });
 
-      const voiceId = voice || "qJemC2CfKzP2DljOYBYj";
+      const voiceId = voice || "fabb918a343d4591b428083a35980dc4";
       const audioChunks: Buffer[] = [];
 
       for (const chapter of chapters.sort((a, b) => a.chapterNumber - b.chapterNumber)) {

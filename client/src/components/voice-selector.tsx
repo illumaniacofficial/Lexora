@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { VOICE_OPTIONS } from "@/components/audio-mini-player";
+import { getBrowserVoices, type BrowserVoiceOption } from "@/lib/browser-tts";
 
 interface VoiceSelectorProps {
   value: string;
@@ -11,14 +12,39 @@ interface VoiceSelectorProps {
   disabled?: boolean;
 }
 
+type SelectorVoice = { value: string; label: string; description: string; isFree?: boolean; isFishAudio?: boolean; isUnavailable?: boolean };
+
 export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [showFreeOnly, setShowFreeOnly] = useState(false);
+  const [browserVoices, setBrowserVoices] = useState<BrowserVoiceOption[]>([]);
 
-  const selectedVoice = VOICE_OPTIONS.find(v => v.value === value);
+  useEffect(() => {
+    const loadVoices = () => setBrowserVoices(getBrowserVoices());
+    loadVoices();
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
+  }, []);
 
-  const filteredVoices = VOICE_OPTIONS.filter(voice => {
+  const browserAsOptions: SelectorVoice[] = browserVoices.map(bv => ({
+    value: bv.id,
+    label: bv.label,
+    description: bv.description,
+    isFree: true,
+  }));
+
+  const allVoices: SelectorVoice[] = [...VOICE_OPTIONS, ...browserAsOptions];
+
+  const selectedVoice = allVoices.find(v => v.value === value);
+
+  const filteredVoices = allVoices.filter(voice => {
     const matchesSearch = voice.label.toLowerCase().includes(search.toLowerCase()) || 
                           voice.description.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = !showFreeOnly || voice.isFree;
@@ -27,7 +53,7 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
 
   const freeVoices = filteredVoices.filter(v => v.isFree);
   const fishVoices = filteredVoices.filter(v => v.isFishAudio && !v.isFree);
-  const premiumVoices = filteredVoices.filter(v => !v.isFree && !v.isFishAudio);
+  const unavailableVoices = filteredVoices.filter(v => v.isUnavailable);
 
   return (
     <div className="relative w-full">
@@ -86,7 +112,7 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
               <div className="space-y-3 max-h-80 overflow-y-auto">
                 {fishVoices.length > 0 && (
                   <div>
-                    <div className="text-[9px] font-mono text-amber-400/70 px-2 py-1 uppercase tracking-wider">Your Cloned Voices</div>
+                    <div className="text-[9px] font-mono text-amber-400/70 px-2 py-1 uppercase tracking-wider">Working Voices · Fish Audio</div>
                     <div className="space-y-1">
                       {fishVoices.map((voice) => (
                         <button
@@ -115,35 +141,6 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
                     </div>
                   </div>
                 )}
-                {premiumVoices.length > 0 && (
-                  <div>
-                    <div className="text-[9px] font-mono text-muted-foreground/60 px-2 py-1 uppercase tracking-wider">Premium Voices</div>
-                    <div className="space-y-1">
-                      {premiumVoices.map((voice) => (
-                        <button
-                          key={voice.value}
-                          onClick={() => {
-                            onChange(voice.value);
-                            setOpen(false);
-                            setSearch("");
-                          }}
-                          className={cn(
-                            "w-full text-left px-2 py-2 rounded-lg border border-transparent hover:border-purple-500/40 hover:bg-purple-500/10 transition-all",
-                            value === voice.value && "bg-purple-500/20 border-purple-500/40"
-                          )}
-                          data-testid={`voice-option-${voice.value}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-mono text-[12px] font-semibold">{voice.label}</span>
-                            {value === voice.value && <div className="h-2 w-2 rounded-full bg-purple-400" />}
-                          </div>
-                          <div className="text-[10px] text-muted-foreground/60 mt-0.5">{voice.description}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {freeVoices.length > 0 && (
                   <div>
                     <div className="text-[9px] font-mono text-green-400/60 px-2 py-1 uppercase tracking-wider">Free Voices</div>
@@ -168,6 +165,27 @@ export function VoiceSelector({ value, onChange, disabled }: VoiceSelectorProps)
                           </div>
                           <div className="text-[10px] text-muted-foreground/60 mt-0.5">{voice.description}</div>
                         </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {unavailableVoices.length > 0 && (
+                  <div>
+                    <div className="text-[9px] font-mono text-muted-foreground/40 px-2 py-1 uppercase tracking-wider">Unavailable (ElevenLabs)</div>
+                    <div className="space-y-1">
+                      {unavailableVoices.map((voice) => (
+                        <div
+                          key={voice.value}
+                          className="w-full text-left px-2 py-2 rounded-lg border border-transparent opacity-50 cursor-not-allowed"
+                          data-testid={`voice-unavailable-${voice.value}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-[12px] font-semibold line-through text-muted-foreground">{voice.label}</span>
+                            <span className="text-[8px] font-mono px-1 py-0.5 rounded bg-muted/40 text-muted-foreground/60 border border-border/30">UNAVAILABLE</span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground/40 mt-0.5">{voice.description}</div>
+                        </div>
                       ))}
                     </div>
                   </div>
