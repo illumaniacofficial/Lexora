@@ -7,6 +7,7 @@ import { buildConsistencyContext, type ContinuityExtras } from "./consistency";
 import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
 import { deriveStyleProfile, buildStyleContext } from "./style";
 import { extractStoryEntities } from "./graph";
+import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
@@ -362,6 +363,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/chapters\/\d+\/generate-audio/,
       /\/api\/projects\/\d+\/generate-audiobook/,
       /\/api\/projects\/\d+\/extract-graph/,
+      /\/api\/projects\/\d+\/analyze-pacing/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/inline-ai/,
       /\/api\/series\/\d+\/bible/,
     ];
     if (
@@ -1687,6 +1690,96 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         data: analysisData,
       });
       res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/analyze-pacing", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const allChapters = await storage.getChapters(projectId);
+      const completed = allChapters.filter(c => c.status === "complete" && c.content);
+      if (completed.length < 2) {
+        return res.status(400).json({ error: "Write at least 2 chapters before analyzing pacing." });
+      }
+      const dna = await storage.getBookDna(projectId);
+      const fiction = isFiction(project.vertical);
+
+      const pacing = await runStep(
+        projectId,
+        "Pacing & Tension Analysis",
+        FAST_MODEL,
+        () => analyzePacing(project, completed, dna, fiction),
+      );
+
+      const saved = await storage.createChapterAnalysis({
+        projectId,
+        chapterId: null,
+        kind: "pacing_curve",
+        data: pacing,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/chapters/:chapterId/inline-ai", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const project = await storage.getProject(projectId);
+      const chapter = await storage.getChapter(chapterId);
+      if (!project || !chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Not found" });
+      if (project.status === "complete") {
+        return res.status(400).json({ error: "Revert the book to editing before co-writing." });
+      }
+
+      const action = req.body?.action === "rewrite" ? "rewrite" : "continue";
+      const before = typeof req.body?.before === "string" ? req.body.before.slice(0, 12000) : "";
+      const after = typeof req.body?.after === "string" ? req.body.after.slice(0, 4000) : "";
+      const selection = typeof req.body?.selection === "string" ? req.body.selection.slice(0, 4000) : "";
+      const instruction = typeof req.body?.instruction === "string" ? req.body.instruction.trim().slice(0, 1000) : "";
+      if (action === "rewrite" && !selection.trim()) {
+        return res.status(400).json({ error: "Select some text to rewrite first." });
+      }
+      if (action === "continue" && !before.trim()) {
+        return res.status(400).json({ error: "Nothing to continue from yet." });
+      }
+
+      const dna = await storage.getBookDna(projectId);
+      const allChapters = await storage.getChapters(projectId);
+      const continuityExtras = await loadContinuityExtras(project);
+      const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber, continuityExtras);
+      const styleContext = await loadStyleContext(project.styleFingerprintId);
+      const fiction = isFiction(project.vertical);
+
+      const bookLine = dna
+        ? `You are co-writing Chapter ${chapter.chapterNumber} ("${chapter.title}") of "${project.title}", a ${project.vertical} ${fiction ? "novel" : "book"}. Core promise: ${dna.corePromise}. Tone rules: ${dna.toneRules}. Write in ${project.targetLanguage}.`
+        : `You are co-writing Chapter ${chapter.chapterNumber} ("${chapter.title}") of "${project.title}", a ${project.vertical} ${fiction ? "novel" : "book"}. Write in ${project.targetLanguage}.`;
+      const context = [bookLine, consistencyContext, styleContext].filter(Boolean).join("\n\n");
+
+      const result = await runStep(
+        projectId,
+        `Co-write (${action}): Ch.${chapter.chapterNumber}`,
+        HIGH_MODEL,
+        async () => {
+          const { suggestion, tokens } = await generateInlineCompletion({
+            action, before, selection, after, instruction, context,
+          });
+          return { result: suggestion, tokens };
+        },
+      );
+
+      if (!result.trim()) return res.status(500).json({ error: "The co-writer returned no text. Try again." });
+      res.json({ suggestion: result });
       saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(500).json({ error: err.message });

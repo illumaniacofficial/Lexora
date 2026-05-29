@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb, json, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb, json, index, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -586,14 +586,15 @@ export const audioTracks = pgTable("audio_tracks", {
   index("audio_tracks_project_idx").on(table.projectId),
   index("audio_tracks_chapter_idx").on(table.chapterId),
   // Null-safe logical uniqueness: one track per (project, scope, chapter, page, voice).
-  // coalesce() guards against Postgres treating NULL chapter/page as always-distinct.
-  uniqueIndex("audio_tracks_unique_idx").on(
+  // NULLS NOT DISTINCT treats NULL chapter/page as equal (Postgres 15+), matching the
+  // intent of the previous coalesce() expression index while emitting clean migration SQL.
+  unique("audio_tracks_unique_idx").on(
     table.projectId,
     table.scope,
     table.voiceId,
-    sql`coalesce(${table.chapterId}, -1)`,
-    sql`coalesce(${table.pageIndex}, -1)`,
-  ),
+    table.chapterId,
+    table.pageIndex,
+  ).nullsNotDistinct(),
 ]);
 
 export const insertSeriesSchema = createInsertSchema(series).omit({ createdAt: true, updatedAt: true });

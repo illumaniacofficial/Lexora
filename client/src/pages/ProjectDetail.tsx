@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
   Save, Edit3, Check, Music, ArrowRight, Globe, Wand2,
-  ClipboardCheck, Users, Sparkles, Gauge, MessageSquareQuote,
+  ClipboardCheck, Users, Sparkles, Gauge, MessageSquareQuote, Activity, TextCursorInput,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -261,7 +261,7 @@ function EditorialPanel({
   );
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -290,11 +290,16 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   boardPending: boolean;
   humanizePending: boolean;
   betaPending: boolean;
+  onInlineAi: (id: number, payload: { action: "continue" | "rewrite"; before: string; after: string; selection: string; instruction: string }) => Promise<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [reviseInstruction, setReviseInstruction] = useState("");
   const [showEditorial, setShowEditorial] = useState(false);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [cowriteInstruction, setCowriteInstruction] = useState("");
+  const [cowriteBusy, setCowriteBusy] = useState<"continue" | "rewrite" | null>(null);
+  const [suggestion, setSuggestion] = useState<{ text: string; mode: "continue" | "rewrite"; selStart: number; selEnd: number } | null>(null);
 
   const isEditing = editingChapterId === chapter.id;
   const isRevisingThis = revisingChapterId === chapter.id;
@@ -333,6 +338,48 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
     e.stopPropagation();
     onCancelEdit();
     setEditContent("");
+    setSuggestion(null);
+    setCowriteInstruction("");
+  };
+
+  const runCowrite = async (action: "continue" | "rewrite") => {
+    const ta = editTextareaRef.current;
+    const selStart = ta ? ta.selectionStart : editContent.length;
+    const selEnd = ta ? ta.selectionEnd : editContent.length;
+    setSuggestion(null);
+    setCowriteBusy(action);
+    try {
+      const before = editContent.slice(0, action === "rewrite" ? selStart : selStart);
+      const selection = action === "rewrite" ? editContent.slice(selStart, selEnd) : "";
+      const after = editContent.slice(action === "rewrite" ? selEnd : selStart);
+      const text = await onInlineAi(chapter.id, {
+        action,
+        before,
+        after,
+        selection,
+        instruction: cowriteInstruction.trim(),
+      });
+      setSuggestion({ text, mode: action, selStart, selEnd: action === "rewrite" ? selEnd : selStart });
+    } catch {
+      /* error toast surfaced by caller */
+    } finally {
+      setCowriteBusy(null);
+    }
+  };
+
+  const acceptSuggestion = () => {
+    if (!suggestion) return;
+    let next: string;
+    if (suggestion.mode === "rewrite") {
+      next = editContent.slice(0, suggestion.selStart) + suggestion.text + editContent.slice(suggestion.selEnd);
+    } else {
+      const head = editContent.slice(0, suggestion.selStart);
+      const tail = editContent.slice(suggestion.selStart);
+      const sep = head.length === 0 || /\s$/.test(head) ? "" : "\n\n";
+      next = head + sep + suggestion.text + tail;
+    }
+    setEditContent(next);
+    setSuggestion(null);
   };
 
   const isLastEdited = mostRecentEditId === chapter.id;
@@ -507,14 +554,84 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
             </div>
           </div>
           <Textarea
+            ref={editTextareaRef}
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
             className="min-h-[300px] text-[12px] bg-card/50 border-amber-500/15 font-mono resize-y focus:border-amber-500/30 leading-relaxed"
             data-testid={`textarea-edit-chapter-${chapter.id}`}
           />
-          <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">
-            {editContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
-          </p>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-[8px] font-mono text-muted-foreground/30">
+              {editContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
+            </p>
+          </div>
+          <div className="mt-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles className="h-3 w-3 text-violet-400" />
+              <span className="text-[9px] font-mono text-violet-300/80 uppercase tracking-wider">AI Co-Writer</span>
+            </div>
+            <input
+              value={cowriteInstruction}
+              onChange={(e) => setCowriteInstruction(e.target.value)}
+              placeholder="Optional direction (e.g. raise the tension, add sensory detail)…"
+              className="w-full mb-2 rounded bg-card/50 border border-violet-500/15 px-2 py-1 text-[10px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-violet-500/40"
+              data-testid={`input-cowrite-instruction-${chapter.id}`}
+            />
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm" variant="outline"
+                className="h-6 text-[9px] font-mono border-violet-500/25 text-violet-300 hover:bg-violet-500/15 px-2"
+                disabled={cowriteBusy !== null}
+                onClick={() => runCowrite("continue")}
+                data-testid={`button-cowrite-continue-${chapter.id}`}
+              >
+                {cowriteBusy === "continue" ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <ArrowRight className="h-2.5 w-2.5 mr-0.5" />}
+                Continue from cursor
+              </Button>
+              <Button
+                size="sm" variant="outline"
+                className="h-6 text-[9px] font-mono border-violet-500/25 text-violet-300 hover:bg-violet-500/15 px-2"
+                disabled={cowriteBusy !== null}
+                onClick={() => runCowrite("rewrite")}
+                data-testid={`button-cowrite-rewrite-${chapter.id}`}
+              >
+                {cowriteBusy === "rewrite" ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Wand2 className="h-2.5 w-2.5 mr-0.5" />}
+                Rewrite selection
+              </Button>
+              <span className="text-[8px] font-mono text-muted-foreground/30 ml-auto">
+                {cowriteBusy ? "thinking…" : "place cursor or select text"}
+              </span>
+            </div>
+            {suggestion && (
+              <div className="mt-2 rounded border border-violet-500/30 bg-card/60 p-2" data-testid={`panel-cowrite-suggestion-${chapter.id}`}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <TextCursorInput className="h-3 w-3 text-violet-400" />
+                  <span className="text-[8px] font-mono text-violet-300/70 uppercase tracking-wider">
+                    {suggestion.mode === "continue" ? "Suggested continuation" : "Suggested rewrite"}
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-foreground/90 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{suggestion.text}</p>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <Button
+                    size="sm"
+                    className="h-6 text-[9px] font-mono bg-violet-500/20 text-violet-200 hover:bg-violet-500/30 border border-violet-500/30 px-2"
+                    onClick={acceptSuggestion}
+                    data-testid={`button-cowrite-accept-${chapter.id}`}
+                  >
+                    <Check className="h-2.5 w-2.5 mr-0.5" /> Accept
+                  </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-6 text-[9px] font-mono border-border/30 text-muted-foreground hover:text-foreground px-2"
+                    onClick={() => setSuggestion(null)}
+                    data-testid={`button-cowrite-reject-${chapter.id}`}
+                  >
+                    <X className="h-2.5 w-2.5 mr-0.5" /> Reject
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
       {expanded && !isEditing && isRevisingThis && (
@@ -888,6 +1005,127 @@ function ContinuityPanel({
   );
 }
 
+interface PacingPoint { chapterNumber: number; title: string; tension: number; pacing: number; flag: "slow" | "rushed" | "balanced"; rationale: string }
+
+function pacingFlagTone(flag: string) {
+  if (flag === "slow") return { color: "text-blue-300", dot: "#60a5fa", border: "border-blue-500/30", bg: "bg-blue-500/10", label: "SLOW" };
+  if (flag === "rushed") return { color: "text-orange-300", dot: "#fb923c", border: "border-orange-500/30", bg: "bg-orange-500/10", label: "RUSHED" };
+  return { color: "text-emerald-300", dot: "#34d399", border: "border-emerald-500/30", bg: "bg-emerald-500/10", label: "BALANCED" };
+}
+
+function PacingCurve({ points }: { points: PacingPoint[] }) {
+  const W = 1000, H = 280, padX = 40, padY = 30;
+  const n = points.length;
+  const x = (i: number) => n <= 1 ? W / 2 : padX + (i * (W - padX * 2)) / (n - 1);
+  const y = (v: number) => padY + ((100 - Math.max(0, Math.min(100, v))) * (H - padY * 2)) / 100;
+  const poly = (key: "tension" | "pacing") => points.map((p, i) => `${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join(" ");
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none" role="img" aria-label="Tension and pacing curve">
+      {[0, 25, 50, 75, 100].map(g => (
+        <line key={g} x1={padX} x2={W - padX} y1={y(g)} y2={y(g)} stroke="currentColor" className="text-border/20" strokeWidth={1} strokeDasharray="3 4" />
+      ))}
+      <polyline points={poly("tension")} fill="none" stroke="#a78bfa" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={poly("pacing")} fill="none" stroke="#22d3ee" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="6 5" />
+      {points.map((p, i) => (
+        <circle key={p.chapterNumber} cx={x(i)} cy={y(p.tension)} r={4} fill={pacingFlagTone(p.flag).dot} stroke="#0a0a0f" strokeWidth={1.5}>
+          <title>{`Ch.${p.chapterNumber} — tension ${p.tension}, pacing ${p.pacing} (${p.flag})`}</title>
+        </circle>
+      ))}
+    </svg>
+  );
+}
+
+function PacingPanel({ analysis, onAnalyze, isPending, canAnalyze, chapterCount }: {
+  analysis: ChapterAnalysis | null;
+  onAnalyze: () => void;
+  isPending: boolean;
+  canAnalyze: boolean;
+  chapterCount: number;
+}) {
+  const result = (analysis?.data as any)?.result as { chapters?: PacingPoint[]; summary?: string } | undefined;
+  const points = result?.chapters || [];
+  const flagged = points.filter(p => p.flag !== "balanced");
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-violet-300">
+                <Activity className="h-4 w-4" /> Pacing & Tension Curve
+              </CardTitle>
+              <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+                AI maps tension and pacing across completed chapters to flag slow or rushed stretches.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="h-7 text-[10px] font-mono bg-violet-500/20 text-violet-200 hover:bg-violet-500/30 border border-violet-500/30 px-2.5 shrink-0"
+              onClick={onAnalyze}
+              disabled={isPending || !canAnalyze}
+              data-testid="button-analyze-pacing"
+            >
+              {isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Activity className="h-3 w-3 mr-1" />}
+              {analysis ? "Re-analyze" : "Analyze Pacing"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!canAnalyze ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Gauge className="h-9 w-9 text-violet-500/30" />
+              <p className="text-[11px] font-mono text-muted-foreground/40 mt-3">
+                Write at least 2 chapters to analyze pacing ({chapterCount} done).
+              </p>
+            </div>
+          ) : !analysis ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Activity className="h-9 w-9 text-violet-500/30" />
+              <p className="text-[11px] font-mono text-muted-foreground/40 mt-3">
+                Run an analysis to see the tension & pacing curve.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {result?.summary && (
+                <p className="text-[11px] font-mono text-foreground/70 leading-relaxed" data-testid="text-pacing-summary">{result.summary}</p>
+              )}
+              <div className="rounded-lg border border-border/20 bg-card/40 p-3">
+                <div className="flex items-center gap-4 mb-2">
+                  <span className="flex items-center gap-1.5 text-[9px] font-mono text-violet-300/80"><span className="inline-block w-4 h-0.5 bg-[#a78bfa]" /> Tension</span>
+                  <span className="flex items-center gap-1.5 text-[9px] font-mono text-cyan-300/80"><span className="inline-block w-4 h-0.5 bg-[#22d3ee]" style={{ borderTop: "2px dashed #22d3ee", background: "transparent" }} /> Pacing</span>
+                </div>
+                <PacingCurve points={points} />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-wider">
+                  {flagged.length > 0 ? `${flagged.length} chapter(s) flagged` : "All chapters well-paced"}
+                </p>
+                {points.map(p => {
+                  const tone = pacingFlagTone(p.flag);
+                  return (
+                    <div key={p.chapterNumber} className={cn("flex items-start gap-2.5 p-2.5 rounded-lg border", tone.border, tone.bg)} data-testid={`row-pacing-${p.chapterNumber}`}>
+                      <span className="text-[10px] font-mono text-muted-foreground/50 shrink-0 mt-0.5 w-10">Ch.{p.chapterNumber}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-mono text-foreground/80 truncate">{p.title}</span>
+                          <Badge variant="outline" className={cn("text-[8px] font-mono px-1.5 py-0 h-4", tone.border, tone.color)}>{tone.label}</Badge>
+                          <span className="text-[8px] font-mono text-muted-foreground/40">T:{p.tension} · P:{p.pacing}</span>
+                        </div>
+                        <p className="text-[10px] font-mono text-muted-foreground/50 mt-0.5 leading-relaxed">{p.rationale}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -974,6 +1212,21 @@ export default function ProjectDetail() {
     onSuccess: () => { invalidate(); toast({ title: "Beta reader feedback ready" }); },
     onError: (e: any) => toast({ title: "Beta readers failed", description: e.message, variant: "destructive" }),
   });
+  const pacingMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/analyze-pacing`),
+    onSuccess: () => { invalidate(); toast({ title: "Pacing analyzed", description: "Tension & pacing curve updated." }); },
+    onError: (e: any) => toast({ title: "Pacing analysis failed", description: e.message, variant: "destructive" }),
+  });
+  const runInlineAi = useCallback(async (chapterId: number, payload: { action: "continue" | "rewrite"; before: string; after: string; selection: string; instruction: string }) => {
+    try {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/inline-ai`, payload);
+      const json = await res.json();
+      return json.suggestion as string;
+    } catch (e: any) {
+      toast({ title: "Co-writer failed", description: e.message, variant: "destructive" });
+      throw e;
+    }
+  }, [projectId, toast]);
   const markCompleteMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/mark-complete`),
     onSuccess: () => { invalidate(); toast({ title: "Book marked as complete!", description: "Your book is now in the Library" }); },
@@ -1086,6 +1339,7 @@ export default function ProjectDetail() {
     (acc[a.chapterId] ||= []).push(a);
     return acc;
   }, {});
+  const pacingAnalysis = (data.chapterAnalyses || []).find(a => a.chapterId == null && a.kind === "pacing_curve") || null;
   const completedChapters = chapters.filter(c => c.status === "complete");
   const isEditingMode = project.status === "editing";
   const mostRecentEditId = (() => {
@@ -1308,6 +1562,9 @@ export default function ProjectDetail() {
               <TabsTrigger value="continuity" data-testid="tab-continuity" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
                 <Network className="h-3 w-3" /> Continuity
               </TabsTrigger>
+              <TabsTrigger value="pacing" data-testid="tab-pacing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
+                <Activity className="h-3 w-3" /> Pacing
+              </TabsTrigger>
               <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
                 <FileText className="h-3 w-3" /> Logs
               </TabsTrigger>
@@ -1361,6 +1618,7 @@ export default function ProjectDetail() {
                     boardPending={editorialBoardMutation.isPending && editorialBoardMutation.variables === ch.id}
                     humanizePending={humanizeMutation.isPending && humanizeMutation.variables === ch.id}
                     betaPending={betaReadersMutation.isPending && betaReadersMutation.variables === ch.id}
+                    onInlineAi={runInlineAi}
                   />
                 ))
               )}
@@ -1460,6 +1718,16 @@ export default function ProjectDetail() {
                 styleFingerprint={data.styleFingerprint}
                 hasChapters={completedChapters.length > 0}
                 onChanged={invalidate}
+              />
+            </TabsContent>
+
+            <TabsContent value="pacing" className="mt-4">
+              <PacingPanel
+                analysis={pacingAnalysis}
+                onAnalyze={() => pacingMutation.mutate()}
+                isPending={pacingMutation.isPending}
+                canAnalyze={completedChapters.length >= 2}
+                chapterCount={completedChapters.length}
               />
             </TabsContent>
 
