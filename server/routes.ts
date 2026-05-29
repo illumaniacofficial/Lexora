@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
 import { buildConsistencyContext } from "./consistency";
+import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
@@ -76,7 +77,7 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-async function runStep(projectId: number, stepName: string, model: string, fn: () => Promise<{ result: any; tokens: number }>) {
+async function runStep(projectId: number, stepName: string, model: string, fn: () => Promise<{ result: any; tokens: number; costOverride?: number }>) {
   const step = await storage.createRunStep({
     projectId,
     stepName,
@@ -87,8 +88,8 @@ async function runStep(projectId: number, stepName: string, model: string, fn: (
   });
   const start = Date.now();
   try {
-    const { result, tokens } = await fn();
-    const cost = estimateCost(tokens, model);
+    const { result, tokens, costOverride } = await fn();
+    const cost = costOverride ?? estimateCost(tokens, model);
     await storage.updateRunStep(step.id, {
       status: "complete",
       tokensUsed: tokens,
@@ -303,6 +304,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/generate-outline/,
       /\/api\/projects\/\d+\/chapters\/\d+\/generate/,
       /\/api\/projects\/\d+\/chapters\/\d+\/revise/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/editorial-board/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/humanize/,
+      /\/api\/projects\/\d+\/chapters\/\d+\/beta-readers/,
       /\/api\/projects\/\d+\/generate-cover/,
       /\/api\/projects\/\d+\/chapters\/\d+\/generate-audio/,
       /\/api\/projects\/\d+\/generate-audiobook/,
@@ -647,7 +651,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const bookDna = await storage.getBookDna(id);
       const marketing = await storage.getMarketingAsset(id);
       const trendReport = await storage.getTrendReportByProject(id);
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport });
+      const chapterAnalyses = await storage.getChapterAnalyses(id);
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1183,6 +1188,142 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       if (project.status !== "complete") return res.status(400).json({ error: "Project must be complete to revert to editing" });
       const updated = await storage.updateProject(id, { status: "editing" });
       res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  async function loadChapterForAnalysis(req: Request, res: Response) {
+    const projectId = parseId(String(req.params.id));
+    const chapterId = parseId(String(req.params.chapterId));
+    if (!projectId || !chapterId) {
+      res.status(400).json({ error: "Invalid ID" });
+      return null;
+    }
+    const project = await storage.getProject(projectId);
+    const chapter = await storage.getChapter(chapterId);
+    if (!project || !chapter || chapter.projectId !== projectId) {
+      res.status(404).json({ error: "Not found" });
+      return null;
+    }
+    if (chapter.status !== "complete" || !chapter.content) {
+      res.status(400).json({ error: "Only completed chapters with content can be analyzed" });
+      return null;
+    }
+    return { projectId, chapterId, project, chapter };
+  }
+
+  app.post("/api/projects/:id/chapters/:chapterId/editorial-board", async (req, res) => {
+    try {
+      const loaded = await loadChapterForAnalysis(req, res);
+      if (!loaded) return;
+      const { projectId, chapterId, project, chapter } = loaded;
+      const dna = await storage.getBookDna(projectId);
+      const allChapters = await storage.getChapters(projectId);
+      const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber);
+      const fiction = isFiction(project.vertical);
+
+      const board = await runStep(
+        projectId,
+        `Editorial Board: Ch.${chapter.chapterNumber}`,
+        HIGH_MODEL,
+        () => runEditorialBoard(project, chapter, dna, consistencyContext, fiction),
+      );
+
+      const saved = await storage.createChapterAnalysis({
+        projectId,
+        chapterId,
+        kind: "editorial_board",
+        score: board.overallScore,
+        data: board,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/chapters/:chapterId/beta-readers", async (req, res) => {
+    try {
+      const loaded = await loadChapterForAnalysis(req, res);
+      if (!loaded) return;
+      const { projectId, chapterId, project, chapter } = loaded;
+      const dna = await storage.getBookDna(projectId);
+      const fiction = isFiction(project.vertical);
+      const personas = Array.isArray(req.body?.personas)
+        ? req.body.personas.filter((p: any) => typeof p === "string")
+        : undefined;
+
+      const betaResult = await runStep(
+        projectId,
+        `Beta Readers: Ch.${chapter.chapterNumber}`,
+        FAST_MODEL,
+        () => runBetaReaders(project, chapter, dna, fiction, personas),
+      );
+
+      const saved = await storage.createChapterAnalysis({
+        projectId,
+        chapterId,
+        kind: "beta_readers",
+        score: betaResult.avgRating,
+        data: betaResult,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/chapters/:chapterId/humanize", async (req, res) => {
+    try {
+      const loaded = await loadChapterForAnalysis(req, res);
+      if (!loaded) return;
+      const { projectId, chapterId, project, chapter } = loaded;
+      if (project.status === "complete") {
+        return res.status(400).json({ error: "Cannot humanize chapters of a completed book. Revert to editing first." });
+      }
+      const dna = await storage.getBookDna(projectId);
+      const allChapters = await storage.getChapters(projectId);
+      const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber);
+      const fiction = isFiction(project.vertical);
+
+      const humanized = await runStep(
+        projectId,
+        `Humanize: Ch.${chapter.chapterNumber}`,
+        HIGH_MODEL,
+        () => humanizeChapter(project, chapter, dna, consistencyContext, fiction),
+      );
+
+      const wordCount = humanized.newContent.trim().split(/\s+/).filter(Boolean).length;
+      const qualityScore = await evaluateChapterQuality(humanized.newContent, chapter.title, project.vertical);
+      await storage.updateChapter(chapterId, {
+        content: humanized.newContent,
+        wordCount,
+        qualityScore,
+        status: "complete",
+        lastEditedAt: new Date(),
+      });
+
+      const refreshed = await storage.getChapters(projectId);
+      const totalWords = refreshed.reduce((s, c) => s + c.wordCount, 0);
+      const completed = refreshed.filter(c => c.status === "complete");
+      const avgQuality = completed.length > 0
+        ? completed.reduce((s, c) => s + (c.qualityScore || 0), 0) / completed.length
+        : 0;
+      await storage.updateProject(projectId, { wordCount: totalWords, qualityScore: avgQuality });
+
+      const { newContent, ...analysisData } = humanized;
+      const saved = await storage.createChapterAnalysis({
+        projectId,
+        chapterId,
+        kind: "humanizer",
+        score: humanized.afterScore,
+        data: analysisData,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

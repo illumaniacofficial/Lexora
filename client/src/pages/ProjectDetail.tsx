@@ -16,6 +16,7 @@ import {
   ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
   Save, Edit3, Check, Music, ArrowRight, Globe, Wand2,
+  ClipboardCheck, Users, Sparkles, Gauge, MessageSquareQuote,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -25,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis } from "@shared/schema";
 
 interface ProjectDetailData {
   project: Project;
@@ -34,6 +35,22 @@ interface ProjectDetailData {
   bookDna?: BookDna;
   marketing?: MarketingAsset;
   trendReport?: TrendReport;
+  chapterAnalyses?: ChapterAnalysis[];
+}
+
+interface EditorialBoardData {
+  reviewers: { role: string; score: number; summary: string; suggestions: { excerpt: string; issue: string; fix: string }[] }[];
+  overallScore: number;
+}
+interface HumanizerData {
+  beforeScore: number;
+  afterScore: number;
+  signals: string[];
+  summary: string;
+}
+interface BetaReadersData {
+  readers: { persona: string; rating: number; quote: string; liked: string; critique: string }[];
+  avgRating: number;
 }
 
 
@@ -44,7 +61,198 @@ function StepStatus({ status }: { status: string }) {
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise }: {
+function scoreToneClass(score: number, max: number): string {
+  const pct = score / max;
+  if (pct >= 0.75) return "text-emerald-400";
+  if (pct >= 0.5) return "text-amber-400";
+  return "text-red-400";
+}
+
+function aiScoreToneClass(score: number): string {
+  if (score <= 33) return "text-emerald-400";
+  if (score <= 66) return "text-amber-400";
+  return "text-red-400";
+}
+
+function EditorialPanel({
+  analyses, isProjectComplete,
+  onRunBoard, onRunHumanize, onRunBeta,
+  boardPending, humanizePending, betaPending,
+}: {
+  analyses: ChapterAnalysis[];
+  isProjectComplete: boolean;
+  onRunBoard: () => void;
+  onRunHumanize: () => void;
+  onRunBeta: () => void;
+  boardPending: boolean;
+  humanizePending: boolean;
+  betaPending: boolean;
+}) {
+  const latest = (kind: string) => analyses.find(a => a.kind === kind);
+  const board = latest("editorial_board")?.data as EditorialBoardData | undefined;
+  const humanizer = latest("humanizer")?.data as HumanizerData | undefined;
+  const beta = latest("beta_readers")?.data as BetaReadersData | undefined;
+  const tsLabel = (kind: string) => {
+    const a = latest(kind);
+    return a?.createdAt ? new Date(a.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+  };
+
+  return (
+    <div className="px-4 pb-4 border-t border-cyan-500/15">
+      <Tabs defaultValue="board" className="mt-3">
+        <TabsList className="bg-card/40 border border-border/20 h-8">
+          <TabsTrigger value="board" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-board">
+            <ClipboardCheck className="h-2.5 w-2.5 mr-1" /> BOARD
+          </TabsTrigger>
+          <TabsTrigger value="humanize" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-humanize">
+            <Sparkles className="h-2.5 w-2.5 mr-1" /> HUMANIZE
+          </TabsTrigger>
+          <TabsTrigger value="beta" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-beta">
+            <Users className="h-2.5 w-2.5 mr-1" /> BETA READERS
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="board" className="mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[9px] font-mono text-muted-foreground/50">
+              {board ? `Last run ${tsLabel("editorial_board")}` : "Run a specialist editorial review of this chapter."}
+            </span>
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[9px] font-mono border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40 px-2"
+              onClick={onRunBoard} disabled={boardPending}
+              data-testid="button-run-editorial-board"
+            >
+              {boardPending ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <ClipboardCheck className="h-2.5 w-2.5 mr-0.5" />}
+              {board ? "Re-run" : "Run Review"}
+            </Button>
+          </div>
+          {board ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Gauge className="h-3 w-3 text-cyan-400" />
+                <span className="text-[10px] font-mono text-muted-foreground/60">Overall</span>
+                <span className={cn("text-[12px] font-bold font-mono", scoreToneClass(board.overallScore, 10))} data-testid="text-board-overall">
+                  {board.overallScore.toFixed(1)}/10
+                </span>
+              </div>
+              {board.reviewers.map((rev, i) => (
+                <div key={i} className="border border-border/20 rounded-lg p-2.5 bg-card/30" data-testid={`reviewer-${i}`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold tracking-tight">{rev.role}</span>
+                    <span className={cn("text-[11px] font-bold font-mono", scoreToneClass(rev.score, 10))}>{rev.score.toFixed(1)}/10</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/70 leading-relaxed mb-1.5">{rev.summary}</p>
+                  <div className="space-y-1.5">
+                    {rev.suggestions.map((s, j) => (
+                      <div key={j} className="text-[9px] font-mono border-l-2 border-cyan-500/20 pl-2">
+                        {s.excerpt && <p className="text-cyan-400/60 italic">"{s.excerpt}"</p>}
+                        <p className="text-red-400/70">{s.issue}</p>
+                        <p className="text-emerald-400/70">→ {s.fix}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground/40 font-mono py-3 text-center">No review yet.</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="humanize" className="mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[9px] font-mono text-muted-foreground/50">
+              {humanizer ? `Last run ${tsLabel("humanizer")}` : "Score AI-ness and rewrite to sound natural."}
+            </span>
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 px-2"
+              onClick={onRunHumanize} disabled={humanizePending || isProjectComplete}
+              data-testid="button-run-humanize"
+            >
+              {humanizePending ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Sparkles className="h-2.5 w-2.5 mr-0.5" />}
+              {humanizer ? "Re-humanize" : "Humanize"}
+            </Button>
+          </div>
+          {isProjectComplete && (
+            <p className="text-[9px] font-mono text-amber-400/60 mb-2">Revert the book to editing to humanize chapters.</p>
+          )}
+          {humanizer ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="text-center">
+                  <p className="text-[8px] font-mono text-muted-foreground/40">BEFORE</p>
+                  <p className={cn("text-[14px] font-bold font-mono", aiScoreToneClass(humanizer.beforeScore))} data-testid="text-humanize-before">{humanizer.beforeScore}</p>
+                </div>
+                <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
+                <div className="text-center">
+                  <p className="text-[8px] font-mono text-muted-foreground/40">AFTER</p>
+                  <p className={cn("text-[14px] font-bold font-mono", aiScoreToneClass(humanizer.afterScore))} data-testid="text-humanize-after">{humanizer.afterScore}</p>
+                </div>
+                <span className="text-[8px] font-mono text-muted-foreground/40">AI-pattern score (0 = human, 100 = robotic)</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/70">{humanizer.summary}</p>
+              {humanizer.signals?.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {humanizer.signals.map((sig, i) => (
+                    <Badge key={i} variant="outline" className="text-[8px] font-mono border-amber-500/20 bg-amber-500/5 text-amber-400/80">{sig}</Badge>
+                  ))}
+                </div>
+              )}
+              <p className="text-[8px] font-mono text-muted-foreground/30">The chapter draft has been rewritten and saved.</p>
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground/40 font-mono py-3 text-center">Not humanized yet.</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="beta" className="mt-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[9px] font-mono text-muted-foreground/50">
+              {beta ? `Last run ${tsLabel("beta_readers")}` : "Get reactions from synthetic reader personas."}
+            </span>
+            <Button
+              size="sm" variant="outline"
+              className="h-6 text-[9px] font-mono border-pink-500/20 text-pink-400 hover:border-pink-500/40 px-2"
+              onClick={onRunBeta} disabled={betaPending}
+              data-testid="button-run-beta-readers"
+            >
+              {betaPending ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Users className="h-2.5 w-2.5 mr-0.5" />}
+              {beta ? "Re-run" : "Run Readers"}
+            </Button>
+          </div>
+          {beta ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Star className="h-3 w-3 text-pink-400" />
+                <span className="text-[10px] font-mono text-muted-foreground/60">Average</span>
+                <span className="text-[12px] font-bold font-mono text-pink-400" data-testid="text-beta-avg">{beta.avgRating.toFixed(1)}/5</span>
+              </div>
+              {beta.readers.map((r, i) => (
+                <div key={i} className="border border-border/20 rounded-lg p-2.5 bg-card/30" data-testid={`beta-reader-${i}`}>
+                  <div className="flex items-center justify-between mb-1 gap-2">
+                    <span className="text-[9px] font-mono text-muted-foreground/60 line-clamp-1">{r.persona}</span>
+                    <span className="text-[11px] font-bold font-mono text-pink-400 shrink-0">{r.rating.toFixed(1)}★</span>
+                  </div>
+                  <p className="text-[10px] italic text-foreground/80 flex gap-1">
+                    <MessageSquareQuote className="h-3 w-3 text-pink-400/50 shrink-0 mt-0.5" /> {r.quote}
+                  </p>
+                  {r.liked && <p className="text-[9px] font-mono text-emerald-400/70 mt-1">+ {r.liked}</p>}
+                  {r.critique && <p className="text-[9px] font-mono text-red-400/70">− {r.critique}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground/40 font-mono py-3 text-center">No reader feedback yet.</p>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -66,10 +274,18 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   revisingChapterId: number | null;
   onStartRevise: (id: number) => void;
   onCancelRevise: () => void;
+  analyses: ChapterAnalysis[];
+  onRunBoard: (id: number) => void;
+  onRunHumanize: (id: number) => void;
+  onRunBeta: (id: number) => void;
+  boardPending: boolean;
+  humanizePending: boolean;
+  betaPending: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [reviseInstruction, setReviseInstruction] = useState("");
+  const [showEditorial, setShowEditorial] = useState(false);
 
   const isEditing = editingChapterId === chapter.id;
   const isRevisingThis = revisingChapterId === chapter.id;
@@ -197,6 +413,18 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                       </Button>
                     </>
                   ) : null}
+                  <Button
+                    size="sm" variant="outline"
+                    className={cn(
+                      "h-6 text-[9px] font-mono px-1.5",
+                      showEditorial ? "border-cyan-500/40 text-cyan-300 bg-cyan-500/10" : "border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40"
+                    )}
+                    onClick={(e) => { e.stopPropagation(); setShowEditorial(v => !v); setExpanded(true); }}
+                    data-testid={`button-editorial-chapter-${chapter.id}`}
+                    aria-label="Editorial review tools"
+                  >
+                    <ClipboardCheck className="h-2.5 w-2.5 mr-0.5" /> EDITORIAL
+                  </Button>
                 </>
               ) : chapter.status === "generating" ? (
                 <>
@@ -321,7 +549,19 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           </p>
         </div>
       )}
-      {expanded && !isEditing && !isRevisingThis && chapter.content && (
+      {expanded && !isEditing && !isRevisingThis && showEditorial && (
+        <EditorialPanel
+          analyses={analyses}
+          isProjectComplete={isProjectComplete}
+          onRunBoard={() => onRunBoard(chapter.id)}
+          onRunHumanize={() => onRunHumanize(chapter.id)}
+          onRunBeta={() => onRunBeta(chapter.id)}
+          boardPending={boardPending}
+          humanizePending={humanizePending}
+          betaPending={betaPending}
+        />
+      )}
+      {expanded && !isEditing && !isRevisingThis && !showEditorial && chapter.content && (
         <div className="px-4 pb-4 border-t border-border/15">
           <ScrollArea className="h-52 mt-3">
             <MarkdownRendererDark content={chapter.content} />
@@ -402,6 +642,21 @@ export default function ProjectDetail() {
       apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/revise`, { instruction }),
     onSuccess: () => { setRevisingChapterId(null); invalidate(); toast({ title: "Chapter revised", description: "The AI rewrote this chapter." }); },
     onError: (e: any) => toast({ title: "Revision failed", description: e.message, variant: "destructive" }),
+  });
+  const editorialBoardMutation = useMutation({
+    mutationFn: (chapterId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/editorial-board`),
+    onSuccess: () => { invalidate(); toast({ title: "Editorial board review complete" }); },
+    onError: (e: any) => toast({ title: "Review failed", description: e.message, variant: "destructive" }),
+  });
+  const humanizeMutation = useMutation({
+    mutationFn: (chapterId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/humanize`),
+    onSuccess: () => { invalidate(); toast({ title: "Chapter humanized", description: "The draft was rewritten to sound more natural." }); },
+    onError: (e: any) => toast({ title: "Humanize failed", description: e.message, variant: "destructive" }),
+  });
+  const betaReadersMutation = useMutation({
+    mutationFn: (chapterId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/beta-readers`),
+    onSuccess: () => { invalidate(); toast({ title: "Beta reader feedback ready" }); },
+    onError: (e: any) => toast({ title: "Beta readers failed", description: e.message, variant: "destructive" }),
   });
   const markCompleteMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/mark-complete`),
@@ -509,6 +764,11 @@ export default function ProjectDetail() {
   }
 
   const { project, chapters, runSteps, bookDna, marketing, trendReport } = data;
+  const analysesByChapter = (data.chapterAnalyses || []).reduce<Record<number, ChapterAnalysis[]>>((acc, a) => {
+    if (a.chapterId == null) return acc;
+    (acc[a.chapterId] ||= []).push(a);
+    return acc;
+  }, {});
   const completedChapters = chapters.filter(c => c.status === "complete");
   const isEditingMode = project.status === "editing";
   const mostRecentEditId = (() => {
@@ -774,6 +1034,13 @@ export default function ProjectDetail() {
                     revisingChapterId={revisingChapterId}
                     onStartRevise={(cid) => setRevisingChapterId(cid)}
                     onCancelRevise={() => setRevisingChapterId(null)}
+                    analyses={analysesByChapter[ch.id] || []}
+                    onRunBoard={(cid) => editorialBoardMutation.mutate(cid)}
+                    onRunHumanize={(cid) => humanizeMutation.mutate(cid)}
+                    onRunBeta={(cid) => betaReadersMutation.mutate(cid)}
+                    boardPending={editorialBoardMutation.isPending && editorialBoardMutation.variables === ch.id}
+                    humanizePending={humanizeMutation.isPending && humanizeMutation.variables === ch.id}
+                    betaPending={betaReadersMutation.isPending && betaReadersMutation.variables === ch.id}
                   />
                 ))
               )}
