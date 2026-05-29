@@ -93,6 +93,7 @@ export async function createBookCheckout(opts: {
   readerId: number | null;
   token: string;
   baseUrl: string;
+  refCode?: string | null;
 }): Promise<string> {
   const stripe = await getUncachableStripeClient();
   const lineItems: { price: string; quantity: number }[] = [];
@@ -111,6 +112,7 @@ export async function createBookCheckout(opts: {
       readerId: opts.readerId ? String(opts.readerId) : "",
       projectIds: opts.projects.map((p) => p.id).join(","),
       inviteToken: opts.token,
+      refCode: opts.refCode || "",
     },
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
@@ -123,6 +125,7 @@ export async function createMembershipCheckout(opts: {
   readerId: number;
   token: string;
   baseUrl: string;
+  refCode?: string | null;
 }): Promise<string> {
   const stripe = await getUncachableStripeClient();
   const session = await stripe.checkout.sessions.create({
@@ -135,10 +138,34 @@ export async function createMembershipCheckout(opts: {
       readerId: String(opts.readerId),
       tierId: String(opts.tier.id),
       inviteToken: opts.token,
+      refCode: opts.refCode || "",
     },
   });
   if (!session.url) throw new Error("Stripe did not return a checkout URL");
   return session.url;
+}
+
+/** Share of a settled order credited to the attributed referral. */
+const REFERRAL_REWARD_RATE = 0.2;
+
+/**
+ * Credits a referral (by code) with a conversion and reward when an order or
+ * membership newly settles. Best-effort and idempotency is enforced by callers
+ * (only invoked when the order/membership row is newly created).
+ */
+async function creditReferralConversion(refCode: string | undefined, amountUsd: number): Promise<void> {
+  const code = (refCode || "").trim();
+  if (!code) return;
+  try {
+    const referral = await storage.getReferralByCode(code);
+    if (!referral) return;
+    await storage.updateReferral(referral.id, {
+      conversions: (referral.conversions || 0) + 1,
+      rewardAmount: Math.round(((referral.rewardAmount || 0) + amountUsd * REFERRAL_REWARD_RATE) * 100) / 100,
+    });
+  } catch (e: any) {
+    console.error("Referral conversion credit failed:", e?.message || e);
+  }
 }
 
 /**
@@ -182,6 +209,7 @@ export async function verifyAndFulfillSession(
           metadata: { type },
         });
       }
+      await creditReferralConversion(md.refCode, (session.amount_total || 0) / 100);
     }
   } else if (type === "membership") {
     const readerId = md.readerId ? parseInt(md.readerId, 10) : null;
@@ -213,6 +241,10 @@ export async function verifyAndFulfillSession(
           stripeSubscriptionId: subId,
           currentPeriodEnd,
         });
+        // Only credit a referral when there's a real subscription id to dedupe
+        // on; a null subId path is not safely idempotent, so skip crediting to
+        // avoid repeated referral rewards on retried verify calls.
+        if (subId) await creditReferralConversion(md.refCode, (session.amount_total || 0) / 100);
       }
     }
   }

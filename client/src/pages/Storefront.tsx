@@ -214,6 +214,22 @@ function ReaderAuthGate({ children, token }: { children: React.ReactNode; token:
 export default function Storefront() {
   const params = useParams<{ token: string }>();
   const token = params.token || "";
+
+  // Capture a referral code from the URL (?ref=CODE) before the auth gate so
+  // anonymous visitors are counted on landing. The code is persisted and later
+  // attached to checkout for conversion attribution.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const ref = url.searchParams.get("ref");
+    if (ref) {
+      try { localStorage.setItem("lexora_ref", ref); } catch { /* ignore */ }
+      fetch(`/api/ref/${encodeURIComponent(ref)}/click`, { method: "POST" }).catch(() => {});
+      url.searchParams.delete("ref");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <ReaderAuthGate token={token}>
       <StorefrontContent token={token} />
@@ -285,11 +301,13 @@ function StorefrontContent({ token }: { token: string }) {
   const startCheckout = async (body: Record<string, unknown>, endpoint: "checkout" | "membership-checkout") => {
     setCheckingOut(true);
     try {
+      let refCode: string | null = null;
+      try { refCode = localStorage.getItem("lexora_ref"); } catch { /* ignore */ }
       const res = await fetch(`/api/store/${token}/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(body),
+        body: JSON.stringify(refCode ? { ...body, refCode } : body),
       });
       const data = await res.json();
       if (!res.ok || !data.url) throw new Error(data.error || "Checkout failed");

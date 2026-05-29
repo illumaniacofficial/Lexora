@@ -22,6 +22,7 @@ import {
   readerHasBookAccess,
 } from "./commerce";
 import crypto from "crypto";
+import { generateLaunchPlan, type LaunchItem } from "./launch";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { saveDbSeed } from "./seed";
 import { z } from "zod";
@@ -519,6 +520,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/competitor-teardown/,
       /\/api\/projects\/\d+\/kdp-optimizer/,
       /\/api\/projects\/\d+\/ab-test$/,
+      /\/api\/projects\/\d+\/launch-schedule$/,
       /\/api\/series\/\d+\/bible/,
     ];
     if (
@@ -541,6 +543,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/storefront-auth/")) {
+      return next();
+    }
+    // Public referral click tracking — fired by anonymous storefront visitors
+    // before they log in. Only matches the click sub-path, not admin /api/referrals.
+    if (req.method === "POST" && /^\/api\/ref\/[^/]+\/click$/.test(req.path)) {
       return next();
     }
     if (req.path.startsWith("/api/store/")) {
@@ -840,11 +847,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if ((p.priceUsd || 0) <= 0) return res.status(400).json({ error: `Book "${p.title}" is free` });
         projects.push(p);
       }
+      const refCode = typeof req.body?.refCode === "string" ? req.body.refCode.trim().slice(0, 64) : null;
       const url = await createBookCheckout({
         projects,
         readerId: req.session.readerId,
         token: req.params.token,
         baseUrl: storeBaseUrl(req),
+        refCode,
       });
       res.json({ url });
     } catch (err: any) {
@@ -864,12 +873,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tier = (await storage.getMembershipTiers()).find(t => t.id === tierId);
       if (!tier || !tier.isActive) return res.status(404).json({ error: "Tier not found" });
       const priceId = tier.stripePriceId || (await syncTierStripePrice(tier));
+      const refCode = typeof req.body?.refCode === "string" ? req.body.refCode.trim().slice(0, 64) : null;
       const url = await createMembershipCheckout({
         tier,
         priceId,
         readerId: req.session.readerId,
         token: req.params.token,
         baseUrl: storeBaseUrl(req),
+        refCode,
       });
       res.json({ url });
     } catch (err: any) {
@@ -992,6 +1003,185 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ---- Referral & affiliate program ----
+
+  async function generateReferralCode(): Promise<string> {
+    for (let i = 0; i < 8; i++) {
+      const code = crypto.randomBytes(6).toString("base64url").slice(0, 8);
+      const existing = await storage.getReferralByCode(code);
+      if (!existing) return code;
+    }
+    throw new Error("Could not generate a unique referral code");
+  }
+
+  // Public: record a click on a referral link (anonymous visitors).
+  app.post("/api/ref/:code/click", async (req, res) => {
+    try {
+      const code = String(req.params.code || "").trim();
+      const referral = await storage.getReferralByCode(code);
+      if (!referral) return res.status(404).json({ error: "Unknown referral code" });
+      await storage.incrementReferralClick(referral.id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: list all referrals.
+  app.get("/api/referrals", async (_req, res) => {
+    try {
+      res.json(await storage.getReferrals());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const referralBodySchema = z.object({
+    code: z.string().trim().min(3).max(64).regex(/^[A-Za-z0-9_-]+$/, "Letters, numbers, - and _ only").optional(),
+    readerId: z.number().int().positive().nullable().optional(),
+  }).strict();
+
+  // Admin: create a referral link (auto-generates a code if none supplied).
+  app.post("/api/referrals", async (req, res) => {
+    try {
+      const data = referralBodySchema.parse(req.body || {});
+      let code = data.code;
+      if (code) {
+        const existing = await storage.getReferralByCode(code);
+        if (existing) return res.status(409).json({ error: "That referral code is already in use" });
+      } else {
+        code = await generateReferralCode();
+      }
+      const created = await storage.createReferral({ code, readerId: data.readerId ?? null });
+      res.status(201).json(created);
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: delete a referral.
+  app.delete("/api/referrals/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid referral ID" });
+      await storage.deleteReferral(id);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---- Launch automation ----
+
+  app.get("/api/projects/:id/launch-schedules", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      res.json(await storage.getLaunchSchedules(id));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const launchGenerateSchema = z.object({
+    launchDate: z.string().min(1),
+    channels: z.array(z.string().min(1)).max(8).optional(),
+  }).strict();
+
+  app.post("/api/projects/:id/launch-schedule", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const body = launchGenerateSchema.parse(req.body || {});
+      const launchDate = new Date(body.launchDate);
+      if (isNaN(launchDate.getTime())) return res.status(400).json({ error: "Invalid launch date" });
+
+      const dna = await storage.getBookDna(projectId);
+      const marketing = await storage.getMarketingAsset(projectId);
+
+      const items = await runStep(
+        projectId,
+        "Launch Plan",
+        FAST_MODEL,
+        async () => {
+          const { items, tokens } = await generateLaunchPlan({
+            project,
+            dna,
+            marketing,
+            launchDate,
+            channels: body.channels ?? [],
+          });
+          return { result: items, tokens };
+        },
+      );
+
+      const saved = await storage.createLaunchSchedule({
+        projectId,
+        launchDate,
+        items,
+        status: "scheduled",
+      });
+      res.status(201).json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Mark items whose scheduled time has passed as "sent" (simulated dispatch —
+  // no live ESP/social posting). Returns the updated schedule.
+  app.post("/api/launch-schedules/:id/process", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid schedule ID" });
+      const projectId = parseId(req.body?.projectId);
+      if (!projectId) return res.status(400).json({ error: "projectId is required" });
+      const schedules = await storage.getLaunchSchedules(projectId);
+      const schedule = schedules.find(s => s.id === id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+
+      const now = Date.now();
+      const items = (Array.isArray(schedule.items) ? schedule.items : []) as LaunchItem[];
+      let dispatched = 0;
+      const updated = items.map(item => {
+        if (item.status !== "sent" && new Date(item.scheduledAt).getTime() <= now) {
+          dispatched++;
+          return { ...item, status: "sent" as const };
+        }
+        return item;
+      });
+      const allSent = updated.length > 0 && updated.every(i => i.status === "sent");
+      const saved = await storage.updateLaunchSchedule(id, {
+        items: updated,
+        status: allSent ? "complete" : "scheduled",
+      });
+      res.json({ schedule: saved, dispatched });
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/launch-schedules/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid schedule ID" });
+      const projectId = parseId(String(req.query.projectId ?? ""));
+      if (!projectId) return res.status(400).json({ error: "projectId is required" });
+      const schedules = await storage.getLaunchSchedules(projectId);
+      const schedule = schedules.find(s => s.id === id);
+      if (!schedule) return res.status(404).json({ error: "Schedule not found" });
+      await storage.updateLaunchSchedule(id, { status: "cancelled" });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/projects", async (_req, res) => {
     try {
       const allList = await storage.getProjects();
@@ -1077,7 +1267,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const coverVariants = await storage.getCoverVariants(id);
       const exportJobs = await storage.getExportJobs(id);
       const brandKit = project.brandKitId ? await storage.getBrandKit(project.brandKitId) : undefined;
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit });
+      const launchSchedules = await storage.getLaunchSchedules(id);
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -160,6 +160,8 @@ export interface IStorage {
   getReferralByCode(code: string): Promise<Referral | undefined>;
   createReferral(data: InsertReferral): Promise<Referral>;
   updateReferral(id: number, data: Partial<Referral>): Promise<Referral>;
+  incrementReferralClick(id: number): Promise<void>;
+  deleteReferral(id: number): Promise<void>;
 
   getLaunchSchedules(projectId: number): Promise<LaunchSchedule[]>;
   createLaunchSchedule(data: InsertLaunchSchedule): Promise<LaunchSchedule>;
@@ -694,6 +696,12 @@ export class DatabaseStorage implements IStorage {
   async updateReferral(id: number, data: Partial<Referral>) {
     const [updated] = await db.update(referrals).set(data).where(eq(referrals.id, id)).returning();
     return updated;
+  }
+  async incrementReferralClick(id: number) {
+    await db.update(referrals).set({ clicks: sql`${referrals.clicks} + 1` }).where(eq(referrals.id, id));
+  }
+  async deleteReferral(id: number) {
+    await db.delete(referrals).where(eq(referrals.id, id));
   }
 
   async getLaunchSchedules(projectId: number) {

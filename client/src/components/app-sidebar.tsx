@@ -23,6 +23,7 @@ const navItems = [
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
+  { title: "Referrals", url: "/referrals", icon: Share2 },
   { title: "Library", url: "/library", icon: Library },
   { title: "Requests", url: "/requests", icon: Lightbulb },
   { title: "Chat Studio", url: "/chat", icon: MessageSquare },

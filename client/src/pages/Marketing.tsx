@@ -1,14 +1,174 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon, AlertCircle, ChevronDown, ChevronUp, Clock, CheckCircle, PenTool } from "lucide-react";
+import { Megaphone, BookOpen, ArrowRight, Mail, Calendar, Target, DollarSign, Hexagon, AlertCircle, ChevronDown, ChevronUp, Clock, CheckCircle, PenTool, Rocket, Send, Loader2, Share2 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { useState } from "react";
 import { VERTICAL_LABELS, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
-import type { Project, MarketingAsset } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Project, MarketingAsset, LaunchSchedule } from "@shared/schema";
+
+interface LaunchItem {
+  id: string;
+  type: "email" | "social";
+  channel: string;
+  offsetDays: number;
+  scheduledAt: string;
+  subject: string | null;
+  content: string;
+  status: "scheduled" | "sent";
+}
+
+function defaultLaunchDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 14);
+  return d.toISOString().slice(0, 10);
+}
+
+function LaunchPlanner({ projectId }: { projectId: number }) {
+  const { toast } = useToast();
+  const [launchDate, setLaunchDate] = useState(defaultLaunchDate());
+
+  const { data: schedules = [], isLoading } = useQuery<LaunchSchedule[]>({
+    queryKey: ["/api/projects", projectId, "launch-schedules"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/launch-schedules`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const activeSchedule = schedules.find(s => s.status !== "cancelled");
+
+  const generate = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/launch-schedule`, {
+        launchDate: new Date(launchDate + "T09:00:00").toISOString(),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "launch-schedules"] });
+      toast({ title: "Launch plan generated", description: "Your email + social campaign is queued." });
+    },
+    onError: (err: Error) => toast({ title: "Generation failed", description: err.message, variant: "destructive" }),
+  });
+
+  const processDue = useMutation({
+    mutationFn: async (scheduleId: number) => {
+      const res = await apiRequest("POST", `/api/launch-schedules/${scheduleId}/process`, { projectId });
+      return res.json();
+    },
+    onSuccess: (data: { dispatched: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "launch-schedules"] });
+      toast({ title: data.dispatched > 0 ? `${data.dispatched} item(s) dispatched` : "Nothing due yet", description: data.dispatched > 0 ? "Due items marked as sent." : "No items have reached their scheduled time." });
+    },
+    onError: (err: Error) => toast({ title: "Processing failed", description: err.message, variant: "destructive" }),
+  });
+
+  const items = (activeSchedule && Array.isArray(activeSchedule.items) ? activeSchedule.items : []) as LaunchItem[];
+  const sentCount = items.filter(i => i.status === "sent").length;
+
+  return (
+    <div className="mt-4 space-y-3 border-t border-border/10 pt-4" data-testid={`launch-planner-${projectId}`}>
+      <div className="flex items-center gap-2">
+        <Rocket className="h-3.5 w-3.5 text-purple-400/60" />
+        <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-purple-400/50">Launch Automation</p>
+      </div>
+
+      {isLoading ? (
+        <Skeleton className="h-16 rounded-lg bg-muted/20" />
+      ) : !activeSchedule ? (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
+          <div className="flex-1">
+            <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-wider">Launch date</label>
+            <Input
+              type="date"
+              value={launchDate}
+              onChange={(e) => setLaunchDate(e.target.value)}
+              className="mt-1 h-9 bg-card/50 border-border/30 font-mono text-xs"
+              data-testid={`input-launch-date-${projectId}`}
+            />
+          </div>
+          <Button
+            onClick={() => generate.mutate()}
+            disabled={generate.isPending || !launchDate}
+            className="h-9 neon-glow text-white border-0 font-mono text-[11px] shrink-0"
+            data-testid={`button-generate-launch-${projectId}`}
+          >
+            {generate.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Rocket className="h-3.5 w-3.5 mr-1" />}
+            Generate Plan
+          </Button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/50">
+              <Calendar className="h-3 w-3 text-purple-400/50" />
+              <span>Launch {activeSchedule.launchDate ? new Date(activeSchedule.launchDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD"}</span>
+              <span>·</span>
+              <span data-testid={`launch-progress-${projectId}`}>{sentCount}/{items.length} sent</span>
+              <Badge variant="outline" className={`text-[8px] font-mono ${activeSchedule.status === "complete" ? "text-emerald-400/70 border-emerald-500/20" : "text-amber-400/70 border-amber-500/20"}`}>
+                {activeSchedule.status.toUpperCase()}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => processDue.mutate(activeSchedule.id)}
+                disabled={processDue.isPending || activeSchedule.status === "complete"}
+                className="h-7 border-purple-500/20 text-purple-300 hover:bg-purple-500/10 font-mono text-[10px]"
+                data-testid={`button-process-launch-${projectId}`}
+              >
+                {processDue.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Send className="h-3 w-3 mr-1" />}
+                Send Due
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => generate.mutate()}
+                disabled={generate.isPending}
+                className="h-7 border-border/30 text-muted-foreground/60 font-mono text-[10px]"
+                data-testid={`button-regen-launch-${projectId}`}
+              >
+                Regenerate
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+            {items.map((item) => (
+              <div key={item.id} className="flex items-start gap-2.5 bg-white/[0.02] border border-border/10 rounded-lg px-3 py-2" data-testid={`launch-item-${projectId}-${item.id}`}>
+                <div className="shrink-0 mt-0.5">
+                  {item.type === "email" ? <Mail className="h-3.5 w-3.5 text-cyan-400/60" /> : <Share2 className="h-3.5 w-3.5 text-pink-400/60" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[9px] font-mono text-muted-foreground/50">{new Date(item.scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                    <Badge variant="outline" className="text-[8px] font-mono border-border/20 text-muted-foreground/50">{item.channel}</Badge>
+                    {item.status === "sent" ? (
+                      <Badge variant="outline" className="text-[8px] font-mono border-emerald-500/20 text-emerald-400/70"><CheckCircle className="h-2 w-2 mr-0.5" /> SENT</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[8px] font-mono border-amber-500/20 text-amber-400/70"><Clock className="h-2 w-2 mr-0.5" /> SCHEDULED</Badge>
+                    )}
+                  </div>
+                  {item.subject && <p className="text-[11px] font-bold text-muted-foreground/70 mt-1">{item.subject}</p>}
+                  <p className="text-[10px] text-muted-foreground/50 mt-0.5 leading-relaxed">{item.content}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const featureCards = [
   { icon: Target, label: "Hook Generator", desc: "30 social media hooks", glow: "neon-glow" },
@@ -152,6 +312,7 @@ function MarketingProjectCard({ project, marketing }: ProjectWithMarketing) {
                         </div>
                       </div>
                     )}
+                    <LaunchPlanner projectId={project.id} />
                     <div className="pt-2">
                       <Link href={`/projects/${project.id}`}>
                         <Button variant="outline" className="text-[10px] font-mono h-8 border-pink-500/20 text-pink-400 hover:bg-pink-500/10" data-testid={`link-project-${project.id}`}>
