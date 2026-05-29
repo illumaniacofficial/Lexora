@@ -28,11 +28,14 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion } from "@shared/schema";
+
+type WorkspaceRole = "owner" | "editor" | "viewer";
 import { VOICE_OPTIONS, DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
 import { Switch } from "@/components/ui/switch";
 import { Headphones, Clapperboard, Radio, Mic2 } from "lucide-react";
 import { Network, Library, Fingerprint, Plus, Trash2, DollarSign, FlaskConical, Trophy } from "lucide-react";
+import { History, RotateCcw, MessageSquare, ShieldCheck, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
@@ -286,7 +289,221 @@ function EditorialPanel({
   );
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi }: {
+// Lightweight line-level diff (LCS) so version history can show what changed
+// without pulling in a diffing dependency.
+type DiffLine = { type: "same" | "add" | "remove"; text: string };
+function lineDiff(oldText: string | null, newText: string | null): DiffLine[] {
+  const a = (oldText || "").split("\n");
+  const b = (newText || "").split("\n");
+  const n = a.length, m = b.length;
+  const lcs: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const out: DiffLine[] = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ type: "same", text: a[i] }); i++; j++; }
+    else if (lcs[i + 1][j] >= lcs[i][j + 1]) { out.push({ type: "remove", text: a[i] }); i++; }
+    else { out.push({ type: "add", text: b[j] }); j++; }
+  }
+  while (i < n) { out.push({ type: "remove", text: a[i] }); i++; }
+  while (j < m) { out.push({ type: "add", text: b[j] }); j++; }
+  return out;
+}
+
+const APPROVAL_META: Record<string, { label: string; className: string }> = {
+  approved: { label: "APPROVED", className: "border-emerald-500/30 text-emerald-300 bg-emerald-500/5" },
+  rejected: { label: "CHANGES REQUESTED", className: "border-red-500/30 text-red-300 bg-red-500/5" },
+  pending: { label: "PENDING REVIEW", className: "border-amber-500/30 text-amber-300 bg-amber-500/5" },
+};
+
+function CollaborationPanel({ projectId, chapter, role, isProjectComplete, onChanged }: {
+  projectId: number;
+  chapter: Chapter;
+  role: WorkspaceRole;
+  isProjectComplete: boolean;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const chapterId = chapter.id;
+  const canEdit = role !== "viewer";
+  const isOwner = role === "owner";
+  const [tab, setTab] = useState<"comments" | "versions">("comments");
+  const [newComment, setNewComment] = useState("");
+  const [diffVersionId, setDiffVersionId] = useState<number | null>(null);
+
+  const commentsKey = ["/api/projects", projectId, "chapters", chapterId, "comments"];
+  const versionsKey = ["/api/projects", projectId, "chapters", chapterId, "versions"];
+  const { data: comments = [], isLoading: commentsLoading } = useQuery<ChapterComment[]>({
+    queryKey: commentsKey,
+    queryFn: () => fetch(`/api/projects/${projectId}/chapters/${chapterId}/comments`, { credentials: "include" }).then(r => r.json()),
+  });
+  const { data: versions = [], isLoading: versionsLoading } = useQuery<ChapterVersion[]>({
+    queryKey: versionsKey,
+    queryFn: () => fetch(`/api/projects/${projectId}/chapters/${chapterId}/versions`, { credentials: "include" }).then(r => r.json()),
+    enabled: tab === "versions",
+  });
+  const invalidateComments = () => queryClient.invalidateQueries({ queryKey: commentsKey });
+  const invalidateVersions = () => queryClient.invalidateQueries({ queryKey: versionsKey });
+
+  const addComment = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/comments`, { body: newComment.trim() }),
+    onSuccess: () => { setNewComment(""); invalidateComments(); },
+    onError: (e: any) => toast({ title: "Comment failed", description: e.message, variant: "destructive" }),
+  });
+  const toggleResolve = useMutation({
+    mutationFn: ({ id, resolved }: { id: number; resolved: boolean }) => apiRequest("PATCH", `/api/comments/${id}`, { resolved }),
+    onSuccess: () => invalidateComments(),
+    onError: (e: any) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
+  });
+  const deleteComment = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/comments/${id}`),
+    onSuccess: () => invalidateComments(),
+    onError: (e: any) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+  });
+  const setApproval = useMutation({
+    mutationFn: (approvalStatus: string) => apiRequest("PATCH", `/api/projects/${projectId}/chapters/${chapterId}/approval`, { approvalStatus }),
+    onSuccess: () => { onChanged(); toast({ title: "Approval updated" }); },
+    onError: (e: any) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
+  });
+  const rollback = useMutation({
+    mutationFn: (versionId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/versions/${versionId}/rollback`),
+    onSuccess: () => { onChanged(); invalidateVersions(); setDiffVersionId(null); toast({ title: "Chapter rolled back" }); },
+    onError: (e: any) => toast({ title: "Rollback failed", description: e.message, variant: "destructive" }),
+  });
+
+  const diffVersion = versions.find(v => v.id === diffVersionId) || null;
+  const diff = diffVersion ? lineDiff(diffVersion.content, chapter.content || "") : [];
+
+  const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+
+  return (
+    <div className="px-4 pb-4 border-t border-cyan-500/15" data-testid={`panel-collab-${chapterId}`}>
+      <div className="flex items-center gap-2 mt-3 mb-3">
+        <Button size="sm" variant="outline"
+          className={cn("h-6 text-[9px] font-mono px-2", tab === "comments" ? "border-cyan-500/40 text-cyan-300 bg-cyan-500/10" : "border-border/30 text-muted-foreground")}
+          onClick={() => setTab("comments")} data-testid={`tab-comments-${chapterId}`}>
+          <MessageSquare className="h-2.5 w-2.5 mr-1" /> Comments
+        </Button>
+        <Button size="sm" variant="outline"
+          className={cn("h-6 text-[9px] font-mono px-2", tab === "versions" ? "border-cyan-500/40 text-cyan-300 bg-cyan-500/10" : "border-border/30 text-muted-foreground")}
+          onClick={() => setTab("versions")} data-testid={`tab-versions-${chapterId}`}>
+          <History className="h-2.5 w-2.5 mr-1" /> History
+        </Button>
+        <div className="ml-auto flex items-center gap-1.5">
+          {chapter.approvalStatus && chapter.approvalStatus !== "none" && APPROVAL_META[chapter.approvalStatus] && (
+            <Badge variant="outline" className={cn("text-[8px] font-mono", APPROVAL_META[chapter.approvalStatus].className)} data-testid={`badge-approval-${chapterId}`}>
+              {APPROVAL_META[chapter.approvalStatus].label}
+            </Badge>
+          )}
+          {isOwner && (
+            <>
+              <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono px-1.5 border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/10"
+                onClick={() => setApproval.mutate("approved")} disabled={setApproval.isPending || chapter.approvalStatus === "approved"} data-testid={`button-approve-${chapterId}`} aria-label="Approve chapter">
+                <ThumbsUp className="h-2.5 w-2.5 mr-0.5" /> Approve
+              </Button>
+              <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono px-1.5 border-red-500/25 text-red-300 hover:bg-red-500/10"
+                onClick={() => setApproval.mutate("rejected")} disabled={setApproval.isPending || chapter.approvalStatus === "rejected"} data-testid={`button-reject-${chapterId}`} aria-label="Request changes">
+                <ThumbsDown className="h-2.5 w-2.5 mr-0.5" /> Reject
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {tab === "comments" ? (
+        <div className="space-y-2">
+          {commentsLoading ? (
+            <Skeleton className="h-12 w-full" />
+          ) : comments.length === 0 ? (
+            <p className="text-[10px] font-mono text-muted-foreground/40">No comments yet. Start the discussion below.</p>
+          ) : (
+            comments.map(c => (
+              <div key={c.id} className={cn("rounded-md border p-2.5", c.resolved ? "border-emerald-500/15 bg-emerald-500/[0.03] opacity-60" : "border-border/20 bg-card/30")} data-testid={`comment-${c.id}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold text-cyan-300">{c.authorName}</span>
+                  <span className="text-[8px] font-mono text-muted-foreground/30">{fmtDate(c.createdAt)}</span>
+                  {c.resolved && <Badge variant="outline" className="text-[7px] font-mono border-emerald-500/30 text-emerald-400">RESOLVED</Badge>}
+                  {canEdit && (
+                    <div className="ml-auto flex items-center gap-1">
+                      <Button size="sm" variant="ghost" className="h-5 text-[8px] font-mono px-1.5 text-muted-foreground hover:text-emerald-300"
+                        onClick={() => toggleResolve.mutate({ id: c.id, resolved: !c.resolved })} data-testid={`button-resolve-comment-${c.id}`}>
+                        {c.resolved ? "Reopen" : "Resolve"}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-5 w-5 p-0 text-muted-foreground hover:text-red-400"
+                        onClick={() => deleteComment.mutate(c.id)} data-testid={`button-delete-comment-${c.id}`} aria-label="Delete comment">
+                        <Trash2 className="h-2.5 w-2.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-foreground/80 whitespace-pre-wrap leading-relaxed">{c.body}</p>
+              </div>
+            ))
+          )}
+          <div className="flex items-start gap-2 pt-1">
+            <Textarea value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Leave a comment for your team…"
+              className="min-h-[60px] text-[11px] bg-card/50 border-border/20 font-mono resize-y" data-testid={`textarea-new-comment-${chapterId}`} />
+            <Button size="sm" className="h-8 text-[9px] font-mono bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 border border-cyan-500/30 px-2 shrink-0"
+              onClick={() => addComment.mutate()} disabled={addComment.isPending || !newComment.trim()} data-testid={`button-add-comment-${chapterId}`}>
+              {addComment.isPending ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Post"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {versionsLoading ? (
+            <Skeleton className="h-12 w-full" />
+          ) : versions.length === 0 ? (
+            <p className="text-[10px] font-mono text-muted-foreground/40">No saved versions yet. Versions are captured automatically when this chapter is generated, edited, or revised.</p>
+          ) : (
+            versions.map(v => (
+              <div key={v.id} className="rounded-md border border-border/20 bg-card/30 p-2.5" data-testid={`version-${v.id}`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-purple-300">{v.versionNote || "Snapshot"}</span>
+                  <span className="text-[8px] font-mono text-muted-foreground/30">{fmtDate(v.createdAt)}</span>
+                  <Badge variant="outline" className="text-[7px] font-mono border-border/30 text-muted-foreground/50">{v.wordCount.toLocaleString()} w</Badge>
+                  <div className="ml-auto flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-5 text-[8px] font-mono px-1.5 text-muted-foreground hover:text-cyan-300"
+                      onClick={() => setDiffVersionId(diffVersionId === v.id ? null : v.id)} data-testid={`button-diff-version-${v.id}`}>
+                      {diffVersionId === v.id ? "Hide diff" : "Diff"}
+                    </Button>
+                    {canEdit && (
+                      <Button size="sm" variant="ghost" className="h-5 text-[8px] font-mono px-1.5 text-muted-foreground hover:text-amber-300"
+                        onClick={() => rollback.mutate(v.id)} disabled={rollback.isPending || isProjectComplete} data-testid={`button-rollback-version-${v.id}`}>
+                        <RotateCcw className="h-2.5 w-2.5 mr-0.5" /> Roll back
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {diffVersionId === v.id && (
+                  <div className="mt-2 rounded border border-border/20 bg-background/40 p-2 max-h-64 overflow-y-auto font-mono text-[10px] leading-relaxed" data-testid={`diff-version-${v.id}`}>
+                    <p className="text-[8px] text-muted-foreground/40 mb-1.5">Comparing this version → current draft</p>
+                    {diff.filter(l => l.type !== "same" || l.text.trim()).slice(0, 400).map((l, idx) => (
+                      <div key={idx} className={cn(
+                        "whitespace-pre-wrap",
+                        l.type === "add" && "text-emerald-300 bg-emerald-500/5",
+                        l.type === "remove" && "text-red-300 bg-red-500/5 line-through/30",
+                        l.type === "same" && "text-muted-foreground/40",
+                      )}>
+                        <span className="select-none opacity-50">{l.type === "add" ? "+ " : l.type === "remove" ? "- " : "  "}</span>{l.text || " "}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, role, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi, onChanged }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -316,11 +533,15 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   humanizePending: boolean;
   betaPending: boolean;
   onInlineAi: (id: number, payload: { action: "continue" | "rewrite"; before: string; after: string; selection: string; instruction: string }) => Promise<string>;
+  role: WorkspaceRole;
+  onChanged: () => void;
 }) {
+  const canEdit = role !== "viewer";
   const [expanded, setExpanded] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [reviseInstruction, setReviseInstruction] = useState("");
   const [showEditorial, setShowEditorial] = useState(false);
+  const [showCollab, setShowCollab] = useState(false);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [cowriteInstruction, setCowriteInstruction] = useState("");
   const [cowriteBusy, setCowriteBusy] = useState<"continue" | "rewrite" | null>(null);
@@ -448,7 +669,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                       </Button>
                     </a>
                   )}
-                  {!chapter.audioUrl && (
+                  {!chapter.audioUrl && canEdit && (
                     <Button
                       size="sm" variant="outline"
                       className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 px-1.5"
@@ -461,7 +682,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                       GEN MP3
                     </Button>
                   )}
-                  {isEditingMode ? (
+                  {canEdit && (isEditingMode ? (
                     <Button
                       size="sm" variant="outline"
                       className="h-6 text-[9px] font-mono border-amber-500/20 text-amber-400 hover:border-amber-500/40 px-1.5"
@@ -493,7 +714,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                         <Wand2 className="h-2.5 w-2.5 mr-0.5" /> REVISE
                       </Button>
                     </>
-                  ) : null}
+                  ) : null)}
                   <Button
                     size="sm" variant="outline"
                     className={cn(
@@ -506,25 +727,39 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                   >
                     <ClipboardCheck className="h-2.5 w-2.5 mr-0.5" /> EDITORIAL
                   </Button>
+                  <Button
+                    size="sm" variant="outline"
+                    className={cn(
+                      "h-6 text-[9px] font-mono px-1.5",
+                      showCollab ? "border-teal-500/40 text-teal-300 bg-teal-500/10" : "border-teal-500/20 text-teal-400 hover:border-teal-500/40"
+                    )}
+                    onClick={(e) => { e.stopPropagation(); setShowCollab(v => !v); setExpanded(true); }}
+                    data-testid={`button-collab-chapter-${chapter.id}`}
+                    aria-label="Team comments and version history"
+                  >
+                    <MessageSquare className="h-2.5 w-2.5 mr-0.5" /> COLLAB
+                  </Button>
                 </>
               ) : chapter.status === "generating" ? (
                 <>
                   <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
                     <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-purple-400" /> Writing...
                   </Badge>
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-7 text-[10px] font-mono border-red-500/20 text-red-400 hover:border-red-500/40 hover:bg-red-500/10"
-                    onClick={(e) => { e.stopPropagation(); onCancel(chapter.id); }}
-                    disabled={isCancelling}
-                    data-testid={`button-cancel-chapter-${chapter.id}`}
-                    aria-label="Cancel generation"
-                  >
-                    {isCancelling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <X className="h-2.5 w-2.5 mr-1" />}
-                    CANCEL
-                  </Button>
+                  {canEdit && (
+                    <Button
+                      size="sm" variant="outline"
+                      className="h-7 text-[10px] font-mono border-red-500/20 text-red-400 hover:border-red-500/40 hover:bg-red-500/10"
+                      onClick={(e) => { e.stopPropagation(); onCancel(chapter.id); }}
+                      disabled={isCancelling}
+                      data-testid={`button-cancel-chapter-${chapter.id}`}
+                      aria-label="Cancel generation"
+                    >
+                      {isCancelling ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <X className="h-2.5 w-2.5 mr-1" />}
+                      CANCEL
+                    </Button>
+                  )}
                 </>
-              ) : (
+              ) : canEdit ? (
                 <Button
                   size="sm" variant="outline"
                   className="h-7 text-[10px] font-mono border-border/30 hover:border-purple-500/30 hover:text-purple-300"
@@ -534,6 +769,8 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                 >
                   <Play className="h-2.5 w-2.5 mr-1" /> WRITE
                 </Button>
+              ) : (
+                <Badge variant="outline" className="text-[10px] font-mono border-border/20 text-muted-foreground/40">Pending</Badge>
               )}
               {chapter.qualityScore && (
                 <span className={`text-[10px] font-bold font-mono ${scoreColor(chapter.qualityScore)}`}>
@@ -704,7 +941,16 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           </p>
         </div>
       )}
-      {expanded && !isEditing && !isRevisingThis && showEditorial && (
+      {expanded && !isEditing && !isRevisingThis && showCollab && (
+        <CollaborationPanel
+          projectId={projectId}
+          chapter={chapter}
+          role={role}
+          isProjectComplete={isProjectComplete}
+          onChanged={onChanged}
+        />
+      )}
+      {expanded && !isEditing && !isRevisingThis && !showCollab && showEditorial && (
         <EditorialPanel
           analyses={analyses}
           isProjectComplete={isProjectComplete}
@@ -716,7 +962,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           betaPending={betaPending}
         />
       )}
-      {expanded && !isEditing && !isRevisingThis && !showEditorial && chapter.content && (
+      {expanded && !isEditing && !isRevisingThis && !showCollab && !showEditorial && chapter.content && (
         <div className="px-4 pb-4 border-t border-border/15">
           <ScrollArea className="h-52 mt-3">
             <MarkdownRendererDark content={chapter.content} />
@@ -2154,6 +2400,8 @@ export default function ProjectDetail() {
     queryKey: ["/api/projects", projectId],
     refetchInterval: 5000,
   });
+  const { data: workspaceMe } = useQuery<{ role: WorkspaceRole }>({ queryKey: ["/api/workspace/me"] });
+  const role: WorkspaceRole = workspaceMe?.role ?? "viewer";
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -2703,6 +2951,8 @@ export default function ProjectDetail() {
                     humanizePending={humanizeMutation.isPending && humanizeMutation.variables === ch.id}
                     betaPending={betaReadersMutation.isPending && betaReadersMutation.variables === ch.id}
                     onInlineAi={runInlineAi}
+                    role={role}
+                    onChanged={invalidate}
                   />
                 ))
               )}

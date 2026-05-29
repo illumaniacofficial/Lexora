@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2 } from "lucide-react";
+import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -272,6 +272,107 @@ function MembershipTierManager() {
               <Button type="button" size="sm" variant="outline" className="font-mono text-[11px] border-border/30" onClick={reset} data-testid="button-cancel-tier">CANCEL</Button>
             )}
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface WorkspaceMemberItem {
+  id: number;
+  userId: string;
+  role: "owner" | "editor" | "viewer";
+  username: string;
+}
+
+const ROLE_OPTIONS = [
+  { value: "owner", label: "Owner — full control, approvals, members" },
+  { value: "editor", label: "Editor — write & revise chapters" },
+  { value: "viewer", label: "Viewer — read & comment only" },
+];
+
+function WorkspaceMemberManager() {
+  const { toast } = useToast();
+  const { data: members, isLoading } = useQuery<WorkspaceMemberItem[]>({ queryKey: ["/api/workspace/members"] });
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("editor");
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/workspace/members"] });
+  const reset = () => { setUsername(""); setPassword(""); setRole("editor"); };
+
+  const addMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/workspace/members", { username: username.trim(), password, role }),
+    onSuccess: () => { invalidate(); reset(); toast({ title: "Teammate added" }); },
+    onError: (e: any) => toast({ title: "Add failed", description: e.message, variant: "destructive" }),
+  });
+  const updateRoleMutation = useMutation({
+    mutationFn: ({ id, role }: { id: number; role: string }) => apiRequest("PATCH", `/api/workspace/members/${id}`, { role }),
+    onSuccess: () => { invalidate(); toast({ title: "Role updated" }); },
+    onError: (e: any) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/workspace/members/${id}`),
+    onSuccess: () => { invalidate(); toast({ title: "Teammate removed" }); },
+    onError: (e: any) => toast({ title: "Remove failed", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <Card className="border-border/20 bg-card/30">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+          <Users className="h-3.5 w-3.5 text-purple-400/70" /> Team Workspace
+        </CardTitle>
+        <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Invite teammates and control who can edit, approve, or just review your books</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : (members && members.length > 0) ? (
+          <div className="space-y-2">
+            {members.map(m => (
+              <div key={m.id} className="flex items-center gap-3 p-3 rounded-lg bg-card/30 border border-border/20" data-testid={`workspace-member-${m.id}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-bold truncate" data-testid={`text-member-name-${m.id}`}>{m.username}</p>
+                </div>
+                <Select value={m.role} onValueChange={(v) => updateRoleMutation.mutate({ id: m.id, role: v })}>
+                  <SelectTrigger className="h-8 w-32 bg-card/30 border-border/30 font-mono text-[10px]" data-testid={`select-member-role-${m.id}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="owner">Owner</SelectItem>
+                    <SelectItem value="editor">Editor</SelectItem>
+                    <SelectItem value="viewer">Viewer</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" className="h-8 w-8 p-0 border-border/30 text-muted-foreground hover:text-red-400" onClick={() => deleteMutation.mutate(m.id)} data-testid={`button-remove-member-${m.id}`} aria-label="Remove teammate">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] font-mono text-muted-foreground/40">No teammates yet. The primary admin always has owner access. Add collaborators below.</p>
+        )}
+
+        <div className="space-y-3 pt-3 border-t border-border/10">
+          <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">Add Teammate</p>
+          <div className="space-y-2">
+            <Input value={username} onChange={e => setUsername(e.target.value)} placeholder="Username" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-member-username" />
+            <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Temporary password (min 6 chars)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-member-password" />
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="select-new-member-role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button type="button" size="sm" className="neon-glow text-white border-0 font-mono text-[11px]" onClick={() => addMutation.mutate()} disabled={addMutation.isPending || !username.trim() || password.length < 6} data-testid="button-add-member">
+            {addMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Save className="h-3 w-3 mr-1.5" />}
+            ADD TEAMMATE
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -638,6 +739,7 @@ export default function Settings() {
         </form>
       </Form>
 
+      <WorkspaceMemberManager />
       <BrandKitManager />
       <MembershipTierManager />
     </div>

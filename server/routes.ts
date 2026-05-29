@@ -347,8 +347,10 @@ const patchProjectSchema = z.object({
   priceUsd: z.number().min(0).max(9999).optional(),
 }).strict();
 
-function parseId(raw: string): number | null {
-  const id = parseInt(raw, 10);
+function parseId(raw: string | string[] | undefined): number | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return null;
+  const id = parseInt(value, 10);
   return isNaN(id) || id < 1 ? null : id;
 }
 
@@ -382,6 +384,65 @@ function requireStoreAuth(req: Request, res: Response, next: NextFunction) {
     return next();
   }
   return res.status(401).json({ error: "Store login required" });
+}
+
+type WorkspaceRole = "owner" | "editor" | "viewer";
+const ROLE_RANK: Record<WorkspaceRole, number> = { viewer: 1, editor: 2, owner: 3 };
+
+// Resolve the workspace role of the currently authenticated admin-session user.
+// Resolution order: an explicit workspaceMembers row wins; otherwise only the
+// bootstrap "admin" account falls back to owner (so existing single-user installs
+// keep working). Any other authenticated user without a membership row is treated
+// as a viewer — this prevents privilege escalation for removed/unlisted users.
+async function getWorkspaceRole(req: Request): Promise<WorkspaceRole | null> {
+  const uid = req.session?.adminId;
+  if (!uid) return null;
+  try {
+    const members = await storage.getWorkspaceMembers();
+    const member = members.find(m => m.userId === uid);
+    if (member && (member.role === "owner" || member.role === "editor" || member.role === "viewer")) {
+      return member.role;
+    }
+    const user = await storage.getUser(uid);
+    return user?.username === "admin" ? "owner" : "viewer";
+  } catch {
+    return "viewer";
+  }
+}
+
+// Gate a route so only members at or above the minimum role may proceed.
+function requireRole(minRole: WorkspaceRole) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const role = await getWorkspaceRole(req);
+    if (!role) return res.status(401).json({ error: "Authentication required" });
+    if (ROLE_RANK[role] >= ROLE_RANK[minRole]) return next();
+    return res.status(403).json({ error: `This action requires ${minRole} access or higher` });
+  };
+}
+
+// Snapshot the current saved state of a chapter into the version timeline so it
+// can be diffed and rolled back to later. Deduplicates against the most recent
+// version to avoid noise from no-op saves. Never throws into the request path.
+async function captureChapterVersion(chapterId: number, note: string) {
+  try {
+    const chapter = await storage.getChapter(chapterId);
+    if (!chapter) return;
+    const versions = await storage.getChapterVersions(chapterId);
+    const latest = versions[0];
+    if (latest && latest.title === chapter.title && (latest.content || "") === (chapter.content || "")) {
+      return;
+    }
+    await storage.createChapterVersion({
+      chapterId,
+      projectId: chapter.projectId,
+      title: chapter.title,
+      content: chapter.content ?? null,
+      wordCount: chapter.wordCount,
+      versionNote: note,
+    });
+  } catch (err) {
+    console.error("captureChapterVersion failed:", err);
+  }
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -1339,12 +1400,226 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.delete("/api/projects/:id", async (req, res) => {
+  app.delete("/api/projects/:id", requireRole("owner"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       await storage.deleteProject(id);
       res.status(204).send();
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ===================================================================
+  // Team workspaces: roles, members, chapter comments, approval gate,
+  // and chapter version history with diff + rollback.
+  // ===================================================================
+
+  // Current user's workspace role (drives the frontend permission gating).
+  app.get("/api/workspace/me", async (req, res) => {
+    try {
+      const role = await getWorkspaceRole(req);
+      if (!role) return res.status(401).json({ error: "Authentication required" });
+      res.json({ role });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/workspace/members", async (_req, res) => {
+    try {
+      const members = await storage.getWorkspaceMembers();
+      const users = await Promise.all(members.map(m => storage.getUser(m.userId)));
+      const enriched = members.map((m, i) => ({
+        ...m,
+        username: users[i]?.username ?? "(deleted user)",
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Add a teammate: creates a login account and a workspace membership row.
+  app.post("/api/workspace/members", requireRole("owner"), async (req, res) => {
+    try {
+      const username = typeof req.body?.username === "string" ? req.body.username.trim().slice(0, 200) : "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      const role = req.body?.role;
+      if (!username || !password) return res.status(400).json({ error: "Username and password are required" });
+      if (password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+      if (role !== "owner" && role !== "editor" && role !== "viewer") {
+        return res.status(400).json({ error: "Role must be owner, editor, or viewer" });
+      }
+      const existing = await storage.getUserByUsername(username);
+      if (existing) return res.status(409).json({ error: "A user with that username already exists" });
+      const hashed = await bcrypt.hash(password, 12);
+      const user = await storage.createUser({ username, password: hashed });
+      const member = await storage.createWorkspaceMember({ userId: user.id, role });
+      res.status(201).json({ ...member, username: user.username });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/workspace/members/:id", requireRole("owner"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid member ID" });
+      const role = req.body?.role;
+      if (role !== "owner" && role !== "editor" && role !== "viewer") {
+        return res.status(400).json({ error: "Role must be owner, editor, or viewer" });
+      }
+      const updated = await storage.updateWorkspaceMember(id, { role });
+      if (!updated) return res.status(404).json({ error: "Member not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/workspace/members/:id", requireRole("owner"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid member ID" });
+      await storage.deleteWorkspaceMember(id);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Chapter comments ---
+  app.get("/api/projects/:id/chapters/:chapterId/comments", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      res.json(await storage.getChapterComments(chapterId));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Any workspace member (including viewers) can leave a comment.
+  app.post("/api/projects/:id/chapters/:chapterId/comments", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      const body = typeof req.body?.body === "string" ? req.body.body.trim().slice(0, 4000) : "";
+      if (!body) return res.status(400).json({ error: "Comment body is required" });
+      const uid = req.session?.adminId ?? null;
+      const author = uid ? await storage.getUser(uid) : undefined;
+      const created = await storage.createChapterComment({
+        chapterId,
+        projectId,
+        userId: uid,
+        authorName: author?.username ?? "Admin",
+        body,
+      });
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Toggle resolved — editors and owners can resolve threads.
+  app.patch("/api/comments/:id", requireRole("editor"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid comment ID" });
+      const resolved = !!req.body?.resolved;
+      const updated = await storage.updateChapterComment(id, { resolved });
+      if (!updated) return res.status(404).json({ error: "Comment not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/comments/:id", requireRole("editor"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid comment ID" });
+      await storage.deleteChapterComment(id);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Approval gate (owner only) ---
+  app.patch("/api/projects/:id/chapters/:chapterId/approval", requireRole("owner"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      const status = req.body?.approvalStatus;
+      if (status !== "approved" && status !== "rejected" && status !== "pending" && status !== "none") {
+        return res.status(400).json({ error: "approvalStatus must be approved, rejected, pending, or none" });
+      }
+      const updated = await storage.updateChapter(chapterId, { approvalStatus: status });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Chapter version history ---
+  app.get("/api/projects/:id/chapters/:chapterId/versions", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+      const chapter = await storage.getChapter(chapterId);
+      if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
+      res.json(await storage.getChapterVersions(chapterId));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Roll back to a prior snapshot. The current state is captured first so the
+  // rollback itself is reversible.
+  app.post("/api/projects/:id/chapters/:chapterId/versions/:versionId/rollback", requireRole("editor"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      const versionId = parseId(req.params.versionId);
+      if (!projectId || !chapterId || !versionId) return res.status(400).json({ error: "Invalid ID" });
+      const project = await storage.getProject(projectId);
+      const chapter = await storage.getChapter(chapterId);
+      if (!project || !chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Not found" });
+      if (project.status === "complete") return res.status(400).json({ error: "Cannot roll back a completed book. Revert to editing first." });
+      const version = await storage.getChapterVersion(versionId);
+      if (!version || version.chapterId !== chapterId) return res.status(404).json({ error: "Version not found" });
+
+      // Snapshot the current state before overwriting so rollback is reversible.
+      await captureChapterVersion(chapterId, "Before rollback");
+
+      const updated = await storage.updateChapter(chapterId, {
+        title: version.title,
+        content: version.content,
+        wordCount: version.wordCount,
+        lastEditedAt: new Date(),
+        ...(chapter.approvalStatus === "approved" ? { approvalStatus: "none" } : {}),
+      });
+
+      const refreshed = await storage.getChapters(projectId);
+      const totalWords = refreshed.reduce((s, c) => s + c.wordCount, 0);
+      await storage.updateProject(projectId, { wordCount: totalWords });
+
+      await captureChapterVersion(chapterId, "Rolled back");
+      res.json(updated);
       saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -1739,7 +2014,7 @@ Return JSON exactly:
     }
   });
 
-  app.post("/api/projects/:id/trend-analysis", async (req, res) => {
+  app.post("/api/projects/:id/trend-analysis", requireRole("editor"), async (req, res) => {
     let prevStatus = "draft";
     try {
       const id = parseId(req.params.id);
@@ -1794,7 +2069,7 @@ Return JSON exactly:
     }
   });
 
-  app.post("/api/projects/:id/generate-outline", async (req, res) => {
+  app.post("/api/projects/:id/generate-outline", requireRole("editor"), async (req, res) => {
     let prevStatus = "draft";
     try {
       const id = parseId(req.params.id);
@@ -1876,7 +2151,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
     }
   });
 
-  app.post("/api/projects/:id/chapters/:chapterId/generate", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/generate", requireRole("editor"), async (req, res) => {
     let activeChapterId: number | null = null;
     try {
       const projectId = parseId(req.params.id);
@@ -1976,6 +2251,8 @@ Write the full chapter content only, no meta-commentary.`;
         status: allChapters.every(c => c.status === "complete") ? "editing" : "writing",
       });
 
+      await captureChapterVersion(chapterId, "Generated");
+
       res.json({ chapterId, wordCount, qualityScore, status: "complete" });
       saveDbSeed().catch(() => {});
     } catch (err: any) {
@@ -2001,7 +2278,7 @@ Write the full chapter content only, no meta-commentary.`;
     }
   });
 
-  app.patch("/api/projects/:id/chapters/:chapterId/edit", async (req, res) => {
+  app.patch("/api/projects/:id/chapters/:chapterId/edit", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       const chapterId = parseId(req.params.chapterId);
@@ -2010,22 +2287,26 @@ Write the full chapter content only, no meta-commentary.`;
       if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
       const { content } = req.body;
       if (typeof content !== "string") return res.status(400).json({ error: "Content is required" });
+      const contentChanged = (chapter.content || "") !== content;
       const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
       const updated = await storage.updateChapter(chapterId, {
         content,
         wordCount,
         lastEditedAt: new Date(),
+        // Editing invalidates a prior approval — send it back through the gate.
+        ...(contentChanged && chapter.approvalStatus === "approved" ? { approvalStatus: "none" } : {}),
       });
       const allChapters = await storage.getChapters(projectId);
       const totalWords = allChapters.reduce((s, c) => s + (c.id === chapterId ? wordCount : c.wordCount), 0);
       await storage.updateProject(projectId, { wordCount: totalWords });
+      if (contentChanged) await captureChapterVersion(chapterId, "Manual edit");
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.post("/api/projects/:id/chapters/:chapterId/revise", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/revise", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       const chapterId = parseId(req.params.chapterId);
@@ -2099,7 +2380,11 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         qualityScore,
         status: "complete",
         lastEditedAt: new Date(),
+        // Revision invalidates a prior approval — send it back through the gate.
+        ...(chapter.approvalStatus === "approved" ? { approvalStatus: "none" } : {}),
       });
+
+      await captureChapterVersion(chapterId, instruction ? "AI revision" : "AI polish");
 
       const refreshed = await storage.getChapters(projectId);
       const totalWords = refreshed.reduce((s, c) => s + c.wordCount, 0);
@@ -2116,7 +2401,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.patch("/api/projects/:id/mark-complete", async (req, res) => {
+  app.patch("/api/projects/:id/mark-complete", requireRole("editor"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -2134,7 +2419,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.patch("/api/projects/:id/toggle-storefront", async (req, res) => {
+  app.patch("/api/projects/:id/toggle-storefront", requireRole("editor"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -2155,7 +2440,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.patch("/api/projects/:id/revert-to-editing", async (req, res) => {
+  app.patch("/api/projects/:id/revert-to-editing", requireRole("editor"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -2189,7 +2474,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     return { projectId, chapterId, project, chapter };
   }
 
-  app.post("/api/projects/:id/chapters/:chapterId/editorial-board", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/editorial-board", requireRole("editor"), async (req, res) => {
     try {
       const loaded = await loadChapterForAnalysis(req, res);
       if (!loaded) return;
@@ -2220,7 +2505,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.post("/api/projects/:id/chapters/:chapterId/beta-readers", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/beta-readers", requireRole("editor"), async (req, res) => {
     try {
       const loaded = await loadChapterForAnalysis(req, res);
       if (!loaded) return;
@@ -2252,7 +2537,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.post("/api/projects/:id/chapters/:chapterId/humanize", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/humanize", requireRole("editor"), async (req, res) => {
     try {
       const loaded = await loadChapterForAnalysis(req, res);
       if (!loaded) return;
@@ -2272,6 +2557,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         () => humanizeChapter(project, chapter, dna, consistencyContext, fiction),
       );
 
+      await captureChapterVersion(chapterId, "Before humanize pass");
       const wordCount = humanized.newContent.trim().split(/\s+/).filter(Boolean).length;
       const qualityScore = await evaluateChapterQuality(humanized.newContent, chapter.title, project.vertical);
       await storage.updateChapter(chapterId, {
@@ -2280,7 +2566,9 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         qualityScore,
         status: "complete",
         lastEditedAt: new Date(),
+        ...(chapter.approvalStatus === "approved" ? { approvalStatus: "none" as const } : {}),
       });
+      await captureChapterVersion(chapterId, "After humanize pass");
 
       const refreshed = await storage.getChapters(projectId);
       const totalWords = refreshed.reduce((s, c) => s + c.wordCount, 0);
@@ -2305,7 +2593,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.post("/api/projects/:id/analyze-pacing", async (req, res) => {
+  app.post("/api/projects/:id/analyze-pacing", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
@@ -2339,7 +2627,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
-  app.post("/api/projects/:id/chapters/:chapterId/inline-ai", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/inline-ai", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       const chapterId = parseId(req.params.chapterId);
@@ -2593,7 +2881,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     return `project-${projectId}-chapter-${chapterId}.mp3`;
   }
 
-  app.post("/api/projects/:id/chapters/:chapterId/generate-audio", async (req, res) => {
+  app.post("/api/projects/:id/chapters/:chapterId/generate-audio", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       const chapterId = parseId(req.params.chapterId);
@@ -2924,7 +3212,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
     }
   });
 
-  app.post("/api/projects/:id/editions/:editionId/chapters/:chapterId/generate-audio", async (req, res) => {
+  app.post("/api/projects/:id/editions/:editionId/chapters/:chapterId/generate-audio", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       const editionId = parseId(req.params.editionId);
@@ -3036,7 +3324,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
     return existing.some((a) => a.kind === kind && a.status === "processing");
   }
 
-  app.post("/api/projects/:id/audiobook", aiRateLimit, async (req, res) => {
+  app.post("/api/projects/:id/audiobook", requireRole("editor"), aiRateLimit, async (req, res) => {
     try {
       const id = parseId(String(req.params.id));
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -3079,7 +3367,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
     }
   });
 
-  app.post("/api/projects/:id/audio-trailer", aiRateLimit, async (req, res) => {
+  app.post("/api/projects/:id/audio-trailer", requireRole("editor"), aiRateLimit, async (req, res) => {
     try {
       const id = parseId(String(req.params.id));
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -3115,7 +3403,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
     }
   });
 
-  app.post("/api/projects/:id/video-trailer", aiRateLimit, async (req, res) => {
+  app.post("/api/projects/:id/video-trailer", requireRole("editor"), aiRateLimit, async (req, res) => {
     try {
       const id = parseId(String(req.params.id));
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -3186,7 +3474,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
     }
   });
 
-  app.post("/api/projects/:id/generate-marketing", async (req, res) => {
+  app.post("/api/projects/:id/generate-marketing", requireRole("editor"), async (req, res) => {
     let prevStatus = "draft";
     try {
       const id = parseId(req.params.id);
@@ -3263,7 +3551,7 @@ Return JSON with:
     }
   });
 
-  app.post("/api/projects/:id/generate-cover", async (req, res) => {
+  app.post("/api/projects/:id/generate-cover", requireRole("editor"), async (req, res) => {
     let prevStatus = "draft";
     try {
       const id = parseId(req.params.id);
@@ -3331,7 +3619,7 @@ Return JSON with:
     "rich illustrative artwork with layered detail and texture",
   ];
 
-  app.post("/api/projects/:id/cover-variants", async (req, res) => {
+  app.post("/api/projects/:id/cover-variants", requireRole("editor"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
@@ -3389,7 +3677,7 @@ Return JSON with:
     }
   });
 
-  app.post("/api/projects/:id/cover-variants/:variantId/select", async (req, res) => {
+  app.post("/api/projects/:id/cover-variants/:variantId/select", requireRole("editor"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       const variantId = parseId(req.params.variantId);
@@ -3405,7 +3693,7 @@ Return JSON with:
     }
   });
 
-  app.delete("/api/projects/:id/cover-variants/:variantId", async (req, res) => {
+  app.delete("/api/projects/:id/cover-variants/:variantId", requireRole("editor"), async (req, res) => {
     try {
       const id = parseId(req.params.id);
       const variantId = parseId(req.params.variantId);
