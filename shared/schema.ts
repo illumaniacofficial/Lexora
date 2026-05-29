@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, real, boolean, jsonb, json, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -8,6 +8,16 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
 });
+
+// Session table managed by connect-pg-simple. Declared here so drizzle-kit
+// tracks it and does not treat new tables as renames of it during push.
+export const session = pgTable("session", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+}, (table) => [
+  index("IDX_session_expire").on(table.expire),
+]);
 
 export const insertUserSchema = createInsertSchema(users).pick({ username: true, password: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -48,6 +58,10 @@ export const projects = pgTable("projects", {
   coverPrompt: text("cover_prompt"),
   coverAvoidStyles: text("cover_avoid_styles"),
   publishedToStore: boolean("published_to_store").notNull().default(false),
+  seriesId: integer("series_id").references((): any => series.id, { onDelete: "set null" }),
+  styleFingerprintId: integer("style_fingerprint_id").references((): any => styleFingerprints.id, { onDelete: "set null" }),
+  brandKitId: integer("brand_kit_id").references((): any => brandKits.id, { onDelete: "set null" }),
+  priceUsd: real("price_usd").notNull().default(0),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
@@ -95,6 +109,7 @@ export const chapters = pgTable("chapters", {
   wordCount: integer("word_count").notNull().default(0),
   qualityScore: real("quality_score"),
   status: text("status").notNull().default("pending"),
+  approvalStatus: text("approval_status").notNull().default("none"),
   audioUrl: text("audio_url"),
   lastEditedAt: timestamp("last_edited_at"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
@@ -145,6 +160,7 @@ export const autopilotConfig = pgTable("autopilot_config", {
   budgetCapUsd: real("budget_cap_usd").notNull().default(50),
   minQualityScore: real("min_quality_score").notNull().default(7.0),
   targetLanguages: text("target_languages").array().notNull().default(sql`ARRAY['english']`),
+  strategyData: jsonb("strategy_data"),
   isActive: boolean("is_active").notNull().default(false),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
@@ -275,3 +291,403 @@ export type InviteToken = typeof inviteTokens.$inferSelect;
 export type BookRequest = typeof bookRequests.$inferSelect;
 export type InsertBookRequest = z.infer<typeof insertBookRequestSchema>;
 export type InsertInviteToken = z.infer<typeof insertInviteTokenSchema>;
+
+// ===================================================================
+// Roadmap foundation tables (shared by the 30-feature roadmap)
+// ===================================================================
+
+export const series = pgTable("series", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  title: text("title").notNull(),
+  description: text("description"),
+  bible: jsonb("bible"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const styleFingerprints = pgTable("style_fingerprints", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  sampleText: text("sample_text"),
+  profile: jsonb("profile"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const brandKits = pgTable("brand_kits", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  palette: jsonb("palette"),
+  fonts: jsonb("fonts"),
+  logoUrl: text("logo_url"),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const storyEntities = pgTable("story_entities", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  seriesId: integer("series_id").references(() => series.id, { onDelete: "cascade" }),
+  type: text("type").notNull().default("character"),
+  name: text("name").notNull(),
+  profile: jsonb("profile"),
+  relationships: jsonb("relationships"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("story_entities_project_idx").on(table.projectId),
+  index("story_entities_series_idx").on(table.seriesId),
+]);
+
+export const chapterAnalyses = pgTable("chapter_analyses", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  chapterId: integer("chapter_id").references(() => chapters.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  score: real("score"),
+  data: jsonb("data"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("chapter_analyses_project_idx").on(table.projectId),
+  index("chapter_analyses_chapter_idx").on(table.chapterId),
+]);
+
+export const marketReports = pgTable("market_reports", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  vertical: text("vertical"),
+  kind: text("kind").notNull(),
+  data: jsonb("data"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("market_reports_project_idx").on(table.projectId),
+]);
+
+export const revenueForecasts = pgTable("revenue_forecasts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  assumptions: jsonb("assumptions"),
+  projections: jsonb("projections"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("revenue_forecasts_project_idx").on(table.projectId),
+]);
+
+export const abTests = pgTable("ab_tests", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  testType: text("test_type").notNull(),
+  variants: jsonb("variants"),
+  winnerIndex: integer("winner_index"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("ab_tests_project_idx").on(table.projectId),
+]);
+
+export const analyticsEvents = pgTable("analytics_events", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  value: real("value").notNull().default(0),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("analytics_events_project_idx").on(table.projectId),
+  index("analytics_events_type_idx").on(table.eventType),
+]);
+
+export const coverVariants = pgTable("cover_variants", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  imageUrl: text("image_url").notNull(),
+  prompt: text("prompt"),
+  isSelected: boolean("is_selected").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("cover_variants_project_idx").on(table.projectId),
+]);
+
+export const exportJobs = pgTable("export_jobs", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  format: text("format").notNull(),
+  language: text("language"),
+  status: text("status").notNull().default("pending"),
+  fileUrl: text("file_url"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("export_jobs_project_idx").on(table.projectId),
+]);
+
+export const membershipTiers = pgTable("membership_tiers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  priceUsd: real("price_usd").notNull().default(0),
+  stripePriceId: text("stripe_price_id"),
+  benefits: jsonb("benefits"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const readerMemberships = pgTable("reader_memberships", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  readerId: integer("reader_id").notNull().references(() => storefrontReaders.id, { onDelete: "cascade" }),
+  tierId: integer("tier_id").references(() => membershipTiers.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("active"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("reader_memberships_reader_idx").on(table.readerId),
+]);
+
+export const storefrontOrders = pgTable("storefront_orders", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  readerId: integer("reader_id").references(() => storefrontReaders.id, { onDelete: "set null" }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "set null" }),
+  inviteToken: varchar("invite_token", { length: 64 }),
+  amount: real("amount").notNull().default(0),
+  currency: text("currency").notNull().default("usd"),
+  stripeSessionId: text("stripe_session_id"),
+  status: text("status").notNull().default("pending"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("storefront_orders_reader_idx").on(table.readerId),
+  index("storefront_orders_project_idx").on(table.projectId),
+]);
+
+export const referrals = pgTable("referrals", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  code: varchar("code", { length: 64 }).notNull().unique(),
+  readerId: integer("reader_id").references(() => storefrontReaders.id, { onDelete: "set null" }),
+  clicks: integer("clicks").notNull().default(0),
+  conversions: integer("conversions").notNull().default(0),
+  rewardAmount: real("reward_amount").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const launchSchedules = pgTable("launch_schedules", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  launchDate: timestamp("launch_date"),
+  items: jsonb("items"),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("launch_schedules_project_idx").on(table.projectId),
+]);
+
+export const mediaAssets = pgTable("media_assets", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  url: text("url"),
+  status: text("status").notNull().default("pending"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("media_assets_project_idx").on(table.projectId),
+]);
+
+export const notifications = pgTable("notifications", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  kind: text("kind").notNull().default("info"),
+  title: text("title").notNull(),
+  body: text("body"),
+  link: text("link"),
+  isRead: boolean("is_read").notNull().default(false),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("notifications_read_idx").on(table.isRead),
+]);
+
+export const bookEditions = pgTable("book_editions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  language: text("language").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("book_editions_project_idx").on(table.projectId),
+]);
+
+export const editionChapters = pgTable("edition_chapters", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  editionId: integer("edition_id").notNull().references(() => bookEditions.id, { onDelete: "cascade" }),
+  chapterNumber: integer("chapter_number").notNull(),
+  title: text("title").notNull(),
+  content: text("content"),
+  wordCount: integer("word_count").notNull().default(0),
+  audioUrl: text("audio_url"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("edition_chapters_edition_idx").on(table.editionId),
+]);
+
+export const workspaceMembers = pgTable("workspace_members", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("viewer"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("workspace_members_user_idx").on(table.userId),
+]);
+
+export const chapterComments = pgTable("chapter_comments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  chapterId: integer("chapter_id").notNull().references(() => chapters.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  authorName: text("author_name").notNull().default("Admin"),
+  body: text("body").notNull(),
+  resolved: boolean("resolved").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("chapter_comments_chapter_idx").on(table.chapterId),
+]);
+
+export const chapterVersions = pgTable("chapter_versions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  chapterId: integer("chapter_id").notNull().references(() => chapters.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content"),
+  wordCount: integer("word_count").notNull().default(0),
+  versionNote: text("version_note"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("chapter_versions_chapter_idx").on(table.chapterId),
+]);
+
+// Narration audio tracks. One row per (project, scope, page, voice). Stores the
+// audio file plus a timing map that aligns audio to text at word + syllable level
+// so playback can be synchronized (and stays in sync when sped up / slowed down,
+// since client scales the relative timestamps by the playback rate).
+// scope: 'book' (intro/outro/whole) | 'chapter' | 'page'. chapterId is null for
+// book-level tracks; pageIndex is set only for page-level tracks.
+export const audioTracks = pgTable("audio_tracks", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  chapterId: integer("chapter_id").references(() => chapters.id, { onDelete: "cascade" }),
+  scope: text("scope").notNull().default("chapter"),
+  pageIndex: integer("page_index"),
+  voiceId: text("voice_id").notNull(),
+  audioUrl: text("audio_url").notNull(),
+  durationMs: integer("duration_ms"),
+  baseSpeed: real("base_speed").notNull().default(1),
+  wordCount: integer("word_count").notNull().default(0),
+  fileSize: integer("file_size"),
+  // timingMap: { words: [{ text, startMs, endMs, syllables?: [{ text, startMs, endMs }] }], cadence?: {...} }
+  timingMap: jsonb("timing_map"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("audio_tracks_project_idx").on(table.projectId),
+  index("audio_tracks_chapter_idx").on(table.chapterId),
+  // Null-safe logical uniqueness: one track per (project, scope, chapter, page, voice).
+  // coalesce() guards against Postgres treating NULL chapter/page as always-distinct.
+  uniqueIndex("audio_tracks_unique_idx").on(
+    table.projectId,
+    table.scope,
+    table.voiceId,
+    sql`coalesce(${table.chapterId}, -1)`,
+    sql`coalesce(${table.pageIndex}, -1)`,
+  ),
+]);
+
+export const insertSeriesSchema = createInsertSchema(series).omit({ createdAt: true, updatedAt: true });
+export type Series = typeof series.$inferSelect;
+export type InsertSeries = z.infer<typeof insertSeriesSchema>;
+
+export const insertStyleFingerprintSchema = createInsertSchema(styleFingerprints).omit({ createdAt: true });
+export type StyleFingerprint = typeof styleFingerprints.$inferSelect;
+export type InsertStyleFingerprint = z.infer<typeof insertStyleFingerprintSchema>;
+
+export const insertBrandKitSchema = createInsertSchema(brandKits).omit({ createdAt: true, updatedAt: true });
+export type BrandKit = typeof brandKits.$inferSelect;
+export type InsertBrandKit = z.infer<typeof insertBrandKitSchema>;
+
+export const insertStoryEntitySchema = createInsertSchema(storyEntities).omit({ createdAt: true, updatedAt: true });
+export type StoryEntity = typeof storyEntities.$inferSelect;
+export type InsertStoryEntity = z.infer<typeof insertStoryEntitySchema>;
+
+export const insertChapterAnalysisSchema = createInsertSchema(chapterAnalyses).omit({ createdAt: true });
+export type ChapterAnalysis = typeof chapterAnalyses.$inferSelect;
+export type InsertChapterAnalysis = z.infer<typeof insertChapterAnalysisSchema>;
+
+export const insertMarketReportSchema = createInsertSchema(marketReports).omit({ createdAt: true });
+export type MarketReport = typeof marketReports.$inferSelect;
+export type InsertMarketReport = z.infer<typeof insertMarketReportSchema>;
+
+export const insertRevenueForecastSchema = createInsertSchema(revenueForecasts).omit({ createdAt: true });
+export type RevenueForecast = typeof revenueForecasts.$inferSelect;
+export type InsertRevenueForecast = z.infer<typeof insertRevenueForecastSchema>;
+
+export const insertAbTestSchema = createInsertSchema(abTests).omit({ createdAt: true });
+export type AbTest = typeof abTests.$inferSelect;
+export type InsertAbTest = z.infer<typeof insertAbTestSchema>;
+
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ createdAt: true });
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = z.infer<typeof insertAnalyticsEventSchema>;
+
+export const insertCoverVariantSchema = createInsertSchema(coverVariants).omit({ createdAt: true });
+export type CoverVariant = typeof coverVariants.$inferSelect;
+export type InsertCoverVariant = z.infer<typeof insertCoverVariantSchema>;
+
+export const insertExportJobSchema = createInsertSchema(exportJobs).omit({ createdAt: true });
+export type ExportJob = typeof exportJobs.$inferSelect;
+export type InsertExportJob = z.infer<typeof insertExportJobSchema>;
+
+export const insertMembershipTierSchema = createInsertSchema(membershipTiers).omit({ createdAt: true });
+export type MembershipTier = typeof membershipTiers.$inferSelect;
+export type InsertMembershipTier = z.infer<typeof insertMembershipTierSchema>;
+
+export const insertReaderMembershipSchema = createInsertSchema(readerMemberships).omit({ createdAt: true });
+export type ReaderMembership = typeof readerMemberships.$inferSelect;
+export type InsertReaderMembership = z.infer<typeof insertReaderMembershipSchema>;
+
+export const insertStorefrontOrderSchema = createInsertSchema(storefrontOrders).omit({ createdAt: true });
+export type StorefrontOrder = typeof storefrontOrders.$inferSelect;
+export type InsertStorefrontOrder = z.infer<typeof insertStorefrontOrderSchema>;
+
+export const insertReferralSchema = createInsertSchema(referrals).omit({ createdAt: true, clicks: true, conversions: true, rewardAmount: true });
+export type Referral = typeof referrals.$inferSelect;
+export type InsertReferral = z.infer<typeof insertReferralSchema>;
+
+export const insertLaunchScheduleSchema = createInsertSchema(launchSchedules).omit({ createdAt: true });
+export type LaunchSchedule = typeof launchSchedules.$inferSelect;
+export type InsertLaunchSchedule = z.infer<typeof insertLaunchScheduleSchema>;
+
+export const insertMediaAssetSchema = createInsertSchema(mediaAssets).omit({ createdAt: true });
+export type MediaAsset = typeof mediaAssets.$inferSelect;
+export type InsertMediaAsset = z.infer<typeof insertMediaAssetSchema>;
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ createdAt: true, isRead: true });
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+export const insertBookEditionSchema = createInsertSchema(bookEditions).omit({ createdAt: true });
+export type BookEdition = typeof bookEditions.$inferSelect;
+export type InsertBookEdition = z.infer<typeof insertBookEditionSchema>;
+
+export const insertEditionChapterSchema = createInsertSchema(editionChapters).omit({ createdAt: true });
+export type EditionChapter = typeof editionChapters.$inferSelect;
+export type InsertEditionChapter = z.infer<typeof insertEditionChapterSchema>;
+
+export const insertWorkspaceMemberSchema = createInsertSchema(workspaceMembers).omit({ createdAt: true });
+export type WorkspaceMember = typeof workspaceMembers.$inferSelect;
+export type InsertWorkspaceMember = z.infer<typeof insertWorkspaceMemberSchema>;
+
+export const insertChapterCommentSchema = createInsertSchema(chapterComments).omit({ createdAt: true, resolved: true });
+export type ChapterComment = typeof chapterComments.$inferSelect;
+export type InsertChapterComment = z.infer<typeof insertChapterCommentSchema>;
+
+export const insertChapterVersionSchema = createInsertSchema(chapterVersions).omit({ createdAt: true });
+export type ChapterVersion = typeof chapterVersions.$inferSelect;
+export type InsertChapterVersion = z.infer<typeof insertChapterVersionSchema>;
+
+export const insertAudioTrackSchema = createInsertSchema(audioTracks).omit({ createdAt: true });
+export type AudioTrack = typeof audioTracks.$inferSelect;
+export type InsertAudioTrack = z.infer<typeof insertAudioTrackSchema>;

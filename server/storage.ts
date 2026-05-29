@@ -12,8 +12,25 @@ import {
   type ChatMessage, type InsertChatMessage,
   type BookRequest, type InsertBookRequest,
   type StorefrontReader, type InsertStorefrontReader,
+  series, styleFingerprints, brandKits, storyEntities, chapterAnalyses, marketReports,
+  revenueForecasts, abTests, analyticsEvents, coverVariants, exportJobs, membershipTiers,
+  readerMemberships, storefrontOrders, referrals, launchSchedules, mediaAssets, notifications,
+  bookEditions, editionChapters, workspaceMembers, chapterComments, chapterVersions, audioTracks,
+  type Series, type InsertSeries, type StyleFingerprint, type InsertStyleFingerprint,
+  type BrandKit, type InsertBrandKit, type StoryEntity, type InsertStoryEntity,
+  type ChapterAnalysis, type InsertChapterAnalysis, type MarketReport, type InsertMarketReport,
+  type RevenueForecast, type InsertRevenueForecast, type AbTest, type InsertAbTest,
+  type AnalyticsEvent, type InsertAnalyticsEvent, type CoverVariant, type InsertCoverVariant,
+  type ExportJob, type InsertExportJob, type MembershipTier, type InsertMembershipTier,
+  type ReaderMembership, type InsertReaderMembership, type StorefrontOrder, type InsertStorefrontOrder,
+  type Referral, type InsertReferral, type LaunchSchedule, type InsertLaunchSchedule,
+  type MediaAsset, type InsertMediaAsset, type Notification, type InsertNotification,
+  type BookEdition, type InsertBookEdition, type EditionChapter, type InsertEditionChapter,
+  type WorkspaceMember, type InsertWorkspaceMember, type ChapterComment, type InsertChapterComment,
+  type ChapterVersion, type InsertChapterVersion,
+  type AudioTrack, type InsertAudioTrack,
 } from "@shared/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -79,6 +96,110 @@ export interface IStorage {
   getStorefrontReader(id: number): Promise<StorefrontReader | undefined>;
   getStorefrontReaderByEmail(email: string): Promise<StorefrontReader | undefined>;
   createStorefrontReader(data: InsertStorefrontReader): Promise<StorefrontReader>;
+
+  getSeriesList(): Promise<Series[]>;
+  getSeries(id: number): Promise<Series | undefined>;
+  createSeries(data: InsertSeries): Promise<Series>;
+  updateSeries(id: number, data: Partial<InsertSeries>): Promise<Series>;
+  deleteSeries(id: number): Promise<void>;
+
+  getStyleFingerprints(): Promise<StyleFingerprint[]>;
+  getStyleFingerprint(id: number): Promise<StyleFingerprint | undefined>;
+  createStyleFingerprint(data: InsertStyleFingerprint): Promise<StyleFingerprint>;
+  deleteStyleFingerprint(id: number): Promise<void>;
+
+  getBrandKits(): Promise<BrandKit[]>;
+  getBrandKit(id: number): Promise<BrandKit | undefined>;
+  createBrandKit(data: InsertBrandKit): Promise<BrandKit>;
+  updateBrandKit(id: number, data: Partial<InsertBrandKit>): Promise<BrandKit>;
+  deleteBrandKit(id: number): Promise<void>;
+
+  getStoryEntities(opts: { projectId?: number; seriesId?: number }): Promise<StoryEntity[]>;
+  createStoryEntity(data: InsertStoryEntity): Promise<StoryEntity>;
+  updateStoryEntity(id: number, data: Partial<InsertStoryEntity>): Promise<StoryEntity>;
+  deleteStoryEntity(id: number): Promise<void>;
+
+  getChapterAnalyses(projectId: number, chapterId?: number): Promise<ChapterAnalysis[]>;
+  createChapterAnalysis(data: InsertChapterAnalysis): Promise<ChapterAnalysis>;
+
+  getMarketReports(projectId?: number): Promise<MarketReport[]>;
+  createMarketReport(data: InsertMarketReport): Promise<MarketReport>;
+
+  getRevenueForecasts(projectId: number): Promise<RevenueForecast[]>;
+  createRevenueForecast(data: InsertRevenueForecast): Promise<RevenueForecast>;
+
+  getAbTests(projectId: number): Promise<AbTest[]>;
+  createAbTest(data: InsertAbTest): Promise<AbTest>;
+  updateAbTest(id: number, data: Partial<InsertAbTest>): Promise<AbTest>;
+
+  getAnalyticsEvents(projectId?: number): Promise<AnalyticsEvent[]>;
+  createAnalyticsEvent(data: InsertAnalyticsEvent): Promise<AnalyticsEvent>;
+
+  getCoverVariants(projectId: number): Promise<CoverVariant[]>;
+  createCoverVariant(data: InsertCoverVariant): Promise<CoverVariant>;
+  selectCoverVariant(projectId: number, id: number): Promise<void>;
+  deleteCoverVariant(id: number): Promise<void>;
+
+  getExportJobs(projectId: number): Promise<ExportJob[]>;
+  createExportJob(data: InsertExportJob): Promise<ExportJob>;
+  updateExportJob(id: number, data: Partial<InsertExportJob>): Promise<ExportJob>;
+
+  getMembershipTiers(): Promise<MembershipTier[]>;
+  createMembershipTier(data: InsertMembershipTier): Promise<MembershipTier>;
+  updateMembershipTier(id: number, data: Partial<InsertMembershipTier>): Promise<MembershipTier>;
+
+  getReaderMemberships(readerId: number): Promise<ReaderMembership[]>;
+  createReaderMembership(data: InsertReaderMembership): Promise<ReaderMembership>;
+  updateReaderMembership(id: number, data: Partial<InsertReaderMembership>): Promise<ReaderMembership>;
+
+  getStorefrontOrders(): Promise<StorefrontOrder[]>;
+  createStorefrontOrder(data: InsertStorefrontOrder): Promise<StorefrontOrder>;
+  updateStorefrontOrder(id: number, data: Partial<InsertStorefrontOrder>): Promise<StorefrontOrder>;
+
+  getReferrals(): Promise<Referral[]>;
+  getReferralByCode(code: string): Promise<Referral | undefined>;
+  createReferral(data: InsertReferral): Promise<Referral>;
+  updateReferral(id: number, data: Partial<Referral>): Promise<Referral>;
+
+  getLaunchSchedules(projectId: number): Promise<LaunchSchedule[]>;
+  createLaunchSchedule(data: InsertLaunchSchedule): Promise<LaunchSchedule>;
+  updateLaunchSchedule(id: number, data: Partial<InsertLaunchSchedule>): Promise<LaunchSchedule>;
+
+  getMediaAssets(projectId: number): Promise<MediaAsset[]>;
+  createMediaAsset(data: InsertMediaAsset): Promise<MediaAsset>;
+  updateMediaAsset(id: number, data: Partial<InsertMediaAsset>): Promise<MediaAsset>;
+
+  getNotifications(): Promise<Notification[]>;
+  createNotification(data: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: number): Promise<void>;
+  markAllNotificationsRead(): Promise<void>;
+
+  getBookEditions(projectId: number): Promise<BookEdition[]>;
+  createBookEdition(data: InsertBookEdition): Promise<BookEdition>;
+  updateBookEdition(id: number, data: Partial<InsertBookEdition>): Promise<BookEdition>;
+  getEditionChapters(editionId: number): Promise<EditionChapter[]>;
+  createEditionChapter(data: InsertEditionChapter): Promise<EditionChapter>;
+
+  getWorkspaceMembers(): Promise<WorkspaceMember[]>;
+  createWorkspaceMember(data: InsertWorkspaceMember): Promise<WorkspaceMember>;
+  updateWorkspaceMember(id: number, data: Partial<InsertWorkspaceMember>): Promise<WorkspaceMember>;
+  deleteWorkspaceMember(id: number): Promise<void>;
+
+  getChapterComments(chapterId: number): Promise<ChapterComment[]>;
+  createChapterComment(data: InsertChapterComment): Promise<ChapterComment>;
+  updateChapterComment(id: number, data: Partial<ChapterComment>): Promise<ChapterComment>;
+  deleteChapterComment(id: number): Promise<void>;
+
+  getChapterVersions(chapterId: number): Promise<ChapterVersion[]>;
+  getChapterVersion(id: number): Promise<ChapterVersion | undefined>;
+  createChapterVersion(data: InsertChapterVersion): Promise<ChapterVersion>;
+
+  getAudioTracks(projectId: number): Promise<AudioTrack[]>;
+  getAudioTracksByChapter(chapterId: number): Promise<AudioTrack[]>;
+  findAudioTrack(opts: { projectId: number; scope: string; chapterId: number | null; pageIndex: number | null; voiceId: string }): Promise<AudioTrack | undefined>;
+  getProjectsWithAudio(): Promise<number[]>;
+  upsertAudioTrack(data: InsertAudioTrack): Promise<AudioTrack>;
+  deleteAudioTrack(id: number): Promise<void>;
 
   getDashboardStats(): Promise<{
     totalProjects: number;
@@ -363,6 +484,358 @@ export class DatabaseStorage implements IStorage {
   async createStorefrontReader(data: InsertStorefrontReader) {
     const [created] = await db.insert(storefrontReaders).values(data).returning();
     return created;
+  }
+
+  async getSeriesList() {
+    return db.select().from(series).orderBy(desc(series.updatedAt));
+  }
+  async getSeries(id: number) {
+    const [row] = await db.select().from(series).where(eq(series.id, id));
+    return row;
+  }
+  async createSeries(data: InsertSeries) {
+    const [created] = await db.insert(series).values(data).returning();
+    return created;
+  }
+  async updateSeries(id: number, data: Partial<InsertSeries>) {
+    const [updated] = await db.update(series).set({ ...data, updatedAt: new Date() }).where(eq(series.id, id)).returning();
+    return updated;
+  }
+  async deleteSeries(id: number) {
+    await db.delete(series).where(eq(series.id, id));
+  }
+
+  async getStyleFingerprints() {
+    return db.select().from(styleFingerprints).orderBy(desc(styleFingerprints.createdAt));
+  }
+  async getStyleFingerprint(id: number) {
+    const [row] = await db.select().from(styleFingerprints).where(eq(styleFingerprints.id, id));
+    return row;
+  }
+  async createStyleFingerprint(data: InsertStyleFingerprint) {
+    const [created] = await db.insert(styleFingerprints).values(data).returning();
+    return created;
+  }
+  async deleteStyleFingerprint(id: number) {
+    await db.delete(styleFingerprints).where(eq(styleFingerprints.id, id));
+  }
+
+  async getBrandKits() {
+    return db.select().from(brandKits).orderBy(desc(brandKits.updatedAt));
+  }
+  async getBrandKit(id: number) {
+    const [row] = await db.select().from(brandKits).where(eq(brandKits.id, id));
+    return row;
+  }
+  async createBrandKit(data: InsertBrandKit) {
+    const [created] = await db.insert(brandKits).values(data).returning();
+    return created;
+  }
+  async updateBrandKit(id: number, data: Partial<InsertBrandKit>) {
+    const [updated] = await db.update(brandKits).set({ ...data, updatedAt: new Date() }).where(eq(brandKits.id, id)).returning();
+    return updated;
+  }
+  async deleteBrandKit(id: number) {
+    await db.delete(brandKits).where(eq(brandKits.id, id));
+  }
+
+  async getStoryEntities(opts: { projectId?: number; seriesId?: number }) {
+    if (opts.projectId !== undefined) {
+      return db.select().from(storyEntities).where(eq(storyEntities.projectId, opts.projectId)).orderBy(storyEntities.name);
+    }
+    if (opts.seriesId !== undefined) {
+      return db.select().from(storyEntities).where(eq(storyEntities.seriesId, opts.seriesId)).orderBy(storyEntities.name);
+    }
+    return db.select().from(storyEntities).orderBy(storyEntities.name);
+  }
+  async createStoryEntity(data: InsertStoryEntity) {
+    const [created] = await db.insert(storyEntities).values(data).returning();
+    return created;
+  }
+  async updateStoryEntity(id: number, data: Partial<InsertStoryEntity>) {
+    const [updated] = await db.update(storyEntities).set({ ...data, updatedAt: new Date() }).where(eq(storyEntities.id, id)).returning();
+    return updated;
+  }
+  async deleteStoryEntity(id: number) {
+    await db.delete(storyEntities).where(eq(storyEntities.id, id));
+  }
+
+  async getChapterAnalyses(projectId: number, chapterId?: number) {
+    if (chapterId !== undefined) {
+      return db.select().from(chapterAnalyses)
+        .where(and(eq(chapterAnalyses.projectId, projectId), eq(chapterAnalyses.chapterId, chapterId)))
+        .orderBy(desc(chapterAnalyses.createdAt));
+    }
+    return db.select().from(chapterAnalyses).where(eq(chapterAnalyses.projectId, projectId)).orderBy(desc(chapterAnalyses.createdAt));
+  }
+  async createChapterAnalysis(data: InsertChapterAnalysis) {
+    const [created] = await db.insert(chapterAnalyses).values(data).returning();
+    return created;
+  }
+
+  async getMarketReports(projectId?: number) {
+    if (projectId !== undefined) {
+      return db.select().from(marketReports).where(eq(marketReports.projectId, projectId)).orderBy(desc(marketReports.createdAt));
+    }
+    return db.select().from(marketReports).orderBy(desc(marketReports.createdAt));
+  }
+  async createMarketReport(data: InsertMarketReport) {
+    const [created] = await db.insert(marketReports).values(data).returning();
+    return created;
+  }
+
+  async getRevenueForecasts(projectId: number) {
+    return db.select().from(revenueForecasts).where(eq(revenueForecasts.projectId, projectId)).orderBy(desc(revenueForecasts.createdAt));
+  }
+  async createRevenueForecast(data: InsertRevenueForecast) {
+    const [created] = await db.insert(revenueForecasts).values(data).returning();
+    return created;
+  }
+
+  async getAbTests(projectId: number) {
+    return db.select().from(abTests).where(eq(abTests.projectId, projectId)).orderBy(desc(abTests.createdAt));
+  }
+  async createAbTest(data: InsertAbTest) {
+    const [created] = await db.insert(abTests).values(data).returning();
+    return created;
+  }
+  async updateAbTest(id: number, data: Partial<InsertAbTest>) {
+    const [updated] = await db.update(abTests).set(data).where(eq(abTests.id, id)).returning();
+    return updated;
+  }
+
+  async getAnalyticsEvents(projectId?: number) {
+    if (projectId !== undefined) {
+      return db.select().from(analyticsEvents).where(eq(analyticsEvents.projectId, projectId)).orderBy(desc(analyticsEvents.createdAt));
+    }
+    return db.select().from(analyticsEvents).orderBy(desc(analyticsEvents.createdAt));
+  }
+  async createAnalyticsEvent(data: InsertAnalyticsEvent) {
+    const [created] = await db.insert(analyticsEvents).values(data).returning();
+    return created;
+  }
+
+  async getCoverVariants(projectId: number) {
+    return db.select().from(coverVariants).where(eq(coverVariants.projectId, projectId)).orderBy(desc(coverVariants.createdAt));
+  }
+  async createCoverVariant(data: InsertCoverVariant) {
+    const [created] = await db.insert(coverVariants).values(data).returning();
+    return created;
+  }
+  async selectCoverVariant(projectId: number, id: number) {
+    await db.transaction(async (tx) => {
+      await tx.update(coverVariants).set({ isSelected: false }).where(eq(coverVariants.projectId, projectId));
+      await tx.update(coverVariants).set({ isSelected: true }).where(eq(coverVariants.id, id));
+    });
+  }
+  async deleteCoverVariant(id: number) {
+    await db.delete(coverVariants).where(eq(coverVariants.id, id));
+  }
+
+  async getExportJobs(projectId: number) {
+    return db.select().from(exportJobs).where(eq(exportJobs.projectId, projectId)).orderBy(desc(exportJobs.createdAt));
+  }
+  async createExportJob(data: InsertExportJob) {
+    const [created] = await db.insert(exportJobs).values(data).returning();
+    return created;
+  }
+  async updateExportJob(id: number, data: Partial<InsertExportJob>) {
+    const [updated] = await db.update(exportJobs).set(data).where(eq(exportJobs.id, id)).returning();
+    return updated;
+  }
+
+  async getMembershipTiers() {
+    return db.select().from(membershipTiers).orderBy(membershipTiers.priceUsd);
+  }
+  async createMembershipTier(data: InsertMembershipTier) {
+    const [created] = await db.insert(membershipTiers).values(data).returning();
+    return created;
+  }
+  async updateMembershipTier(id: number, data: Partial<InsertMembershipTier>) {
+    const [updated] = await db.update(membershipTiers).set(data).where(eq(membershipTiers.id, id)).returning();
+    return updated;
+  }
+
+  async getReaderMemberships(readerId: number) {
+    return db.select().from(readerMemberships).where(eq(readerMemberships.readerId, readerId)).orderBy(desc(readerMemberships.createdAt));
+  }
+  async createReaderMembership(data: InsertReaderMembership) {
+    const [created] = await db.insert(readerMemberships).values(data).returning();
+    return created;
+  }
+  async updateReaderMembership(id: number, data: Partial<InsertReaderMembership>) {
+    const [updated] = await db.update(readerMemberships).set(data).where(eq(readerMemberships.id, id)).returning();
+    return updated;
+  }
+
+  async getStorefrontOrders() {
+    return db.select().from(storefrontOrders).orderBy(desc(storefrontOrders.createdAt));
+  }
+  async createStorefrontOrder(data: InsertStorefrontOrder) {
+    const [created] = await db.insert(storefrontOrders).values(data).returning();
+    return created;
+  }
+  async updateStorefrontOrder(id: number, data: Partial<InsertStorefrontOrder>) {
+    const [updated] = await db.update(storefrontOrders).set(data).where(eq(storefrontOrders.id, id)).returning();
+    return updated;
+  }
+
+  async getReferrals() {
+    return db.select().from(referrals).orderBy(desc(referrals.createdAt));
+  }
+  async getReferralByCode(code: string) {
+    const [row] = await db.select().from(referrals).where(eq(referrals.code, code));
+    return row;
+  }
+  async createReferral(data: InsertReferral) {
+    const [created] = await db.insert(referrals).values(data).returning();
+    return created;
+  }
+  async updateReferral(id: number, data: Partial<Referral>) {
+    const [updated] = await db.update(referrals).set(data).where(eq(referrals.id, id)).returning();
+    return updated;
+  }
+
+  async getLaunchSchedules(projectId: number) {
+    return db.select().from(launchSchedules).where(eq(launchSchedules.projectId, projectId)).orderBy(desc(launchSchedules.createdAt));
+  }
+  async createLaunchSchedule(data: InsertLaunchSchedule) {
+    const [created] = await db.insert(launchSchedules).values(data).returning();
+    return created;
+  }
+  async updateLaunchSchedule(id: number, data: Partial<InsertLaunchSchedule>) {
+    const [updated] = await db.update(launchSchedules).set(data).where(eq(launchSchedules.id, id)).returning();
+    return updated;
+  }
+
+  async getMediaAssets(projectId: number) {
+    return db.select().from(mediaAssets).where(eq(mediaAssets.projectId, projectId)).orderBy(desc(mediaAssets.createdAt));
+  }
+  async createMediaAsset(data: InsertMediaAsset) {
+    const [created] = await db.insert(mediaAssets).values(data).returning();
+    return created;
+  }
+  async updateMediaAsset(id: number, data: Partial<InsertMediaAsset>) {
+    const [updated] = await db.update(mediaAssets).set(data).where(eq(mediaAssets.id, id)).returning();
+    return updated;
+  }
+
+  async getNotifications() {
+    return db.select().from(notifications).orderBy(desc(notifications.createdAt)).limit(100);
+  }
+  async createNotification(data: InsertNotification) {
+    const [created] = await db.insert(notifications).values(data).returning();
+    return created;
+  }
+  async markNotificationRead(id: number) {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+  async markAllNotificationsRead() {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.isRead, false));
+  }
+
+  async getBookEditions(projectId: number) {
+    return db.select().from(bookEditions).where(eq(bookEditions.projectId, projectId)).orderBy(desc(bookEditions.createdAt));
+  }
+  async createBookEdition(data: InsertBookEdition) {
+    const [created] = await db.insert(bookEditions).values(data).returning();
+    return created;
+  }
+  async updateBookEdition(id: number, data: Partial<InsertBookEdition>) {
+    const [updated] = await db.update(bookEditions).set(data).where(eq(bookEditions.id, id)).returning();
+    return updated;
+  }
+  async getEditionChapters(editionId: number) {
+    return db.select().from(editionChapters).where(eq(editionChapters.editionId, editionId)).orderBy(editionChapters.chapterNumber);
+  }
+  async createEditionChapter(data: InsertEditionChapter) {
+    const [created] = await db.insert(editionChapters).values(data).returning();
+    return created;
+  }
+
+  async getWorkspaceMembers() {
+    return db.select().from(workspaceMembers).orderBy(desc(workspaceMembers.createdAt));
+  }
+  async createWorkspaceMember(data: InsertWorkspaceMember) {
+    const [created] = await db.insert(workspaceMembers).values(data).returning();
+    return created;
+  }
+  async updateWorkspaceMember(id: number, data: Partial<InsertWorkspaceMember>) {
+    const [updated] = await db.update(workspaceMembers).set(data).where(eq(workspaceMembers.id, id)).returning();
+    return updated;
+  }
+  async deleteWorkspaceMember(id: number) {
+    await db.delete(workspaceMembers).where(eq(workspaceMembers.id, id));
+  }
+
+  async getChapterComments(chapterId: number) {
+    return db.select().from(chapterComments).where(eq(chapterComments.chapterId, chapterId)).orderBy(chapterComments.createdAt);
+  }
+  async createChapterComment(data: InsertChapterComment) {
+    const [created] = await db.insert(chapterComments).values(data).returning();
+    return created;
+  }
+  async updateChapterComment(id: number, data: Partial<ChapterComment>) {
+    const [updated] = await db.update(chapterComments).set(data).where(eq(chapterComments.id, id)).returning();
+    return updated;
+  }
+  async deleteChapterComment(id: number) {
+    await db.delete(chapterComments).where(eq(chapterComments.id, id));
+  }
+
+  async getChapterVersions(chapterId: number) {
+    return db.select().from(chapterVersions).where(eq(chapterVersions.chapterId, chapterId)).orderBy(desc(chapterVersions.createdAt));
+  }
+  async getChapterVersion(id: number) {
+    const [row] = await db.select().from(chapterVersions).where(eq(chapterVersions.id, id));
+    return row;
+  }
+  async createChapterVersion(data: InsertChapterVersion) {
+    const [created] = await db.insert(chapterVersions).values(data).returning();
+    return created;
+  }
+
+  async getAudioTracks(projectId: number) {
+    return db.select().from(audioTracks).where(eq(audioTracks.projectId, projectId)).orderBy(audioTracks.chapterId, audioTracks.pageIndex);
+  }
+  async getAudioTracksByChapter(chapterId: number) {
+    return db.select().from(audioTracks).where(eq(audioTracks.chapterId, chapterId)).orderBy(audioTracks.pageIndex);
+  }
+  async findAudioTrack(opts: { projectId: number; scope: string; chapterId: number | null; pageIndex: number | null; voiceId: string }) {
+    const conds = [
+      eq(audioTracks.projectId, opts.projectId),
+      eq(audioTracks.scope, opts.scope),
+      eq(audioTracks.voiceId, opts.voiceId),
+      opts.chapterId === null ? sql`${audioTracks.chapterId} is null` : eq(audioTracks.chapterId, opts.chapterId),
+      opts.pageIndex === null ? sql`${audioTracks.pageIndex} is null` : eq(audioTracks.pageIndex, opts.pageIndex),
+    ];
+    const [row] = await db.select().from(audioTracks).where(and(...conds));
+    return row;
+  }
+  async getProjectsWithAudio() {
+    const rows = await db.selectDistinct({ projectId: audioTracks.projectId }).from(audioTracks);
+    return rows.map((r) => r.projectId);
+  }
+  async upsertAudioTrack(data: InsertAudioTrack) {
+    return db.transaction(async (tx) => {
+      const conds = [
+        eq(audioTracks.projectId, data.projectId),
+        eq(audioTracks.scope, data.scope ?? "chapter"),
+        eq(audioTracks.voiceId, data.voiceId),
+        data.chapterId == null ? sql`${audioTracks.chapterId} is null` : eq(audioTracks.chapterId, data.chapterId),
+        data.pageIndex == null ? sql`${audioTracks.pageIndex} is null` : eq(audioTracks.pageIndex, data.pageIndex),
+      ];
+      const [existing] = await tx.select().from(audioTracks).where(and(...conds));
+      if (existing) {
+        const [updated] = await tx.update(audioTracks).set(data).where(eq(audioTracks.id, existing.id)).returning();
+        return updated;
+      }
+      const [created] = await tx.insert(audioTracks).values(data).returning();
+      return created;
+    });
+  }
+  async deleteAudioTrack(id: number) {
+    await db.delete(audioTracks).where(eq(audioTracks.id, id));
   }
 
   async getDashboardStats() {
