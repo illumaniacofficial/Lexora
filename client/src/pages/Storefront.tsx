@@ -17,7 +17,7 @@ import BookReader from "@/components/book-reader";
 import type { NarrationState } from "@/components/audio-mini-player";
 import AudioMiniPlayer from "@/components/audio-mini-player";
 import { useNarration } from "@/App";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface StoreBook {
   id: number;
@@ -30,11 +30,31 @@ interface StoreBook {
   qualityScore: number | null;
   shortBlurb: string | null;
   mediumBlurb: string | null;
+  priceUsd: number;
 }
 
 interface StoreBookDetail extends StoreBook {
   coverImageUrl: string | null;
+  locked: boolean;
+  hasAccess: boolean;
   chapters: { id: number; chapterNumber: number; title: string; content: string | null; wordCount: number; status: string }[];
+}
+
+interface StoreTier {
+  id: number;
+  name: string;
+  priceUsd: number;
+  benefits: string[] | null;
+}
+
+interface StoreAccess {
+  ownedBookIds: number[];
+  activeMembership: boolean;
+  isAdmin: boolean;
+}
+
+function formatPrice(usd: number): string {
+  return `$${usd.toFixed(2)}`;
 }
 
 function ReaderAuthGate({ children, token }: { children: React.ReactNode; token: string }) {
@@ -211,7 +231,74 @@ function StorefrontContent({ token }: { token: string }) {
   const [requestGenre, setRequestGenre] = useState("");
   const [requestDescription, setRequestDescription] = useState("");
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
   const { toast } = useToast();
+
+  const { data: access } = useQuery<StoreAccess>({
+    queryKey: ["/api/store", token, "access"],
+    queryFn: async () => {
+      const res = await fetch(`/api/store/${token}/access`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load access");
+      return res.json();
+    },
+    enabled: !!token,
+  });
+
+  const { data: tiers = [] } = useQuery<StoreTier[]>({
+    queryKey: ["/api/store", token, "tiers"],
+    queryFn: async () => {
+      const res = await fetch(`/api/store/${token}/tiers`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!token,
+  });
+
+  // After returning from Stripe Checkout, verify + fulfill the session.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sessionId = url.searchParams.get("session_id");
+    if (!sessionId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/store/${token}/checkout/verify?session_id=${encodeURIComponent(sessionId)}`, { credentials: "include" });
+        const result = await res.json();
+        if (res.ok && result.status === "complete") {
+          toast({ title: "Purchase complete!", description: result.type === "membership" ? "Your membership is active." : "Your book is unlocked." });
+          queryClient.invalidateQueries({ queryKey: ["/api/store", token, "access"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/store", token] });
+        } else if (res.ok) {
+          toast({ title: "Payment pending", description: "We'll unlock your purchase once payment settles." });
+        } else {
+          toast({ title: "Verification failed", description: result.error || "Could not verify purchase", variant: "destructive" });
+        }
+      } catch {
+        toast({ title: "Verification failed", variant: "destructive" });
+      } finally {
+        url.searchParams.delete("session_id");
+        window.history.replaceState({}, "", url.pathname + url.search);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const startCheckout = async (body: Record<string, unknown>, endpoint: "checkout" | "membership-checkout") => {
+    setCheckingOut(true);
+    try {
+      const res = await fetch(`/api/store/${token}/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data.error || "Checkout failed");
+      window.location.href = data.url;
+    } catch (err: any) {
+      toast({ title: "Checkout failed", description: err.message, variant: "destructive" });
+      setCheckingOut(false);
+    }
+  };
 
   const submitRequest = useMutation({
     mutationFn: async () => {
@@ -334,23 +421,78 @@ function StorefrontContent({ token }: { token: string }) {
                 <span>{bookDetail.chapters.length} chapters</span>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                <Button
-                  onClick={() => setShowReader(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-sm px-6 shadow-[0_0_20px_rgba(147,51,234,0.3)]"
-                  data-testid="button-read-book"
-                >
-                  <BookOpen className="h-4 w-4 mr-2" /> Read Book
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowReader(true)}
-                  className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 font-mono text-sm"
-                  data-testid="button-listen-book"
-                >
-                  <Volume2 className="h-4 w-4 mr-2" /> Listen with AI
-                </Button>
-              </div>
+              {bookDetail.locked ? (
+                <div className="space-y-4" data-testid="locked-purchase-panel">
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                    <Lock className="h-4 w-4 text-amber-400 shrink-0" />
+                    <span className="text-xs font-mono text-amber-200">Premium book — preview only. Unlock to read in full.</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                    <Button
+                      onClick={() => startCheckout({ bookId: bookDetail.id }, "checkout")}
+                      disabled={checkingOut}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-sm px-6 shadow-[0_0_20px_rgba(147,51,234,0.3)]"
+                      data-testid="button-buy-book"
+                    >
+                      {checkingOut ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShoppingBag className="h-4 w-4 mr-2" />}
+                      Buy for {formatPrice(bookDetail.priceUsd)}
+                    </Button>
+                  </div>
+                  {tiers.length > 0 && (
+                    <div className="border-t border-stone-800 pt-4">
+                      <h3 className="text-xs font-mono text-stone-500 uppercase tracking-wider mb-3">Or unlock everything with a membership</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {tiers.map(tier => (
+                          <Card key={tier.id} className="bg-stone-900/50 border-stone-800/50" data-testid={`tier-card-${tier.id}`}>
+                            <CardContent className="p-4">
+                              <div className="flex items-baseline justify-between mb-2">
+                                <span className="text-sm font-bold text-white">{tier.name}</span>
+                                <span className="text-sm font-mono text-purple-300">{formatPrice(tier.priceUsd)}<span className="text-[10px] text-stone-500">/mo</span></span>
+                              </div>
+                              {tier.benefits && tier.benefits.length > 0 && (
+                                <ul className="space-y-1 mb-3">
+                                  {tier.benefits.map((b, i) => (
+                                    <li key={i} className="flex items-start gap-1.5 text-[11px] text-stone-400">
+                                      <CheckCircle2 className="h-3 w-3 text-emerald-400/70 shrink-0 mt-0.5" /> {b}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              <Button
+                                size="sm"
+                                onClick={() => startCheckout({ tierId: tier.id }, "membership-checkout")}
+                                disabled={checkingOut}
+                                className="w-full bg-purple-600/80 hover:bg-purple-700 text-white font-mono text-xs"
+                                data-testid={`button-subscribe-${tier.id}`}
+                              >
+                                Subscribe
+                              </Button>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <Button
+                    onClick={() => setShowReader(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-mono text-sm px-6 shadow-[0_0_20px_rgba(147,51,234,0.3)]"
+                    data-testid="button-read-book"
+                  >
+                    <BookOpen className="h-4 w-4 mr-2" /> Read Book
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowReader(true)}
+                    className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 font-mono text-sm"
+                    data-testid="button-listen-book"
+                  >
+                    <Volume2 className="h-4 w-4 mr-2" /> Listen with AI
+                  </Button>
+                </div>
+              )}
 
               <div className="mt-8 border-t border-stone-800 pt-6">
                 <h3 className="text-xs font-mono text-stone-500 uppercase tracking-wider mb-3">Chapters</h3>
@@ -517,11 +659,16 @@ function StorefrontContent({ token }: { token: string }) {
                     <div className="flex items-center gap-3 text-[9px] font-mono text-stone-600 pt-2 border-t border-stone-800/50">
                       <span>{(book.wordCount || 0).toLocaleString()} words</span>
                       <span>{book.chapterCount} ch</span>
-                      {book.hasCover && (
-                        <span className="ml-auto text-purple-400/50 flex items-center gap-1">
-                          <Volume2 className="h-2.5 w-2.5" /> AI Narrator
-                        </span>
-                      )}
+                      {(() => {
+                        const owned = access?.isAdmin || access?.activeMembership || access?.ownedBookIds?.includes(book.id);
+                        if (book.priceUsd > 0 && owned) {
+                          return <span className="ml-auto text-emerald-400/70 flex items-center gap-1" data-testid={`badge-owned-${book.id}`}><CheckCircle2 className="h-2.5 w-2.5" /> Owned</span>;
+                        }
+                        if (book.priceUsd > 0) {
+                          return <span className="ml-auto text-amber-300 flex items-center gap-1" data-testid={`badge-price-${book.id}`}><Lock className="h-2.5 w-2.5" /> {formatPrice(book.priceUsd)}</span>;
+                        }
+                        return <span className="ml-auto text-purple-400/50 flex items-center gap-1" data-testid={`badge-free-${book.id}`}><Volume2 className="h-2.5 w-2.5" /> AI Narrator</span>;
+                      })()}
                     </div>
                   </CardContent>
                 </Card>

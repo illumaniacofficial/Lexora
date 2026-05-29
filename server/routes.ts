@@ -12,6 +12,15 @@ import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema } from "@shared/schema";
 import { buildEpub } from "./epub";
+import { buildDocx } from "./docx";
+import { buildMobi } from "./mobi";
+import {
+  createBookCheckout,
+  createMembershipCheckout,
+  verifyAndFulfillSession,
+  syncTierStripePrice,
+  readerHasBookAccess,
+} from "./commerce";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { saveDbSeed } from "./seed";
@@ -332,6 +341,7 @@ const patchProjectSchema = z.object({
   seriesId: z.number().int().positive().nullable().optional(),
   styleFingerprintId: z.number().int().positive().nullable().optional(),
   brandKitId: z.number().int().positive().nullable().optional(),
+  priceUsd: z.number().min(0).max(9999).optional(),
 }).strict();
 
 function parseId(raw: string): number | null {
@@ -373,6 +383,24 @@ function requireStoreAuth(req: Request, res: Response, next: NextFunction) {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await ensureAdminUser();
+
+  // Gate premium chapter audio: files at /uploads/audio/.../project-{id}-chapter-{id}.mp3
+  // have predictable paths, so re-check book access before serving for paid books.
+  app.get(/^\/uploads\/audio\/.*\.mp3$/, async (req, res, next) => {
+    try {
+      const m = req.path.match(/project-(\d+)-chapter-\d+\.mp3$/);
+      if (!m) return next();
+      const project = await storage.getProject(parseInt(m[1], 10));
+      if (!project || (project.priceUsd || 0) <= 0) return next();
+      const isAdmin = req.session?.role === "admin" && !!req.session?.adminId;
+      if (isAdmin) return next();
+      const readerId = req.session?.role === "reader" ? req.session.readerId ?? null : null;
+      if (await readerHasBookAccess(readerId, project)) return next();
+      return res.status(403).json({ error: "Purchase required to access this audio" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
 
   app.use("/uploads", express.static(path.resolve("uploads")));
 
@@ -631,6 +659,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           qualityScore: project.qualityScore,
           shortBlurb: marketing?.shortBlurb || null,
           mediumBlurb: marketing?.mediumBlurb || null,
+          priceUsd: project.priceUsd || 0,
         };
       }));
       res.json({ books, inviteLabel: invite.label });
@@ -679,7 +708,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const chapterList = await storage.getChapters(bookId);
       const marketing = await storage.getMarketingAsset(bookId);
+
+      const isAdmin = req.session?.role === "admin";
+      const readerId = req.session?.role === "reader" ? req.session.readerId ?? null : null;
+      const hasAccess = isAdmin || (await readerHasBookAccess(readerId, project));
+      const locked = (project.priceUsd || 0) > 0 && !hasAccess;
+
       storage.createAnalyticsEvent({ projectId: bookId, eventType: "read", value: 1, metadata: { token: req.params.token } }).catch(() => {});
+
+      const completed = chapterList.filter(c => c.status === "complete");
+      const chapters = completed.map((c, idx) => {
+        // Locked premium books expose only a short preview of the first chapter.
+        let content = c.content;
+        if (locked) {
+          content = idx === 0 && c.content ? c.content.slice(0, 600) + "\u2026" : null;
+        }
+        return {
+          id: c.id,
+          chapterNumber: c.chapterNumber,
+          title: c.title,
+          content,
+          wordCount: c.wordCount,
+          status: c.status,
+        };
+      });
+
       res.json({
         id: project.id,
         title: project.title,
@@ -690,14 +743,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         qualityScore: project.qualityScore,
         shortBlurb: marketing?.shortBlurb || null,
         mediumBlurb: marketing?.mediumBlurb || null,
-        chapters: chapterList.filter(c => c.status === "complete").map(c => ({
-          id: c.id,
-          chapterNumber: c.chapterNumber,
-          title: c.title,
-          content: c.content,
-          wordCount: c.wordCount,
-          status: c.status,
-        })),
+        priceUsd: project.priceUsd || 0,
+        locked,
+        hasAccess,
+        chapters,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -729,6 +778,118 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ---- Storefront commerce (checkout, memberships, access) ----
+
+  function storeBaseUrl(req: Request): string {
+    const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol;
+    return `${proto}://${req.get("host")}`;
+  }
+
+  app.get("/api/store/:token/tiers", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
+      const tiers = (await storage.getMembershipTiers()).filter(t => t.isActive);
+      res.json(tiers.map(t => ({ id: t.id, name: t.name, priceUsd: t.priceUsd, benefits: t.benefits })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/store/:token/access", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
+      if (req.session?.role === "admin") {
+        return res.json({ ownedBookIds: [], activeMembership: true, isAdmin: true });
+      }
+      const readerId = req.session?.readerId ?? null;
+      if (!readerId) return res.json({ ownedBookIds: [], activeMembership: false, isAdmin: false });
+      const memberships = await storage.getReaderMemberships(readerId);
+      const activeMembership = memberships.some(
+        m => m.status === "active" && (!m.currentPeriodEnd || m.currentPeriodEnd.getTime() > Date.now()),
+      );
+      const orders = await storage.getStorefrontOrders();
+      const ownedBookIds = Array.from(new Set(
+        orders.filter(o => o.readerId === readerId && o.status === "complete" && o.projectId).map(o => o.projectId as number),
+      ));
+      res.json({ ownedBookIds, activeMembership, isAdmin: false });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/store/:token/checkout", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
+      if (req.session?.role !== "reader" || !req.session.readerId) {
+        return res.status(401).json({ error: "Reader login required" });
+      }
+      const rawIds: unknown = req.body?.bookIds ?? (req.body?.bookId != null ? [req.body.bookId] : []);
+      if (!Array.isArray(rawIds) || rawIds.length === 0) {
+        return res.status(400).json({ error: "Provide bookId or bookIds" });
+      }
+      const ids = Array.from(new Set(rawIds.map((x: any) => parseInt(String(x), 10)).filter(n => !isNaN(n) && n > 0)));
+      if (ids.length === 0) return res.status(400).json({ error: "Invalid book IDs" });
+
+      const projects = [];
+      for (const id of ids) {
+        const p = await storage.getProject(id);
+        if (!p || !p.publishedToStore) return res.status(404).json({ error: `Book ${id} not available` });
+        if ((p.priceUsd || 0) <= 0) return res.status(400).json({ error: `Book "${p.title}" is free` });
+        projects.push(p);
+      }
+      const url = await createBookCheckout({
+        projects,
+        readerId: req.session.readerId,
+        token: req.params.token,
+        baseUrl: storeBaseUrl(req),
+      });
+      res.json({ url });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/store/:token/membership-checkout", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
+      if (req.session?.role !== "reader" || !req.session.readerId) {
+        return res.status(401).json({ error: "Reader login required" });
+      }
+      const tierId = parseInt(String(req.body?.tierId), 10);
+      if (isNaN(tierId) || tierId < 1) return res.status(400).json({ error: "Invalid tier ID" });
+      const tier = (await storage.getMembershipTiers()).find(t => t.id === tierId);
+      if (!tier || !tier.isActive) return res.status(404).json({ error: "Tier not found" });
+      const priceId = tier.stripePriceId || (await syncTierStripePrice(tier));
+      const url = await createMembershipCheckout({
+        tier,
+        priceId,
+        readerId: req.session.readerId,
+        token: req.params.token,
+        baseUrl: storeBaseUrl(req),
+      });
+      res.json({ url });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/store/:token/checkout/verify", async (req, res) => {
+    try {
+      const invite = await storage.getInviteByToken(req.params.token);
+      if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
+      const sessionId = req.query.session_id as string;
+      if (!sessionId) return res.status(400).json({ error: "Missing session_id" });
+      const result = await verifyAndFulfillSession(sessionId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/book-requests", async (_req, res) => {
     try {
       const requests = await storage.getBookRequests();
@@ -755,6 +916,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!id) return res.status(400).json({ error: "Invalid request ID" });
       await storage.deleteBookRequest(id);
       res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ---- Admin: membership tiers & storefront orders ----
+
+  app.get("/api/membership-tiers", async (_req, res) => {
+    try {
+      res.json(await storage.getMembershipTiers());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const tierBodySchema = z.object({
+    name: z.string().min(1).max(120),
+    priceUsd: z.number().min(0).max(9999),
+    benefits: z.array(z.string()).nullable().optional(),
+    isActive: z.boolean().optional(),
+  }).strict();
+
+  app.post("/api/membership-tiers", async (req, res) => {
+    try {
+      const data = tierBodySchema.parse(req.body);
+      const tier = await storage.createMembershipTier({
+        name: data.name,
+        priceUsd: data.priceUsd,
+        benefits: data.benefits ?? null,
+        isActive: data.isActive ?? true,
+        stripePriceId: null,
+      });
+      let synced = tier;
+      try {
+        const priceId = await syncTierStripePrice(tier);
+        synced = { ...tier, stripePriceId: priceId };
+      } catch (e: any) {
+        console.error("Tier Stripe sync failed (saved without price):", e?.message || e);
+      }
+      res.status(201).json(synced);
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/membership-tiers/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid tier ID" });
+      const data = tierBodySchema.partial().parse(req.body);
+      const updated = await storage.updateMembershipTier(id, data);
+      // Re-sync price when the amount changed.
+      if (data.priceUsd != null && (updated.priceUsd || 0) > 0) {
+        try {
+          const priceId = await syncTierStripePrice(updated);
+          if (priceId !== updated.stripePriceId) updated.stripePriceId = priceId;
+        } catch (e: any) {
+          console.error("Tier Stripe re-sync failed:", e?.message || e);
+        }
+      }
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/orders", async (_req, res) => {
+    try {
+      res.json(await storage.getStorefrontOrders());
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1201,8 +1433,9 @@ Return JSON exactly:
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const format = (req.query.format as string) || "txt";
-      if (format !== "txt" && format !== "html" && format !== "epub") {
-        return res.status(400).json({ error: "Invalid format. Must be 'txt', 'html', or 'epub'" });
+      const allowedFormats = ["txt", "html", "epub", "docx", "mobi"];
+      if (!allowedFormats.includes(format)) {
+        return res.status(400).json({ error: "Invalid format. Must be 'txt', 'html', 'epub', 'docx', or 'mobi'" });
       }
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
@@ -1225,6 +1458,22 @@ Return JSON exactly:
         res.setHeader("Content-Type", "application/epub+zip");
         res.setHeader("Content-Disposition", `attachment; filename="${slugify(title)}.epub"`);
         return res.send(epub);
+      }
+
+      if (format === "docx") {
+        const docx = buildDocx({ title, authorName, chapters: completedChapters });
+        await storage.createExportJob({ projectId: id, format: "docx", language: project.targetLanguage || "en", status: "complete" });
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        res.setHeader("Content-Disposition", `attachment; filename="${slugify(title)}.docx"`);
+        return res.send(docx);
+      }
+
+      if (format === "mobi") {
+        const mobi = buildMobi({ title, authorName, chapters: completedChapters });
+        await storage.createExportJob({ projectId: id, format: "mobi", language: project.targetLanguage || "en", status: "complete" });
+        res.setHeader("Content-Type", "application/x-mobipocket-ebook");
+        res.setHeader("Content-Disposition", `attachment; filename="${slugify(title)}.mobi"`);
+        return res.send(mobi);
       }
 
       if (format === "html") {

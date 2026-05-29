@@ -174,6 +174,110 @@ function BrandKitManager() {
   );
 }
 
+interface MembershipTierItem {
+  id: number;
+  name: string;
+  priceUsd: number;
+  benefits: string[] | null;
+  isActive: boolean;
+  stripePriceId: string | null;
+}
+
+function MembershipTierManager() {
+  const { toast } = useToast();
+  const { data: tiers, isLoading } = useQuery<MembershipTierItem[]>({ queryKey: ["/api/membership-tiers"] });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [benefits, setBenefits] = useState("");
+  const [isActive, setIsActive] = useState(true);
+
+  const reset = () => { setEditingId(null); setName(""); setPrice(""); setBenefits(""); setIsActive(true); };
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/membership-tiers"] });
+
+  const buildPayload = () => ({
+    name: name.trim(),
+    priceUsd: parseFloat(price) || 0,
+    benefits: benefits.split("\n").map(s => s.trim()).filter(Boolean),
+    isActive,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: () => editingId
+      ? apiRequest("PATCH", `/api/membership-tiers/${editingId}`, buildPayload())
+      : apiRequest("POST", "/api/membership-tiers", buildPayload()),
+    onSuccess: () => { invalidate(); reset(); toast({ title: editingId ? "Tier updated" : "Tier created" }); },
+    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+
+  const startEdit = (tier: MembershipTierItem) => {
+    setEditingId(tier.id);
+    setName(tier.name);
+    setPrice(String(tier.priceUsd));
+    setBenefits((tier.benefits || []).join("\n"));
+    setIsActive(tier.isActive);
+  };
+
+  return (
+    <Card className="border-border/20 bg-card/30">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+          <Store className="h-3.5 w-3.5 text-purple-400/70" /> Membership Tiers
+        </CardTitle>
+        <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Recurring subscriptions that unlock all premium books on your storefront</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : (tiers && tiers.length > 0) ? (
+          <div className="space-y-2">
+            {tiers.map(tier => (
+              <div key={tier.id} className="flex items-center gap-3 p-3 rounded-lg bg-card/30 border border-border/20" data-testid={`membership-tier-${tier.id}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[12px] font-bold truncate" data-testid={`text-tier-name-${tier.id}`}>{tier.name}</p>
+                    <Badge variant="outline" className="text-[8px] font-mono border-purple-500/30 text-purple-300">${tier.priceUsd.toFixed(2)}/mo</Badge>
+                    {!tier.isActive && <Badge variant="outline" className="text-[8px] font-mono border-stone-500/30 text-stone-400">INACTIVE</Badge>}
+                    {!tier.stripePriceId && <Badge variant="outline" className="text-[8px] font-mono border-amber-500/30 text-amber-300">NO STRIPE PRICE</Badge>}
+                  </div>
+                  {(tier.benefits && tier.benefits.length > 0) && (
+                    <p className="text-[9px] font-mono text-muted-foreground/40 truncate">{tier.benefits.join(" · ")}</p>
+                  )}
+                </div>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-[10px] font-mono border-border/30" onClick={() => startEdit(tier)} data-testid={`button-edit-tier-${tier.id}`}>Edit</Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] font-mono text-muted-foreground/40">No membership tiers yet. Create one below.</p>
+        )}
+
+        <div className="space-y-3 pt-3 border-t border-border/10">
+          <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">{editingId ? "Edit Tier" : "New Tier"}</p>
+          <div className="space-y-2">
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Tier name (e.g., All-Access)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-tier-name" />
+            <Input type="number" min={0} step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="Monthly price USD (e.g., 9.99)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-tier-price" />
+            <textarea value={benefits} onChange={e => setBenefits(e.target.value)} placeholder="Benefits, one per line" rows={3} className="w-full rounded-md bg-card/30 border border-border/30 font-mono text-[12px] p-2 resize-none" data-testid="input-tier-benefits" />
+            <div className="flex items-center gap-2">
+              <Switch checked={isActive} onCheckedChange={setIsActive} data-testid="switch-tier-active" />
+              <span className="text-[10px] font-mono text-muted-foreground/50">Active (shown to readers)</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" className="neon-glow text-white border-0 font-mono text-[11px]" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !name.trim()} data-testid="button-save-tier">
+              {saveMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Save className="h-3 w-3 mr-1.5" />}
+              {editingId ? "UPDATE" : "CREATE"}
+            </Button>
+            {editingId && (
+              <Button type="button" size="sm" variant="outline" className="font-mono text-[11px] border-border/30" onClick={reset} data-testid="button-cancel-tier">CANCEL</Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const { data: settings, isLoading, error } = useQuery<AppSettings | null>({ queryKey: ["/api/settings"] });
@@ -535,6 +639,7 @@ export default function Settings() {
       </Form>
 
       <BrandKitManager />
+      <MembershipTierManager />
     </div>
   );
 }

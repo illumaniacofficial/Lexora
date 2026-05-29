@@ -31,6 +31,34 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// Stripe webhook MUST be registered BEFORE express.json() so the raw body is
+// available for signature verification.
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const signature = req.headers["stripe-signature"];
+    if (!signature) {
+      return res.status(400).json({ error: "Missing stripe-signature" });
+    }
+    try {
+      const sig = Array.isArray(signature) ? signature[0] : signature;
+      if (!Buffer.isBuffer(req.body)) {
+        console.error(
+          "STRIPE WEBHOOK ERROR: req.body is not a Buffer (express.json ran first).",
+        );
+        return res.status(500).json({ error: "Webhook processing error" });
+      }
+      const { WebhookHandlers } = await import("./webhookHandlers");
+      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      res.status(200).json({ received: true });
+    } catch (error: any) {
+      console.error("Webhook error:", error?.message || error);
+      res.status(400).json({ error: "Webhook processing error" });
+    }
+  },
+);
+
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -115,9 +143,39 @@ app.use((req, res, next) => {
   next();
 });
 
+async function initStripe() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.warn("Skipping Stripe init: DATABASE_URL is not set.");
+    return;
+  }
+  try {
+    const { runMigrations } = await import("stripe-replit-sync");
+    const { getStripeSync } = await import("./stripeClient");
+    log("Initializing Stripe schema...", "stripe");
+    await runMigrations({ databaseUrl });
+    const stripeSync = await getStripeSync();
+    const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
+    if (domain) {
+      const webhookBaseUrl = `https://${domain}`;
+      await stripeSync.findOrCreateManagedWebhook(`${webhookBaseUrl}/api/stripe/webhook`);
+      log("Stripe webhook configured", "stripe");
+    }
+    stripeSync
+      .syncBackfill()
+      .then(() => log("Stripe data synced", "stripe"))
+      .catch((err) => console.error("Error syncing Stripe data:", err?.message || err));
+  } catch (error: any) {
+    // Non-fatal: the app must still boot if Stripe setup fails.
+    console.error("Failed to initialize Stripe (continuing):", error?.message || error);
+  }
+}
+
 (async () => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch(console.error);
+
+  await initStripe();
 
   await registerRoutes(httpServer, app);
 

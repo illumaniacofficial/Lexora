@@ -1659,6 +1659,7 @@ export default function ProjectDetail() {
   const [coverText, setCoverText] = useState("");
   const [coverAvoid, setCoverAvoid] = useState("");
   const [showOutlineConfirm, setShowOutlineConfirm] = useState(false);
+  const [priceInput, setPriceInput] = useState<string>("");
   const { startNarration } = useNarration();
 
   const { data, isLoading, isFetching, error, refetch } = useQuery<ProjectDetailData>({
@@ -1786,6 +1787,11 @@ export default function ProjectDetail() {
     onSuccess: () => { invalidate(); toast({ title: "Reverted to editing" }); },
     onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
+  const setPriceMutation = useMutation({
+    mutationFn: (priceUsd: number) => apiRequest("PATCH", `/api/projects/${projectId}`, { priceUsd }),
+    onSuccess: () => { invalidate(); queryClient.invalidateQueries({ queryKey: ["/api/library"] }); toast({ title: "Price updated" }); },
+    onError: (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
   const toggleStorefrontMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/toggle-storefront`),
     onSuccess: () => { invalidate(); queryClient.invalidateQueries({ queryKey: ["/api/library"] }); toast({ title: project?.publishedToStore ? "Removed from Storefront" : "Published to Storefront!" }); },
@@ -1805,7 +1811,7 @@ export default function ProjectDetail() {
     }
   }, [projectId, toast]);
 
-  const exportPdf = useCallback(async () => {
+  const exportPdf = useCallback(async (printMode = false) => {
     if (!data?.project) return;
     const completed = (data.chapters || []).filter(c => c.status === "complete" && c.content);
     if (completed.length === 0) return;
@@ -1815,8 +1821,9 @@ export default function ProjectDetail() {
         { id: data.project.id, title: data.project.title, authorName: data.project.authorName, coverImageUrl: data.project.coverImageUrl },
         data.chapters || [],
         trimSizeId,
+        printMode,
       );
-      toast({ title: "PDF exported" });
+      toast({ title: printMode ? "Print PDF exported" : "PDF exported" });
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
@@ -2082,6 +2089,33 @@ export default function ProjectDetail() {
                       {toggleStorefrontMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Globe className="h-3.5 w-3.5 mr-1.5" />}
                       {project.publishedToStore ? "ON STOREFRONT" : "ADD TO STOREFRONT"}
                     </Button>
+                    {project.publishedToStore && (
+                      <div className="flex items-center gap-1.5 rounded-md border border-amber-500/20 bg-amber-500/5 px-2 h-9">
+                        <span className="text-[10px] font-mono text-amber-300/70">$</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          defaultValue={(project.priceUsd || 0) > 0 ? String(project.priceUsd) : ""}
+                          placeholder="Free"
+                          onChange={(e) => setPriceInput(e.target.value)}
+                          className="h-7 w-16 border-0 bg-transparent px-0 text-[11px] font-mono focus-visible:ring-0"
+                          data-testid="input-book-price"
+                        />
+                        <Button
+                          variant="ghost" size="sm"
+                          className="h-7 px-2 text-[10px] font-mono text-amber-300 hover:bg-amber-500/10"
+                          onClick={() => {
+                            const v = parseFloat(priceInput);
+                            setPriceMutation.mutate(isNaN(v) || v < 0 ? 0 : v);
+                          }}
+                          disabled={setPriceMutation.isPending}
+                          data-testid="button-save-price"
+                        >
+                          {setPriceMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Set Price"}
+                        </Button>
+                      </div>
+                    )}
                     <Button
                       variant="outline"
                       className="border-amber-500/20 text-amber-400 font-mono text-[11px] h-9 hover:border-amber-500/40 hover:bg-amber-500/5"
@@ -2546,7 +2580,7 @@ export default function ProjectDetail() {
                   <Button
                     variant="outline" size="sm"
                     className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30"
-                    onClick={exportPdf}
+                    onClick={() => exportPdf()}
                     disabled={pdfLoading}
                     data-testid="button-export-pdf"
                   >
@@ -2566,9 +2600,29 @@ export default function ProjectDetail() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <Button
+                    variant="outline" size="sm"
+                    className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-orange-500/30"
+                    onClick={() => exportPdf(true)}
+                    disabled={pdfLoading}
+                    data-testid="button-export-print-pdf"
+                  >
+                    {pdfLoading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-2 text-orange-400/60" />}
+                    .PDF (Print + Bleed)
+                  </Button>
                   <a href={`/api/projects/${projectId}/export?format=epub`} download>
                     <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30" data-testid="button-export-epub">
                       <BookOpen className="h-3.5 w-3.5 mr-2 text-emerald-400/50" /> .EPUB (eReaders)
+                    </Button>
+                  </a>
+                  <a href={`/api/projects/${projectId}/export?format=mobi`} download>
+                    <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30" data-testid="button-export-mobi">
+                      <BookOpen className="h-3.5 w-3.5 mr-2 text-blue-400/50" /> .MOBI (Kindle)
+                    </Button>
+                  </a>
+                  <a href={`/api/projects/${projectId}/export?format=docx`} download>
+                    <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30" data-testid="button-export-docx">
+                      <FileText className="h-3.5 w-3.5 mr-2 text-sky-400/50" /> .DOCX (Word)
                     </Button>
                   </a>
                   <a href={`/api/projects/${projectId}/export?format=txt`} download>

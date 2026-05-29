@@ -45,7 +45,7 @@ function ExportMenu({ book, variant }: { book: LibraryBook; variant: "card" | "r
   const [exportingPdf, setExportingPdf] = useState(false);
   const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); };
 
-  const handlePdf = async (e: React.MouseEvent) => {
+  const handlePdf = async (e: React.MouseEvent, printMode = false) => {
     stop(e);
     setExportingPdf(true);
     try {
@@ -54,8 +54,10 @@ function ExportMenu({ book, variant }: { book: LibraryBook; variant: "card" | "r
       await exportBookPdf(
         { id: book.id, title: book.title, authorName: book.authorName, coverImageUrl: data.project?.coverImageUrl || `/api/projects/${book.id}/cover-image` },
         data.chapters || [],
+        "6x9",
+        printMode,
       );
-      toast({ title: "PDF exported" });
+      toast({ title: printMode ? "Print PDF exported" : "PDF exported" });
     } catch (err: any) {
       toast({ title: "Export failed", description: err?.message || "Could not export PDF", variant: "destructive" });
     } finally {
@@ -85,8 +87,20 @@ function ExportMenu({ book, variant }: { book: LibraryBook; variant: "card" | "r
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="bg-card/95 backdrop-blur-md border-border/30">
-        <DropdownMenuItem onClick={handlePdf} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-pdf-${book.id}`}>
+        <DropdownMenuItem onClick={(e) => handlePdf(e)} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-pdf-${book.id}`}>
           <FileDown className="h-3.5 w-3.5 mr-2 text-amber-400/70" /> Export PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => handlePdf(e, true)} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-print-pdf-${book.id}`}>
+          <FileDown className="h-3.5 w-3.5 mr-2 text-orange-400/70" /> Print PDF (bleed)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { stop(e); downloadBookFile(book.id, "epub"); }} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-epub-${book.id}`}>
+          <BookOpen className="h-3.5 w-3.5 mr-2 text-emerald-400/70" /> Export EPUB
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { stop(e); downloadBookFile(book.id, "mobi"); }} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-mobi-${book.id}`}>
+          <BookOpen className="h-3.5 w-3.5 mr-2 text-blue-400/70" /> Export MOBI
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={(e) => { stop(e); downloadBookFile(book.id, "docx"); }} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-docx-${book.id}`}>
+          <FileText className="h-3.5 w-3.5 mr-2 text-sky-400/70" /> Export DOCX
         </DropdownMenuItem>
         <DropdownMenuItem onClick={(e) => { stop(e); downloadBookFile(book.id, "txt"); }} className="text-xs font-mono cursor-pointer" data-testid={`menu-export-txt-${book.id}`}>
           <FileText className="h-3.5 w-3.5 mr-2 text-cyan-400/70" /> Export TXT

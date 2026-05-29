@@ -16,7 +16,7 @@ function slugify(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function downloadBookFile(projectId: number, format: "txt" | "html" | "epub") {
+export function downloadBookFile(projectId: number, format: "txt" | "html" | "epub" | "docx" | "mobi") {
   const a = document.createElement("a");
   a.href = `/api/projects/${projectId}/export?format=${format}`;
   a.rel = "noopener";
@@ -61,19 +61,24 @@ function loadImageAsDataUrl(src: string): Promise<string> {
   });
 }
 
-export async function exportBookPdf(book: ExportBook, chapters: ExportChapter[], trimSizeId: string = "letter") {
+export async function exportBookPdf(book: ExportBook, chapters: ExportChapter[], trimSizeId: string = "letter", printMode: boolean = false) {
   const completed = chapters.filter(c => c.status === "complete" && c.content);
   if (completed.length === 0) throw new Error("No completed chapters to export");
 
   const trim = getTrimSize(trimSizeId);
+  // Print mode adds a 0.125in (9pt) bleed on every edge so the page can be
+  // trimmed by a print-on-demand service without white slivers.
+  const bleed = printMode ? 9 : 0;
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "pt", format: [trim.width, trim.height] });
+  const doc = new jsPDF({ unit: "pt", format: [trim.width + bleed * 2, trim.height + bleed * 2] });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const isSmallTrim = pageW < 500;
-  const marginX = isSmallTrim ? 54 : 72;
-  const marginTop = isSmallTrim ? 54 : 72;
-  const marginBottom = isSmallTrim ? 54 : 72;
+  // In print mode add an inner gutter (extra 18pt) so text clears the spine.
+  const gutter = printMode ? 18 : 0;
+  const marginX = (isSmallTrim ? 54 : 72) + bleed + gutter;
+  const marginTop = (isSmallTrim ? 54 : 72) + bleed;
+  const marginBottom = (isSmallTrim ? 54 : 72) + bleed;
   const contentW = pageW - marginX * 2;
   const lineH = 16;
   const maxY = pageH - marginBottom;
