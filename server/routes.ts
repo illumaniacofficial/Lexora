@@ -2881,6 +2881,15 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     return `project-${projectId}-chapter-${chapterId}.mp3`;
   }
 
+  // Canonical, text-safe per-voice page asset saved under the book's voice
+  // namespace. The text hash is part of the filename so reused audio stays
+  // correct even when client-side pagination changes (different font/viewport
+  // produce different page slices). This is the "indexed page-level chapter
+  // asset" persisted to the book profile and linked via audio_tracks.
+  function chapterPageAudioFilename(projectId: number, chapterId: number, pageIndex: number, textHash: string): string {
+    return `project-${projectId}-chapter-${chapterId}-page-${pageIndex}-${textHash}.mp3`;
+  }
+
   app.post("/api/projects/:id/chapters/:chapterId/generate-audio", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
@@ -4157,7 +4166,14 @@ Return JSON with:
       const cacheKey = ttsCacheKey(trimmed, voiceId);
       const ctx = parseAudioContext(req.body);
       const diskFile = ttsDiskPath(voiceId, cacheKey);
-      const linkTrack = () => {
+      // When the request carries valid book/chapter/page context, persist the
+      // audio to a canonical, text-safe page asset under the book's voice
+      // namespace (in addition to the generic hash cache). This is what makes
+      // reader-generated narration "stick" to the book profile.
+      const pageFile = ctx && ctx.pageIndex !== null
+        ? path.join(voiceAudioDir(voiceId), chapterPageAudioFilename(ctx.projectId, ctx.chapterId, ctx.pageIndex, cacheKey))
+        : null;
+      const linkTrack = (fileSize?: number | null) => {
         if (ctx) {
           linkChapterAudioTrack({
             projectId: ctx.projectId,
@@ -4165,7 +4181,8 @@ Return JSON with:
             pageIndex: ctx.pageIndex,
             scope: "page",
             voiceId,
-            audioUrl: uploadsUrl(diskFile),
+            audioUrl: uploadsUrl(pageFile || diskFile),
+            fileSize: fileSize ?? null,
             wordCount: trimmed.split(/\s+/).filter(Boolean).length,
           }).catch(() => {});
         }
@@ -4173,14 +4190,28 @@ Return JSON with:
 
       const cached = ttsCache.get(cacheKey);
       if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
-        linkTrack();
+        if (pageFile && !fs.existsSync(pageFile)) {
+          try { fs.writeFileSync(pageFile, Buffer.from(cached.audio, "base64")); } catch {}
+        }
+        linkTrack(pageFile && fs.existsSync(pageFile) ? fs.statSync(pageFile).size : null);
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      if (fs.existsSync(diskFile)) {
-        const base64Audio = fs.readFileSync(diskFile).toString("base64");
+      // Serve previously saved audio first: canonical page asset, then hash cache.
+      if (pageFile && fs.existsSync(pageFile)) {
+        const buf = fs.readFileSync(pageFile);
+        const base64Audio = buf.toString("base64");
         ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
-        linkTrack();
+        linkTrack(buf.length);
+        return res.json({ audio: base64Audio, format: "mp3" });
+      }
+
+      if (fs.existsSync(diskFile)) {
+        const buf = fs.readFileSync(diskFile);
+        const base64Audio = buf.toString("base64");
+        ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+        if (pageFile) { try { fs.writeFileSync(pageFile, buf); } catch {} }
+        linkTrack(buf.length);
         return res.json({ audio: base64Audio, format: "mp3" });
       }
 
@@ -4188,9 +4219,10 @@ Return JSON with:
       const base64Audio = audioBuffer.toString("base64");
 
       fs.writeFileSync(diskFile, audioBuffer);
+      if (pageFile) { try { fs.writeFileSync(pageFile, audioBuffer); } catch {} }
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
       cleanTtsCache();
-      linkTrack();
+      linkTrack(audioBuffer.length);
 
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
@@ -4230,18 +4262,23 @@ Return JSON with:
       if (!apiKey) return res.status(500).json({ error: "Fish Audio not configured" });
 
       const trimmed = text.slice(0, 4000);
+      const fishVoiceId = `fish_${voice || "default"}`;
       const cacheKey = ttsCacheKey(trimmed, voice || "fish-default");
       const ctx = parseAudioContext(req.body);
-      const diskFile = ttsDiskPath(`fish_${voice || "default"}`, cacheKey);
-      const linkTrack = () => {
+      const diskFile = ttsDiskPath(fishVoiceId, cacheKey);
+      const pageFile = ctx && ctx.pageIndex !== null
+        ? path.join(voiceAudioDir(fishVoiceId), chapterPageAudioFilename(ctx.projectId, ctx.chapterId, ctx.pageIndex, cacheKey))
+        : null;
+      const linkTrack = (fileSize?: number | null) => {
         if (ctx) {
           linkChapterAudioTrack({
             projectId: ctx.projectId,
             chapterId: ctx.chapterId,
             pageIndex: ctx.pageIndex,
             scope: "page",
-            voiceId: `fish_${voice || "default"}`,
-            audioUrl: uploadsUrl(diskFile),
+            voiceId: fishVoiceId,
+            audioUrl: uploadsUrl(pageFile || diskFile),
+            fileSize: fileSize ?? null,
             wordCount: trimmed.split(/\s+/).filter(Boolean).length,
           }).catch(() => {});
         }
@@ -4249,14 +4286,28 @@ Return JSON with:
 
       const cached = ttsCache.get(cacheKey);
       if (cached && Date.now() - cached.ts < TTS_CACHE_TTL) {
-        linkTrack();
+        if (pageFile && !fs.existsSync(pageFile)) {
+          try { fs.writeFileSync(pageFile, Buffer.from(cached.audio, "base64")); } catch {}
+        }
+        linkTrack(pageFile && fs.existsSync(pageFile) ? fs.statSync(pageFile).size : null);
         return res.json({ audio: cached.audio, format: "mp3" });
       }
 
-      if (fs.existsSync(diskFile)) {
-        const base64Audio = fs.readFileSync(diskFile).toString("base64");
+      // Serve previously saved audio first: canonical page asset, then hash cache.
+      if (pageFile && fs.existsSync(pageFile)) {
+        const buf = fs.readFileSync(pageFile);
+        const base64Audio = buf.toString("base64");
         ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
-        linkTrack();
+        linkTrack(buf.length);
+        return res.json({ audio: base64Audio, format: "mp3" });
+      }
+
+      if (fs.existsSync(diskFile)) {
+        const buf = fs.readFileSync(diskFile);
+        const base64Audio = buf.toString("base64");
+        ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
+        if (pageFile) { try { fs.writeFileSync(pageFile, buf); } catch {} }
+        linkTrack(buf.length);
         return res.json({ audio: base64Audio, format: "mp3" });
       }
 
@@ -4287,9 +4338,10 @@ Return JSON with:
       const base64Audio = audioBuffer.toString("base64");
 
       fs.writeFileSync(diskFile, audioBuffer);
+      if (pageFile) { try { fs.writeFileSync(pageFile, audioBuffer); } catch {} }
       ttsCache.set(cacheKey, { audio: base64Audio, ts: Date.now() });
       cleanTtsCache();
-      linkTrack();
+      linkTrack(audioBuffer.length);
 
       res.json({ audio: base64Audio, format: "mp3" });
     } catch (err: any) {
