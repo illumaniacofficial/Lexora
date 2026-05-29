@@ -8,6 +8,7 @@ import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial"
 import { deriveStyleProfile, buildStyleContext } from "./style";
 import { extractStoryEntities } from "./graph";
 import { analyzePacing, generateInlineCompletion } from "./pacing";
+import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
@@ -365,6 +366,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/extract-graph/,
       /\/api\/projects\/\d+\/analyze-pacing/,
       /\/api\/projects\/\d+\/chapters\/\d+\/inline-ai/,
+      /\/api\/projects\/\d+\/competitor-teardown/,
+      /\/api\/projects\/\d+\/kdp-optimizer/,
       /\/api\/series\/\d+\/bible/,
     ];
     if (
@@ -710,9 +713,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const trendReport = await storage.getTrendReportByProject(id);
       const chapterAnalyses = await storage.getChapterAnalyses(id);
       const storyEntities = await storage.getStoryEntities({ projectId: id });
+      const marketReports = await storage.getMarketReports(id);
       const seriesRef = project.seriesId ? await storage.getSeries(project.seriesId) : undefined;
       const styleFingerprint = project.styleFingerprintId ? await storage.getStyleFingerprint(project.styleFingerprintId) : undefined;
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, series: seriesRef, styleFingerprint });
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, series: seriesRef, styleFingerprint });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1786,6 +1790,69 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
+  app.post("/api/projects/:id/competitor-teardown", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const competitorInput = typeof req.body?.competitorInput === "string" ? req.body.competitorInput.slice(0, 4000) : "";
+      const dna = await storage.getBookDna(projectId);
+
+      const teardown = await runStep(
+        projectId,
+        "Competitor Teardown",
+        FAST_MODEL,
+        async () => {
+          const { result, tokens } = await analyzeCompetitor(project, dna, competitorInput);
+          return { result, tokens };
+        },
+      );
+
+      const saved = await storage.createMarketReport({
+        projectId,
+        vertical: project.vertical,
+        kind: "competitor_teardown",
+        data: teardown,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/kdp-optimizer", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const dna = await storage.getBookDna(projectId);
+
+      const optimization = await runStep(
+        projectId,
+        "KDP Keyword & Category Optimizer",
+        FAST_MODEL,
+        async () => {
+          const { result, tokens } = await optimizeKdp(project, dna);
+          return { result, tokens };
+        },
+      );
+
+      const saved = await storage.createMarketReport({
+        projectId,
+        vertical: project.vertical,
+        kind: "kdp_optimizer",
+        data: optimization,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const AUDIO_DIR = path.resolve("uploads/audio");
   fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
@@ -2102,6 +2169,17 @@ Return JSON with:
       const { vertical } = req.query;
       const reports = await storage.getTrendReports(vertical as string | undefined);
       res.json(reports);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/trends/forecast", async (_req, res) => {
+    try {
+      const reports = await storage.getTrendReports();
+      const forecasts = forecastTrends(reports);
+      const alerts = forecasts.filter(f => f.alert === "act-now" || f.alert === "rising");
+      res.json({ forecasts, alerts });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

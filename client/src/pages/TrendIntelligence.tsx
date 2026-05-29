@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon, AlertCircle, ArrowUpDown } from "lucide-react";
+import { TrendingUp, Zap, Target, Lightbulb, Hash, Loader2, BarChart3, Hexagon, AlertCircle, ArrowUpDown, Bell, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { formatScore, VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,6 +21,34 @@ const FICTION_VERTICALS = new Set([
 ]);
 
 type TrendSortKey = "greenlight" | "demand" | "competition" | "recent";
+
+type ForecastAlert = "act-now" | "rising" | "cooling" | "stable" | "insufficient-data";
+interface VerticalForecast {
+  vertical: string;
+  reportCount: number;
+  currentDemand: number | null;
+  forecastDemand: number | null;
+  demandTrend: number;
+  currentCompetition: number | null;
+  currentGreenlight: number | null;
+  lastUpdated: string | null;
+  alert: ForecastAlert;
+}
+interface ForecastResponse { forecasts: VerticalForecast[]; alerts: VerticalForecast[] }
+
+const ALERT_META: Record<ForecastAlert, { label: string; color: string; border: string; bg: string }> = {
+  "act-now": { label: "ACT NOW", color: "text-emerald-300", border: "border-emerald-500/30", bg: "bg-emerald-500/10" },
+  rising: { label: "RISING", color: "text-cyan-300", border: "border-cyan-500/25", bg: "bg-cyan-500/5" },
+  stable: { label: "STABLE", color: "text-muted-foreground/60", border: "border-border/25", bg: "bg-card/30" },
+  cooling: { label: "COOLING", color: "text-amber-300", border: "border-amber-500/25", bg: "bg-amber-500/5" },
+  "insufficient-data": { label: "NEW", color: "text-muted-foreground/40", border: "border-border/20", bg: "bg-card/20" },
+};
+
+function TrendArrow({ trend }: { trend: number }) {
+  if (trend >= 0.2) return <ArrowUpRight className="h-3 w-3 text-emerald-400" />;
+  if (trend <= -0.2) return <ArrowDownRight className="h-3 w-3 text-red-400" />;
+  return <Minus className="h-3 w-3 text-muted-foreground/40" />;
+}
 
 function ScoreBar({ label, score }: { label: string; score: number | null | undefined }) {
   const pct = score != null ? (score / 10) * 100 : 0;
@@ -149,6 +177,10 @@ export default function TrendIntelligence() {
     },
   });
 
+  const { data: forecast } = useQuery<ForecastResponse>({
+    queryKey: ["/api/trends/forecast"],
+  });
+
   const displayReports = useMemo(() => {
     let result = category === "all" ? reports : reports.filter(r =>
       category === "fiction" ? FICTION_VERTICALS.has(r.vertical) : !FICTION_VERTICALS.has(r.vertical)
@@ -168,6 +200,7 @@ export default function TrendIntelligence() {
     mutationFn: () => apiRequest("POST", "/api/trends/analyze", { vertical: analyzeVertical, keywords }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/trends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/trends/forecast"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
       toast({ title: "Analysis complete" });
     },
@@ -230,6 +263,67 @@ export default function TrendIntelligence() {
           </div>
         </CardContent>
       </Card>
+
+      {forecast && forecast.forecasts.length > 0 && (
+        <Card className="border-border/20 bg-card/30 overflow-hidden" data-testid="card-forecast">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-400/70" />
+              Demand Forecast & Alerts
+            </CardTitle>
+            <CardDescription className="text-[11px] font-mono text-muted-foreground/40">
+              Projected next-cycle demand from your analysis history, with "act now" alerts for rising niches.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {forecast.alerts.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Bell className="h-3 w-3 text-emerald-400/70" />
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-emerald-400/60">{forecast.alerts.length} Active Alert(s)</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {forecast.alerts.map(f => {
+                    const meta = ALERT_META[f.alert];
+                    return (
+                      <div key={f.vertical} className={`flex items-center gap-2.5 rounded-lg border p-3 ${meta.border} ${meta.bg}`} data-testid={`alert-${f.vertical}`}>
+                        <span className="text-lg">{VERTICAL_ICONS[f.vertical] || "📊"}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-[11px] font-mono font-bold truncate">{VERTICAL_LABELS[f.vertical] || f.vertical}</p>
+                            <Badge variant="outline" className={`text-[8px] font-mono px-1.5 py-0 h-4 ${meta.border} ${meta.color}`}>{meta.label}</Badge>
+                          </div>
+                          <p className="text-[9px] font-mono text-muted-foreground/50 mt-0.5">
+                            Demand {formatScore(f.currentDemand)} → <span className="text-emerald-300/80">{formatScore(f.forecastDemand)}</span> next cycle
+                          </p>
+                        </div>
+                        <TrendArrow trend={f.demandTrend} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="space-y-1">
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-1.5">All Verticals ({forecast.forecasts.length})</p>
+              {forecast.forecasts.map(f => {
+                const meta = ALERT_META[f.alert];
+                return (
+                  <div key={f.vertical} className="flex items-center gap-2.5 rounded-lg border border-border/15 bg-card/20 px-3 py-2" data-testid={`forecast-${f.vertical}`}>
+                    <span className="text-base">{VERTICAL_ICONS[f.vertical] || "📊"}</span>
+                    <p className="text-[11px] font-mono text-foreground/75 flex-1 min-w-0 truncate">{VERTICAL_LABELS[f.vertical] || f.vertical}</p>
+                    <Badge variant="outline" className={`text-[8px] font-mono px-1.5 py-0 h-4 shrink-0 ${meta.border} ${meta.color}`}>{meta.label}</Badge>
+                    <span className="text-[9px] font-mono text-muted-foreground/50 shrink-0 w-24 text-right">
+                      D {formatScore(f.currentDemand)} → {formatScore(f.forecastDemand)}
+                    </span>
+                    <span className="shrink-0"><TrendArrow trend={f.demandTrend} /></span>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="font-bold text-sm tracking-tight font-mono text-muted-foreground/60">Reports ({displayReports.length})</h2>

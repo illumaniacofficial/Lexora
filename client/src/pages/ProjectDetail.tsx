@@ -17,6 +17,7 @@ import {
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
   Save, Edit3, Check, Music, ArrowRight, Globe, Wand2,
   ClipboardCheck, Users, Sparkles, Gauge, MessageSquareQuote, Activity, TextCursorInput,
+  Target, Search, Tag, Crosshair,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
@@ -26,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport } from "@shared/schema";
 import { Network, Library, Fingerprint, Plus, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -39,6 +40,7 @@ interface ProjectDetailData {
   trendReport?: TrendReport;
   chapterAnalyses?: ChapterAnalysis[];
   storyEntities?: StoryEntity[];
+  marketReports?: MarketReport[];
   series?: Series;
   styleFingerprint?: StyleFingerprint;
 }
@@ -1131,6 +1133,208 @@ function PacingPanel({ analysis, onAnalyze, isPending, canAnalyze, chapterCount 
   );
 }
 
+interface CompetitorTeardownData {
+  competitors: { name: string; strengths: string; weaknesses: string }[];
+  marketGaps: string[];
+  positioning: string;
+  differentiators: string[];
+  recommendedAngle: string;
+}
+interface KdpOptimizationData {
+  keywords: string[];
+  categories: { name: string; rationale: string }[];
+  summary: string;
+}
+
+function MarketPanel({ projectId, reports, hasOutline, onChanged }: {
+  projectId: number;
+  reports: MarketReport[];
+  hasOutline: boolean;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [competitorInput, setCompetitorInput] = useState("");
+
+  const teardownReport = reports.find(r => r.kind === "competitor_teardown");
+  const kdpReport = reports.find(r => r.kind === "kdp_optimizer");
+  const teardown = teardownReport?.data as CompetitorTeardownData | undefined;
+  const kdp = kdpReport?.data as KdpOptimizationData | undefined;
+  const tsLabel = (r?: MarketReport) =>
+    r?.createdAt ? new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+
+  const teardownMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/competitor-teardown`, { competitorInput: competitorInput.trim() || undefined }),
+    onSuccess: () => { onChanged(); toast({ title: "Competitor teardown ready" }); },
+    onError: (e: any) => toast({ title: "Teardown failed", description: e.message, variant: "destructive" }),
+  });
+  const kdpMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/kdp-optimizer`),
+    onSuccess: () => { onChanged(); toast({ title: "KDP optimization ready" }); },
+    onError: (e: any) => toast({ title: "KDP optimization failed", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-orange-300">
+                <Crosshair className="h-4 w-4" /> Competitor Teardown
+              </CardTitle>
+              <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+                AI maps competing titles, finds market gaps, and sharpens your positioning.
+              </p>
+            </div>
+            {teardownReport && (
+              <span className="text-[9px] font-mono text-muted-foreground/40">Last run {tsLabel(teardownReport)}</span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={competitorInput}
+            onChange={e => setCompetitorInput(e.target.value)}
+            placeholder="Optional: paste a competing book's title + description, or a market note to benchmark against. Leave blank to analyze the niche generally."
+            className="min-h-[72px] text-[12px] font-mono bg-card/40 border-border/30 resize-none"
+            data-testid="input-competitor"
+          />
+          <Button
+            size="sm"
+            className="h-8 text-[10px] font-mono bg-orange-500/20 text-orange-200 hover:bg-orange-500/30 border border-orange-500/30"
+            onClick={() => teardownMutation.mutate()}
+            disabled={teardownMutation.isPending}
+            data-testid="button-run-teardown"
+          >
+            {teardownMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Crosshair className="h-3 w-3 mr-1" />}
+            {teardown ? "Re-run Teardown" : "Run Teardown"}
+          </Button>
+
+          {teardown && (
+            <div className="space-y-3 pt-1">
+              {teardown.recommendedAngle && (
+                <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-3">
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-orange-400/60 mb-1">Recommended Angle</p>
+                  <p className="text-[12px] text-foreground/80 leading-relaxed" data-testid="text-recommended-angle">{teardown.recommendedAngle}</p>
+                </div>
+              )}
+              {teardown.positioning && (
+                <div>
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-1.5">Positioning</p>
+                  <p className="text-[12px] text-muted-foreground/75 leading-relaxed">{teardown.positioning}</p>
+                </div>
+              )}
+              {teardown.competitors?.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Competitors</p>
+                  {teardown.competitors.map((c, i) => (
+                    <div key={i} className="border border-border/20 rounded-lg p-2.5 bg-card/30" data-testid={`competitor-${i}`}>
+                      <p className="text-[11px] font-bold tracking-tight mb-1">{c.name}</p>
+                      <p className="text-[10px] font-mono text-emerald-400/70">+ {c.strengths}</p>
+                      <p className="text-[10px] font-mono text-red-400/70">− {c.weaknesses}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {teardown.marketGaps?.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Target className="h-3 w-3 text-red-400/60" />
+                    <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Market Gaps</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {teardown.marketGaps.map((g, i) => (
+                      <div key={i} className="flex items-start gap-2.5 text-[11px]">
+                        <span className="shrink-0 flex h-4 w-4 mt-0.5 items-center justify-center rounded bg-red-500/10 border border-red-500/20 text-[8px] font-mono font-bold text-red-400">{i + 1}</span>
+                        <span className="text-muted-foreground/70 leading-snug">{g}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {teardown.differentiators?.length > 0 && (
+                <div>
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-1.5">Differentiators</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {teardown.differentiators.map((d, i) => (
+                      <Badge key={i} variant="secondary" className="text-[10px] font-mono border-border/20 bg-orange-500/5 text-orange-300/70">{d}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-cyan-300">
+                <Search className="h-4 w-4" /> KDP Keyword & Category Optimizer
+              </CardTitle>
+              <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+                7 buyer-intent keywords and 2 winnable Amazon categories tuned for discoverability.
+              </p>
+            </div>
+            {kdpReport && (
+              <span className="text-[9px] font-mono text-muted-foreground/40">Last run {tsLabel(kdpReport)}</span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            size="sm"
+            className="h-8 text-[10px] font-mono bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 border border-cyan-500/30"
+            onClick={() => kdpMutation.mutate()}
+            disabled={kdpMutation.isPending || !hasOutline}
+            data-testid="button-run-kdp"
+          >
+            {kdpMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Search className="h-3 w-3 mr-1" />}
+            {kdp ? "Re-run Optimizer" : "Run Optimizer"}
+          </Button>
+          {!hasOutline && (
+            <p className="text-[9px] font-mono text-amber-400/60">Generate the book outline first to optimize KDP metadata.</p>
+          )}
+
+          {kdp && (
+            <div className="space-y-3 pt-1">
+              {kdp.summary && (
+                <p className="text-[12px] text-muted-foreground/75 leading-relaxed" data-testid="text-kdp-summary">{kdp.summary}</p>
+              )}
+              {kdp.keywords?.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Tag className="h-3 w-3 text-cyan-400/60" />
+                    <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">7 Keywords</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {kdp.keywords.map((k, i) => (
+                      <span key={i} className="text-[10px] bg-cyan-500/5 border border-cyan-500/15 text-cyan-300/80 rounded-full px-2.5 py-1 font-mono" data-testid={`kdp-keyword-${i}`}>{k}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {kdp.categories?.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40">Best Categories</p>
+                  {kdp.categories.map((c, i) => (
+                    <div key={i} className="border border-border/20 rounded-lg p-2.5 bg-card/30" data-testid={`kdp-category-${i}`}>
+                      <p className="text-[11px] font-mono text-cyan-300/90 mb-1">{c.name}</p>
+                      <p className="text-[10px] font-mono text-muted-foreground/60 leading-relaxed">{c.rationale}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -1567,6 +1771,9 @@ export default function ProjectDetail() {
               <TabsTrigger value="continuity" data-testid="tab-continuity" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
                 <Network className="h-3 w-3" /> Continuity
               </TabsTrigger>
+              <TabsTrigger value="market" data-testid="tab-market" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
+                <Crosshair className="h-3 w-3" /> Market
+              </TabsTrigger>
               <TabsTrigger value="pacing" data-testid="tab-pacing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
                 <Activity className="h-3 w-3" /> Pacing
               </TabsTrigger>
@@ -1722,6 +1929,15 @@ export default function ProjectDetail() {
                 series={data.series}
                 styleFingerprint={data.styleFingerprint}
                 hasChapters={completedChapters.length > 0}
+                onChanged={invalidate}
+              />
+            </TabsContent>
+
+            <TabsContent value="market" className="mt-4">
+              <MarketPanel
+                projectId={projectId}
+                reports={data.marketReports || []}
+                hasOutline={chapters.length > 0}
                 onChanged={invalidate}
               />
             </TabsContent>
