@@ -30,6 +30,8 @@ const schema = z.object({
   lengthDepth: z.enum(["auto", "concise", "standard", "comprehensive"]).optional(),
   vertical: z.enum(VERTICALS),
   targetLanguage: z.enum(LANGUAGES),
+  seriesId: z.string().optional(),
+  styleFingerprintId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -111,8 +113,11 @@ export default function NewProject() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", targetAudience: "", toneStyle: "", keyThemes: "", comparableTitles: "", avoid: "", lengthDepth: "auto", vertical: "money", targetLanguage: "english" },
+    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", targetAudience: "", toneStyle: "", keyThemes: "", comparableTitles: "", avoid: "", lengthDepth: "auto", vertical: "money", targetLanguage: "english", seriesId: "none", styleFingerprintId: "none" },
   });
+
+  const { data: seriesList = [] } = useQuery<{ id: number; title: string; bookCount: number }[]>({ queryKey: ["/api/series"] });
+  const { data: styleList = [] } = useQuery<{ id: number; name: string }[]>({ queryKey: ["/api/style-fingerprints"] });
 
   const currentTitle = form.watch("title");
 
@@ -156,6 +161,8 @@ export default function NewProject() {
       targetLanguage: data.targetLanguage,
       description: composeGuidance(data),
       status: "draft",
+      seriesId: data.seriesId && data.seriesId !== "none" ? parseInt(data.seriesId) : null,
+      styleFingerprintId: data.styleFingerprintId && data.styleFingerprintId !== "none" ? parseInt(data.styleFingerprintId) : null,
     }),
     onSuccess: async (res) => {
       const project = await res.json();
@@ -294,6 +301,30 @@ export default function NewProject() {
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl><SelectTrigger data-testid="select-language" className="h-11 bg-card/30 border-border/30 font-mono text-sm"><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>{LANGUAGES.map(l => <SelectItem key={l} value={l}>{LANGUAGE_LABELS[l] || l}</SelectItem>)}</SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="seriesId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Series <span className="text-muted-foreground/30 normal-case">(optional)</span></FormLabel>
+                  <Select value={field.value || "none"} onValueChange={field.onChange}>
+                    <FormControl><SelectTrigger data-testid="select-series" className="h-11 bg-card/30 border-border/30 font-mono text-sm"><SelectValue placeholder="No series" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">No series</SelectItem>
+                      {seriesList.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.title}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="styleFingerprintId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-[11px] font-mono text-muted-foreground/60 uppercase tracking-wider">Author Style <span className="text-muted-foreground/30 normal-case">(optional)</span></FormLabel>
+                  <Select value={field.value || "none"} onValueChange={field.onChange}>
+                    <FormControl><SelectTrigger data-testid="select-style" className="h-11 bg-card/30 border-border/30 font-mono text-sm"><SelectValue placeholder="Default voice" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Default voice</SelectItem>
+                      {styleList.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+                    </SelectContent>
                   </Select>
                 </FormItem>
               )} />

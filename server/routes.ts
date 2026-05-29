@@ -3,8 +3,10 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
-import { buildConsistencyContext } from "./consistency";
+import { buildConsistencyContext, type ContinuityExtras } from "./consistency";
 import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
+import { deriveStyleProfile, buildStyleContext } from "./style";
+import { extractStoryEntities } from "./graph";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
@@ -24,6 +26,53 @@ const FICTION_GENRES = new Set([
 
 function isFiction(vertical: string): boolean {
   return FICTION_GENRES.has(vertical);
+}
+
+async function loadContinuityExtras(project: { id: number; seriesId?: number | null }): Promise<ContinuityExtras> {
+  const extras: ContinuityExtras = {};
+  let projectEntities: any[] = [];
+  try {
+    projectEntities = await storage.getStoryEntities({ projectId: project.id });
+  } catch {
+    projectEntities = [];
+  }
+  if (project.seriesId) {
+    try {
+      const s = await storage.getSeries(project.seriesId);
+      if (s) {
+        extras.seriesTitle = s.title;
+        extras.seriesBible = (s.bible as any) || null;
+      }
+    } catch {
+      /* ignore */
+    }
+    // Merge in entities from sibling books in the same series (cross-book continuity).
+    try {
+      const seriesEntities = await storage.getStoryEntities({ seriesId: project.seriesId });
+      const seen = new Set(projectEntities.map((e) => `${e.type}::${String(e.name).toLowerCase()}`));
+      for (const e of seriesEntities) {
+        const key = `${e.type}::${String(e.name).toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          projectEntities.push(e);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  extras.entities = projectEntities;
+  return extras;
+}
+
+async function loadStyleContext(styleFingerprintId?: number | null): Promise<string> {
+  if (!styleFingerprintId) return "";
+  try {
+    const fp = await storage.getStyleFingerprint(styleFingerprintId);
+    return buildStyleContext(fp);
+  } catch {
+    return "";
+  }
 }
 
 function slugify(text: string): string {
@@ -158,6 +207,8 @@ const patchProjectSchema = z.object({
   wordCount: z.number().int().min(0).optional(),
   chapterCount: z.number().int().min(0).optional(),
   coverImageUrl: z.string().nullable().optional(),
+  seriesId: z.number().int().positive().nullable().optional(),
+  styleFingerprintId: z.number().int().positive().nullable().optional(),
 }).strict();
 
 function parseId(raw: string): number | null {
@@ -310,11 +361,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/generate-cover/,
       /\/api\/projects\/\d+\/chapters\/\d+\/generate-audio/,
       /\/api\/projects\/\d+\/generate-audiobook/,
+      /\/api\/projects\/\d+\/extract-graph/,
+      /\/api\/series\/\d+\/bible/,
     ];
     if (
       req.path === "/api/tts" ||
       req.path === "/api/fish-tts" ||
       req.path === "/api/autopilot/run" ||
+      (req.method === "POST" && req.path === "/api/style-fingerprints") ||
       aiPaths.some(p => p.test(req.path))
     ) {
       return aiRateLimit(req, res, next);
@@ -652,7 +706,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const marketing = await storage.getMarketingAsset(id);
       const trendReport = await storage.getTrendReportByProject(id);
       const chapterAnalyses = await storage.getChapterAnalyses(id);
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses });
+      const storyEntities = await storage.getStoryEntities({ projectId: id });
+      const seriesRef = project.seriesId ? await storage.getSeries(project.seriesId) : undefined;
+      const styleFingerprint = project.styleFingerprintId ? await storage.getStyleFingerprint(project.styleFingerprintId) : undefined;
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, series: seriesRef, styleFingerprint });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -684,6 +741,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const data = patchProjectSchema.parse(req.body);
       const updated = await storage.updateProject(id, data);
+      // Keep this book's extracted entities attached to the series so they
+      // participate in cross-book continuity.
+      if (Object.prototype.hasOwnProperty.call(data, "seriesId")) {
+        try {
+          const ents = await storage.getStoryEntities({ projectId: id });
+          await Promise.all(ents.map((e) => storage.updateStoryEntity(e.id, { seriesId: data.seriesId ?? null })));
+        } catch {
+          /* non-fatal */
+        }
+      }
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -695,6 +762,297 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       await storage.deleteProject(id);
+      res.status(204).send();
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ===================================================================
+  // Continuity: style fingerprints, series bible, character/world graph
+  // ===================================================================
+
+  app.get("/api/style-fingerprints", async (_req, res) => {
+    try {
+      res.json(await storage.getStyleFingerprints());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/style-fingerprints", async (req, res) => {
+    try {
+      const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 200) : "";
+      const sampleText = typeof req.body?.sampleText === "string" ? req.body.sampleText.trim() : "";
+      if (!name) return res.status(400).json({ error: "Name is required" });
+      if (sampleText.length < 200) return res.status(400).json({ error: "Provide at least 200 characters of sample text" });
+      const { profile } = await deriveStyleProfile(sampleText);
+      const created = await storage.createStyleFingerprint({ name, sampleText: sampleText.slice(0, 20000), profile });
+      res.status(201).json(created);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/style-fingerprints/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      await storage.deleteStyleFingerprint(id);
+      res.status(204).send();
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/series", async (_req, res) => {
+    try {
+      const list = await storage.getSeriesList();
+      const allProjects = await storage.getProjects();
+      const withCounts = list.map((s) => ({
+        ...s,
+        bookCount: allProjects.filter((p) => p.seriesId === s.id).length,
+      }));
+      res.json(withCounts);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/series/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const s = await storage.getSeries(id);
+      if (!s) return res.status(404).json({ error: "Not found" });
+      const allProjects = await storage.getProjects();
+      const books = allProjects.filter((p) => p.seriesId === id);
+      const entities = await storage.getStoryEntities({ seriesId: id });
+      res.json({ series: s, books, entities });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/series", async (req, res) => {
+    try {
+      const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 200) : "";
+      const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 2000) : "";
+      if (!title) return res.status(400).json({ error: "Title is required" });
+      const created = await storage.createSeries({ title, description: description || null });
+      res.status(201).json(created);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/series/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const existing = await storage.getSeries(id);
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      const data: { title?: string; description?: string | null; bible?: any } = {};
+      if (typeof req.body?.title === "string") data.title = req.body.title.trim().slice(0, 200);
+      if (typeof req.body?.description === "string") data.description = req.body.description.trim().slice(0, 2000) || null;
+      if (req.body?.bible && typeof req.body.bible === "object") {
+        const b = req.body.bible;
+        data.bible = {
+          summary: String(b.summary ?? "").slice(0, 2000),
+          characters: String(b.characters ?? "").slice(0, 4000),
+          world: String(b.world ?? "").slice(0, 4000),
+          timeline: String(b.timeline ?? "").slice(0, 2000),
+          notes: String(b.notes ?? "").slice(0, 2000),
+        };
+      }
+      const updated = await storage.updateSeries(id, data);
+      res.json(updated);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/series/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      await storage.deleteSeries(id);
+      res.status(204).send();
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/series/:id/bible", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const s = await storage.getSeries(id);
+      if (!s) return res.status(404).json({ error: "Not found" });
+      const allProjects = await storage.getProjects();
+      const books = allProjects.filter((p) => p.seriesId === id);
+      if (books.length === 0) return res.status(400).json({ error: "Assign at least one book to this series first" });
+
+      const bookSummaries: string[] = [];
+      for (const b of books) {
+        const dna = await storage.getBookDna(b.id);
+        const ents = await storage.getStoryEntities({ projectId: b.id });
+        const entLine = ents.slice(0, 20).map((e) => `${e.name} (${e.type})`).join(", ");
+        bookSummaries.push(
+          `BOOK: "${b.title}" (${b.vertical})${dna?.corePromise ? `\nPremise: ${dna.corePromise}` : ""}${dna?.transformationArc ? `\nArc: ${dna.transformationArc}` : ""}${entLine ? `\nKey entities: ${entLine}` : ""}`,
+        );
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: FAST_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You are a series bible editor. You consolidate multiple books into a single shared canon used to keep future books consistent. Respond ONLY with valid JSON.",
+          },
+          {
+            role: "user",
+            content: `Build a shared series bible for the series "${s.title}"${s.description ? ` — ${s.description}` : ""} from these books:
+
+${bookSummaries.join("\n\n")}
+
+Return JSON exactly:
+{
+  "summary": "<the series premise and through-line>",
+  "characters": "<recurring characters and their roles/relationships across books>",
+  "world": "<shared world, settings, rules, terminology>",
+  "timeline": "<chronology and how the books connect>",
+  "notes": "<continuity rules future books must respect>"
+}`,
+          },
+        ],
+        max_completion_tokens: 2048,
+        response_format: { type: "json_object" },
+      });
+
+      const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+      const bible = {
+        summary: String(parsed.summary ?? "").slice(0, 2000),
+        characters: String(parsed.characters ?? "").slice(0, 4000),
+        world: String(parsed.world ?? "").slice(0, 4000),
+        timeline: String(parsed.timeline ?? "").slice(0, 2000),
+        notes: String(parsed.notes ?? "").slice(0, 2000),
+      };
+      const updated = await storage.updateSeries(id, { bible });
+      res.json(updated);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/extract-graph", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const chapters = await storage.getChapters(id);
+      const hasContent = chapters.some((c) => c.status === "complete" && c.content);
+      if (!hasContent) return res.status(400).json({ error: "Write at least one chapter before extracting the graph" });
+
+      const { entities, tokens } = await runStep(id, "Extract character & world graph", FAST_MODEL, async () => {
+        const out = await extractStoryEntities(project, chapters);
+        return { result: out, tokens: out.tokens };
+      });
+
+      const existing = await storage.getStoryEntities({ projectId: id });
+      const byKey = new Map(existing.map((e) => [`${e.type}::${e.name.toLowerCase()}`, e]));
+      for (const e of entities) {
+        const key = `${e.type}::${e.name.toLowerCase()}`;
+        const prev = byKey.get(key);
+        if (prev) {
+          await storage.updateStoryEntity(prev.id, { profile: e.profile, relationships: e.relationships });
+        } else {
+          await storage.createStoryEntity({
+            projectId: id,
+            seriesId: project.seriesId ?? null,
+            type: e.type,
+            name: e.name,
+            profile: e.profile,
+            relationships: e.relationships,
+          });
+        }
+      }
+      const refreshed = await storage.getStoryEntities({ projectId: id });
+      res.json({ entities: refreshed, extracted: entities.length, tokens });
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/entities", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const name = typeof req.body?.name === "string" ? req.body.name.trim().slice(0, 160) : "";
+      const type = typeof req.body?.type === "string" ? req.body.type.trim().slice(0, 40) : "character";
+      if (!name) return res.status(400).json({ error: "Name is required" });
+      const created = await storage.createStoryEntity({
+        projectId: id,
+        seriesId: project.seriesId ?? null,
+        type,
+        name,
+        profile: {
+          description: String(req.body?.profile?.description ?? "").slice(0, 600),
+          role: String(req.body?.profile?.role ?? "").slice(0, 300),
+          traits: String(req.body?.profile?.traits ?? "").slice(0, 400),
+        },
+        relationships: Array.isArray(req.body?.relationships)
+          ? req.body.relationships.slice(0, 8).map((r: any) => ({ to: String(r?.to ?? "").slice(0, 160), relation: String(r?.relation ?? "").slice(0, 240) })).filter((r: any) => r.to)
+          : [],
+      });
+      res.status(201).json(created);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/entities/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      const data: any = {};
+      if (typeof req.body?.name === "string") data.name = req.body.name.trim().slice(0, 160);
+      if (typeof req.body?.type === "string") data.type = req.body.type.trim().slice(0, 40);
+      if (req.body?.profile && typeof req.body.profile === "object") {
+        data.profile = {
+          description: String(req.body.profile.description ?? "").slice(0, 600),
+          role: String(req.body.profile.role ?? "").slice(0, 300),
+          traits: String(req.body.profile.traits ?? "").slice(0, 400),
+        };
+      }
+      if (Array.isArray(req.body?.relationships)) {
+        data.relationships = req.body.relationships.slice(0, 8).map((r: any) => ({ to: String(r?.to ?? "").slice(0, 160), relation: String(r?.relation ?? "").slice(0, 240) })).filter((r: any) => r.to);
+      }
+      const updated = await storage.updateStoryEntity(id, data);
+      res.json(updated);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/entities/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid ID" });
+      await storage.deleteStoryEntity(id);
       res.status(204).send();
       saveDbSeed().catch(() => {});
     } catch (err: any) {
@@ -923,11 +1281,13 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       await storage.updateChapter(chapterId, { status: "generating" });
 
       const priorChapters = await storage.getChapters(projectId);
-      const consistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber);
+      const continuityExtras = await loadContinuityExtras(project);
+      const consistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber, continuityExtras);
+      const styleContext = await loadStyleContext(project.styleFingerprintId);
 
       const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
         const fiction = isFiction(project.vertical);
-        const systemPrompt = dna
+        const systemPrompt = (dna
           ? `You are a professional ${fiction ? "fiction author" : "author"} writing ${fiction ? `a ${project.vertical} novel` : `in the ${project.vertical} niche`}.
 Book: "${project.title}"
 Core Promise: ${dna.corePromise}
@@ -936,7 +1296,8 @@ Tone Rules: ${dna.toneRules}
 Framework: ${dna.frameworkSummary}
 Transformation Arc: ${dna.transformationArc}
 Write in ${project.targetLanguage}.`
-          : `You are a professional ${fiction ? "fiction author" : "author"} writing a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`;
+          : `You are a professional ${fiction ? "fiction author" : "author"} writing a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`)
+          + (styleContext ? `\n\n${styleContext}` : "");
 
         const chapterInstructions = fiction
           ? `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
@@ -1067,11 +1428,13 @@ Write the full chapter content only, no meta-commentary.`;
       const instruction = typeof req.body?.instruction === "string" ? req.body.instruction.trim().slice(0, 2000) : "";
       const dna = await storage.getBookDna(projectId);
       const allChapters = await storage.getChapters(projectId);
-      const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber);
+      const reviseExtras = await loadContinuityExtras(project);
+      const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber, reviseExtras);
+      const styleContext = await loadStyleContext(project.styleFingerprintId);
       const fiction = isFiction(project.vertical);
 
       const result = await runStep(projectId, `Revise Ch.${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
-        const systemPrompt = dna
+        const systemPrompt = (dna
           ? `You are a professional ${fiction ? "fiction author" : "author"} revising a chapter ${fiction ? `for a ${project.vertical} novel` : `in the ${project.vertical} niche`}.
 Book: "${project.title}"
 Core Promise: ${dna.corePromise}
@@ -1080,7 +1443,8 @@ Tone Rules: ${dna.toneRules}
 Framework: ${dna.frameworkSummary}
 Transformation Arc: ${dna.transformationArc}
 Write in ${project.targetLanguage}.`
-          : `You are a professional ${fiction ? "fiction author" : "author"} revising a chapter of a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`;
+          : `You are a professional ${fiction ? "fiction author" : "author"} revising a chapter of a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`)
+          + (styleContext ? `\n\n${styleContext}` : "");
 
         const lengthHint = fiction ? "approximately 2000-3000 words" : "approximately 1500-2000 words";
         const userPrompt = `${consistencyContext ? `${consistencyContext}\n\n---\n\n` : ""}You are revising Chapter ${chapter.chapterNumber}: "${chapter.title}".

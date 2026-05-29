@@ -1,10 +1,40 @@
-import type { Chapter } from "@shared/schema";
+import type { Chapter, StoryEntity } from "@shared/schema";
+import { buildGraphContext } from "./graph";
 
 const RECENT_EXCERPT_COUNT = 6;
 const HEAD_CHARS = 600;
 const TAIL_CHARS = 300;
 
-export function buildConsistencyContext(
+export interface SeriesBible {
+  summary?: string;
+  characters?: string;
+  world?: string;
+  timeline?: string;
+  notes?: string;
+}
+
+export interface ContinuityExtras {
+  seriesTitle?: string;
+  seriesBible?: SeriesBible | null;
+  entities?: StoryEntity[];
+}
+
+function buildSeriesBibleBlock(title: string | undefined, bible: SeriesBible | null | undefined): string {
+  if (!bible) return "";
+  const lines = [
+    bible.summary && `Overview: ${bible.summary}`,
+    bible.characters && `Recurring characters: ${bible.characters}`,
+    bible.world && `World & setting: ${bible.world}`,
+    bible.timeline && `Series timeline: ${bible.timeline}`,
+    bible.notes && `Continuity notes: ${bible.notes}`,
+  ].filter(Boolean);
+  if (lines.length === 0) return "";
+  return `SERIES BIBLE${title ? ` — "${title}"` : ""}
+This book is part of a series. Stay 100% consistent with the shared series canon below across all books:
+${lines.join("\n")}`;
+}
+
+function buildChapterBibleBlock(
   chapters: Chapter[],
   currentChapterNumber: number | null,
 ): string {
@@ -38,4 +68,18 @@ You MUST stay 100% consistent with what has already been written below. Do not c
 ${lines.join("\n\n")}
 
 END OF STORY BIBLE. Continue with perfect continuity.`;
+}
+
+export function buildConsistencyContext(
+  chapters: Chapter[],
+  currentChapterNumber: number | null,
+  extras?: ContinuityExtras,
+): string {
+  const blocks = [
+    buildSeriesBibleBlock(extras?.seriesTitle, extras?.seriesBible),
+    extras?.entities && extras.entities.length > 0 ? buildGraphContext(extras.entities) : "",
+    buildChapterBibleBlock(chapters, currentChapterNumber),
+  ].filter(Boolean);
+
+  return blocks.join("\n\n---\n\n");
 }

@@ -26,7 +26,9 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity } from "@shared/schema";
+import { Network, Library, Fingerprint, Plus, Trash2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ProjectDetailData {
   project: Project;
@@ -36,7 +38,14 @@ interface ProjectDetailData {
   marketing?: MarketingAsset;
   trendReport?: TrendReport;
   chapterAnalyses?: ChapterAnalysis[];
+  storyEntities?: StoryEntity[];
+  series?: Series;
+  styleFingerprint?: StyleFingerprint;
 }
+
+interface EntityProfile { description?: string; role?: string; traits?: string }
+interface EntityRelationship { to: string; relation: string }
+interface SeriesBible { summary?: string; characters?: string; world?: string; timeline?: string; notes?: string }
 
 interface EditorialBoardData {
   reviewers: { role: string; score: number; summary: string; suggestions: { excerpt: string; issue: string; fix: string }[] }[];
@@ -572,6 +581,313 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   );
 }
 
+function ContinuityPanel({
+  projectId, project, entities, series, styleFingerprint, hasChapters, onChanged,
+}: {
+  projectId: number;
+  project: Project;
+  entities: StoryEntity[];
+  series?: Series;
+  styleFingerprint?: StyleFingerprint;
+  hasChapters: boolean;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [newSeriesTitle, setNewSeriesTitle] = useState("");
+  const [newStyleName, setNewStyleName] = useState("");
+  const [newStyleSample, setNewStyleSample] = useState("");
+  const [newEntityName, setNewEntityName] = useState("");
+  const [newEntityType, setNewEntityType] = useState("character");
+  const [newEntityDesc, setNewEntityDesc] = useState("");
+
+  const { data: seriesList = [] } = useQuery<(Series & { bookCount: number })[]>({ queryKey: ["/api/series"] });
+  const { data: styleList = [] } = useQuery<StyleFingerprint[]>({ queryKey: ["/api/style-fingerprints"] });
+
+  const onError = (e: any) => toast({ title: "Failed", description: e.message, variant: "destructive" });
+
+  const assignMutation = useMutation({
+    mutationFn: (patch: { seriesId?: number | null; styleFingerprintId?: number | null }) =>
+      apiRequest("PATCH", `/api/projects/${projectId}`, patch),
+    onSuccess: () => { onChanged(); },
+    onError,
+  });
+  const createSeriesMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/series", { title: newSeriesTitle.trim() }),
+    onSuccess: async (res: any) => {
+      const created = await res.json();
+      setNewSeriesTitle("");
+      queryClient.invalidateQueries({ queryKey: ["/api/series"] });
+      assignMutation.mutate({ seriesId: created.id });
+      toast({ title: "Series created" });
+    },
+    onError,
+  });
+  const createStyleMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/style-fingerprints", { name: newStyleName.trim(), sampleText: newStyleSample.trim() }),
+    onSuccess: async (res: any) => {
+      const created = await res.json();
+      setNewStyleName(""); setNewStyleSample("");
+      queryClient.invalidateQueries({ queryKey: ["/api/style-fingerprints"] });
+      assignMutation.mutate({ styleFingerprintId: created.id });
+      toast({ title: "Style fingerprint created" });
+    },
+    onError,
+  });
+  const bibleMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/series/${series!.id}/bible`),
+    onSuccess: () => { onChanged(); queryClient.invalidateQueries({ queryKey: ["/api/series"] }); toast({ title: "Series bible generated" }); },
+    onError,
+  });
+  const extractMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/extract-graph`),
+    onSuccess: () => { onChanged(); toast({ title: "Graph extracted" }); },
+    onError,
+  });
+  const addEntityMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/entities`, {
+      name: newEntityName.trim(), type: newEntityType, profile: { description: newEntityDesc.trim() },
+    }),
+    onSuccess: () => { setNewEntityName(""); setNewEntityDesc(""); onChanged(); toast({ title: "Entity added" }); },
+    onError,
+  });
+  const deleteEntityMutation = useMutation({
+    mutationFn: (eid: number) => apiRequest("DELETE", `/api/entities/${eid}`),
+    onSuccess: () => { onChanged(); },
+    onError,
+  });
+
+  const bible = (series?.bible as SeriesBible | null) || null;
+  const styleProfile = (styleFingerprint?.profile as Record<string, any> | null) || null;
+
+  return (
+    <div className="space-y-3" data-testid="panel-continuity">
+      {/* Series */}
+      <Card className="border-border/20 bg-card/30 glow-border">
+        <CardContent className="pt-4 pb-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Library className="h-3.5 w-3.5 text-purple-400/70" />
+            <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/50">Series / Saga</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select
+              value={project.seriesId ? String(project.seriesId) : "none"}
+              onValueChange={(v) => assignMutation.mutate({ seriesId: v === "none" ? null : parseInt(v) })}
+            >
+              <SelectTrigger className="h-8 text-[11px] font-mono bg-card/50" data-testid="select-series">
+                <SelectValue placeholder="No series" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No series</SelectItem>
+                {seriesList.map((s) => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.title} ({s.bookCount})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={newSeriesTitle}
+              onChange={(e) => setNewSeriesTitle(e.target.value)}
+              placeholder="New series title…"
+              className="h-8 text-[11px] font-mono bg-card/50"
+              data-testid="input-new-series"
+            />
+            <Button
+              size="sm" variant="outline" className="h-8 text-[10px] font-mono shrink-0"
+              disabled={!newSeriesTitle.trim() || createSeriesMutation.isPending}
+              onClick={() => createSeriesMutation.mutate()}
+              data-testid="button-create-series"
+            >
+              {createSeriesMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+            </Button>
+          </div>
+          {series && (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-mono text-muted-foreground/50">Shared bible for "{series.title}"</p>
+                <Button
+                  size="sm" variant="outline" className="h-7 text-[10px] font-mono"
+                  disabled={bibleMutation.isPending}
+                  onClick={() => bibleMutation.mutate()}
+                  data-testid="button-generate-bible"
+                >
+                  {bibleMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Wand2 className="h-3 w-3 mr-1" />}
+                  {bible ? "Regenerate" : "Generate"} Bible
+                </Button>
+              </div>
+              {bible && (
+                <div className="space-y-1.5">
+                  {([["Summary", bible.summary], ["Characters", bible.characters], ["World", bible.world], ["Timeline", bible.timeline], ["Notes", bible.notes]] as [string, string | undefined][])
+                    .filter(([, v]) => v).map(([label, v]) => (
+                      <div key={label} className="bg-white/[0.02] border border-border/15 rounded-lg px-3 py-2">
+                        <p className="text-[8px] font-mono font-bold uppercase tracking-[0.2em] text-purple-400/50 mb-1">{label}</p>
+                        <p className="text-[12px] leading-relaxed text-muted-foreground/75 whitespace-pre-wrap">{v}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Style fingerprint */}
+      <Card className="border-border/20 bg-card/30 glow-border-cyan">
+        <CardContent className="pt-4 pb-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Fingerprint className="h-3.5 w-3.5 text-cyan-400/70" />
+            <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/50">Author Style Fingerprint</p>
+          </div>
+          <Select
+            value={project.styleFingerprintId ? String(project.styleFingerprintId) : "none"}
+            onValueChange={(v) => assignMutation.mutate({ styleFingerprintId: v === "none" ? null : parseInt(v) })}
+          >
+            <SelectTrigger className="h-8 text-[11px] font-mono bg-card/50" data-testid="select-style">
+              <SelectValue placeholder="No style" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Default voice</SelectItem>
+              {styleList.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {styleProfile && (
+            <div className="bg-white/[0.02] border border-border/15 rounded-lg px-3 py-2 space-y-1">
+              {Object.entries(styleProfile).filter(([, v]) => v && typeof v === "string").slice(0, 6).map(([k, v]) => (
+                <p key={k} className="text-[11px] leading-relaxed text-muted-foreground/70">
+                  <span className="text-cyan-400/60 font-mono uppercase text-[8px] tracking-wider mr-1.5">{k}</span>{String(v)}
+                </p>
+              ))}
+            </div>
+          )}
+          <div className="space-y-2 pt-1 border-t border-border/15">
+            <p className="text-[10px] font-mono text-muted-foreground/50 pt-2">Create from sample text</p>
+            <Input
+              value={newStyleName}
+              onChange={(e) => setNewStyleName(e.target.value)}
+              placeholder="Fingerprint name…"
+              className="h-8 text-[11px] font-mono bg-card/50"
+              data-testid="input-style-name"
+            />
+            <Textarea
+              value={newStyleSample}
+              onChange={(e) => setNewStyleSample(e.target.value)}
+              placeholder="Paste 200+ characters of representative prose…"
+              className="text-[11px] font-mono bg-card/50 min-h-[80px]"
+              data-testid="input-style-sample"
+            />
+            <Button
+              size="sm" variant="outline" className="h-8 text-[10px] font-mono w-full"
+              disabled={!newStyleName.trim() || newStyleSample.trim().length < 200 || createStyleMutation.isPending}
+              onClick={() => createStyleMutation.mutate()}
+              data-testid="button-create-style"
+            >
+              {createStyleMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Fingerprint className="h-3 w-3 mr-1" />}
+              Derive Fingerprint
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Character & world graph */}
+      <Card className="border-border/20 bg-card/30 glow-border-pink">
+        <CardContent className="pt-4 pb-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Network className="h-3.5 w-3.5 text-pink-400/70" />
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/50">Character & World Graph ({entities.length})</p>
+            </div>
+            <Button
+              size="sm" variant="outline" className="h-7 text-[10px] font-mono"
+              disabled={!hasChapters || extractMutation.isPending}
+              onClick={() => extractMutation.mutate()}
+              data-testid="button-extract-graph"
+            >
+              {extractMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+              Extract
+            </Button>
+          </div>
+
+          {entities.length > 0 && (
+            <div className="space-y-1.5">
+              {entities.map((e) => {
+                const p = (e.profile as EntityProfile | null) || {};
+                const rels = (e.relationships as EntityRelationship[] | null) || [];
+                return (
+                  <div key={e.id} className="bg-white/[0.02] border border-border/15 rounded-lg px-3 py-2" data-testid={`entity-${e.id}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="text-[8px] font-mono border-pink-500/30 text-pink-300/70 capitalize shrink-0">{e.type}</Badge>
+                        <span className="text-[12px] font-bold tracking-tight truncate">{e.name}</span>
+                      </div>
+                      <Button
+                        size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-muted-foreground/40 hover:text-red-400"
+                        onClick={() => deleteEntityMutation.mutate(e.id)}
+                        data-testid={`button-delete-entity-${e.id}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    {p.description && <p className="text-[11px] leading-relaxed text-muted-foreground/70 mt-1">{p.description}</p>}
+                    {p.role && <p className="text-[10px] text-muted-foreground/45 mt-0.5"><span className="font-mono uppercase text-[8px] mr-1">role</span>{p.role}</p>}
+                    {rels.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {rels.map((r, i) => (
+                          <span key={i} className="text-[9px] font-mono text-cyan-400/50 bg-cyan-500/5 border border-cyan-500/15 rounded px-1.5 py-0.5">{r.to}: {r.relation}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="space-y-2 pt-1 border-t border-border/15">
+            <p className="text-[10px] font-mono text-muted-foreground/50 pt-2">Add manually</p>
+            <div className="flex items-center gap-2">
+              <Select value={newEntityType} onValueChange={setNewEntityType}>
+                <SelectTrigger className="h-8 text-[11px] font-mono bg-card/50 w-[120px] shrink-0" data-testid="select-entity-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["character", "location", "item", "faction", "concept"].map((t) => (
+                    <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={newEntityName}
+                onChange={(e) => setNewEntityName(e.target.value)}
+                placeholder="Name…"
+                className="h-8 text-[11px] font-mono bg-card/50"
+                data-testid="input-entity-name"
+              />
+            </div>
+            <Textarea
+              value={newEntityDesc}
+              onChange={(e) => setNewEntityDesc(e.target.value)}
+              placeholder="Description (optional)…"
+              className="text-[11px] font-mono bg-card/50 min-h-[56px]"
+              data-testid="input-entity-desc"
+            />
+            <Button
+              size="sm" variant="outline" className="h-8 text-[10px] font-mono w-full"
+              disabled={!newEntityName.trim() || addEntityMutation.isPending}
+              onClick={() => addEntityMutation.mutate()}
+              data-testid="button-add-entity"
+            >
+              {addEntityMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+              Add Entity
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -764,6 +1080,7 @@ export default function ProjectDetail() {
   }
 
   const { project, chapters, runSteps, bookDna, marketing, trendReport } = data;
+  const storyEntities = data.storyEntities || [];
   const analysesByChapter = (data.chapterAnalyses || []).reduce<Record<number, ChapterAnalysis[]>>((acc, a) => {
     if (a.chapterId == null) return acc;
     (acc[a.chapterId] ||= []).push(a);
@@ -988,6 +1305,9 @@ export default function ProjectDetail() {
               <TabsTrigger value="marketing" data-testid="tab-marketing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
                 <Megaphone className="h-3 w-3" /> Marketing
               </TabsTrigger>
+              <TabsTrigger value="continuity" data-testid="tab-continuity" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <Network className="h-3 w-3" /> Continuity
+              </TabsTrigger>
               <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
                 <FileText className="h-3 w-3" /> Logs
               </TabsTrigger>
@@ -1129,6 +1449,18 @@ export default function ProjectDetail() {
                   )}
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="continuity" className="mt-4">
+              <ContinuityPanel
+                projectId={projectId}
+                project={project}
+                entities={storyEntities}
+                series={data.series}
+                styleFingerprint={data.styleFingerprint}
+                hasChapters={completedChapters.length > 0}
+                onChanged={invalidate}
+              />
             </TabsContent>
 
             <TabsContent value="logs" className="mt-4">
