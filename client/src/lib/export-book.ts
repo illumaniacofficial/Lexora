@@ -16,13 +16,32 @@ function slugify(title: string): string {
   return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function downloadBookFile(projectId: number, format: "txt" | "html") {
+export function downloadBookFile(projectId: number, format: "txt" | "html" | "epub") {
   const a = document.createElement("a");
   a.href = `/api/projects/${projectId}/export?format=${format}`;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+export interface TrimSize {
+  id: string;
+  label: string;
+  width: number; // points (1in = 72pt)
+  height: number;
+}
+
+export const TRIM_SIZES: TrimSize[] = [
+  { id: "letter", label: "Letter (8.5 × 11)", width: 612, height: 792 },
+  { id: "5x8", label: "Pocket (5 × 8)", width: 360, height: 576 },
+  { id: "5.25x8", label: "Digest (5.25 × 8)", width: 378, height: 576 },
+  { id: "5.5x8.5", label: "Trade (5.5 × 8.5)", width: 396, height: 612 },
+  { id: "6x9", label: "US Trade (6 × 9)", width: 432, height: 648 },
+];
+
+export function getTrimSize(id: string): TrimSize {
+  return TRIM_SIZES.find(t => t.id === id) || TRIM_SIZES[0];
 }
 
 function loadImageAsDataUrl(src: string): Promise<string> {
@@ -42,17 +61,19 @@ function loadImageAsDataUrl(src: string): Promise<string> {
   });
 }
 
-export async function exportBookPdf(book: ExportBook, chapters: ExportChapter[]) {
+export async function exportBookPdf(book: ExportBook, chapters: ExportChapter[], trimSizeId: string = "letter") {
   const completed = chapters.filter(c => c.status === "complete" && c.content);
   if (completed.length === 0) throw new Error("No completed chapters to export");
 
+  const trim = getTrimSize(trimSizeId);
   const { jsPDF } = await import("jspdf");
-  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const doc = new jsPDF({ unit: "pt", format: [trim.width, trim.height] });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
-  const marginX = 72;
-  const marginTop = 72;
-  const marginBottom = 72;
+  const isSmallTrim = pageW < 500;
+  const marginX = isSmallTrim ? 54 : 72;
+  const marginTop = isSmallTrim ? 54 : 72;
+  const marginBottom = isSmallTrim ? 54 : 72;
   const contentW = pageW - marginX * 2;
   const lineH = 16;
   const maxY = pageH - marginBottom;

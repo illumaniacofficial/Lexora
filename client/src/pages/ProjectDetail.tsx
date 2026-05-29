@@ -22,12 +22,12 @@ import {
 import { Helmet } from "react-helmet-async";
 import { cn, formatScore, scoreColor, statusLabel, VERTICAL_LABELS, STATUS_GLOW, VERTICAL_ICONS, sanitizeHtml } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { exportBookPdf } from "@/lib/export-book";
+import { exportBookPdf, TRIM_SIZES } from "@/lib/export-book";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob } from "@shared/schema";
 import { Network, Library, Fingerprint, Plus, Trash2, DollarSign, FlaskConical, Trophy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
@@ -46,6 +46,9 @@ interface ProjectDetailData {
   abTests?: AbTest[];
   series?: Series;
   styleFingerprint?: StyleFingerprint;
+  coverVariants?: CoverVariant[];
+  exportJobs?: ExportJob[];
+  brandKit?: BrandKit;
 }
 
 interface ForecastMonthData { month: number; units: number; gross: number; royalty: number; cumulative: number }
@@ -1697,6 +1700,33 @@ export default function ProjectDetail() {
     onSuccess: () => { invalidate(); toast({ title: "Cover generated" }); },
     onError: (e: any) => toast({ title: "Cover failed", description: e.message, variant: "destructive" }),
   });
+  const [variantCount, setVariantCount] = useState("2");
+  const coverVariantsMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/cover-variants`, {
+      count: parseInt(variantCount, 10),
+      coverPrompt: coverText || undefined,
+      avoidStyles: coverAvoid || undefined,
+    }),
+    onSuccess: () => { invalidate(); toast({ title: "Cover variants generated" }); },
+    onError: (e: any) => toast({ title: "Variants failed", description: e.message, variant: "destructive" }),
+  });
+  const selectVariantMutation = useMutation({
+    mutationFn: (variantId: number) => apiRequest("POST", `/api/projects/${projectId}/cover-variants/${variantId}/select`),
+    onSuccess: () => { invalidate(); toast({ title: "Cover applied" }); },
+    onError: (e: any) => toast({ title: "Apply failed", description: e.message, variant: "destructive" }),
+  });
+  const deleteVariantMutation = useMutation({
+    mutationFn: (variantId: number) => apiRequest("DELETE", `/api/projects/${projectId}/cover-variants/${variantId}`),
+    onSuccess: () => { invalidate(); toast({ title: "Variant removed" }); },
+    onError: (e: any) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+  });
+  const { data: brandKits } = useQuery<BrandKit[]>({ queryKey: ["/api/brand-kits"] });
+  const brandKitMutation = useMutation({
+    mutationFn: (brandKitId: number | null) => apiRequest("PATCH", `/api/projects/${projectId}`, { brandKitId }),
+    onSuccess: () => { invalidate(); toast({ title: "Brand kit updated" }); },
+    onError: (e: any) => toast({ title: "Update failed", description: e.message, variant: "destructive" }),
+  });
+  const [trimSizeId, setTrimSizeId] = useState("6x9");
   const cancelChapterMutation = useMutation({
     mutationFn: (chapterId: number) => apiRequest("PATCH", `/api/projects/${projectId}/chapters/${chapterId}/cancel`),
     onSuccess: () => { invalidate(); toast({ title: "Generation cancelled", description: "Chapter reset to pending" }); },
@@ -1784,6 +1814,7 @@ export default function ProjectDetail() {
       await exportBookPdf(
         { id: data.project.id, title: data.project.title, authorName: data.project.authorName, coverImageUrl: data.project.coverImageUrl },
         data.chapters || [],
+        trimSizeId,
       );
       toast({ title: "PDF exported" });
     } catch (err: any) {
@@ -2393,6 +2424,95 @@ export default function ProjectDetail() {
                   </Button>
                 </div>
               )}
+
+              <div className="mt-4 pt-4 border-t border-border/10 space-y-2">
+                <p className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/40">Brand Kit</p>
+                <Select
+                  value={project.brandKitId ? String(project.brandKitId) : "none"}
+                  onValueChange={(v) => brandKitMutation.mutate(v === "none" ? null : parseInt(v, 10))}
+                >
+                  <SelectTrigger className="h-8 text-[11px] bg-card/30 border-border/20 font-mono" data-testid="select-brand-kit">
+                    <SelectValue placeholder="No brand kit" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No brand kit</SelectItem>
+                    {(brandKits || []).map((kit) => (
+                      <SelectItem key={kit.id} value={String(kit.id)} data-testid={`option-brand-kit-${kit.id}`}>{kit.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[8px] text-muted-foreground/30 font-mono">Brand palette & fonts are applied to cover generation. Manage kits in Settings.</p>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-border/10 space-y-2">
+                <p className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/40">Cover Variant Studio</p>
+                <div className="flex items-center gap-2">
+                  <Select value={variantCount} onValueChange={setVariantCount}>
+                    <SelectTrigger className="h-8 w-16 text-[11px] bg-card/30 border-border/20 font-mono" data-testid="select-variant-count">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["1", "2", "3", "4"].map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm" variant="outline"
+                    className="flex-1 border-border/30 font-mono text-[10px] hover:border-pink-500/30"
+                    onClick={() => coverVariantsMutation.mutate()}
+                    disabled={coverVariantsMutation.isPending}
+                    data-testid="button-generate-variants"
+                  >
+                    {coverVariantsMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1.5 text-pink-400" />}
+                    GENERATE VARIANTS
+                  </Button>
+                </div>
+                {coverVariantsMutation.isPending && (
+                  <p className="text-[8px] text-muted-foreground/30 font-mono">Generating {variantCount} variant{variantCount !== "1" ? "s" : ""}… each uses one image credit.</p>
+                )}
+                {(data.coverVariants && data.coverVariants.length > 0) && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {data.coverVariants.map((variant) => (
+                      <div
+                        key={variant.id}
+                        className={cn(
+                          "relative rounded-lg overflow-hidden border group",
+                          variant.isSelected ? "border-pink-500/60 glow-border-pink" : "border-border/20",
+                        )}
+                        data-testid={`cover-variant-${variant.id}`}
+                      >
+                        <img src={variant.imageUrl} alt="Cover variant" className="w-full aspect-[2/3] object-cover" />
+                        {variant.isSelected && (
+                          <div className="absolute top-1 left-1 bg-pink-500/90 rounded-full p-0.5">
+                            <CheckCircle className="h-3 w-3 text-white" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60">
+                          <Button
+                            size="sm"
+                            className="h-6 text-[9px] font-mono bg-pink-500/80 hover:bg-pink-500 text-white border-0"
+                            onClick={() => selectVariantMutation.mutate(variant.id)}
+                            disabled={selectVariantMutation.isPending || variant.isSelected}
+                            data-testid={`button-select-variant-${variant.id}`}
+                          >
+                            {variant.isSelected ? "SELECTED" : "USE THIS"}
+                          </Button>
+                          <Button
+                            size="sm" variant="outline"
+                            className="h-6 text-[9px] font-mono border-border/40 bg-black/40"
+                            onClick={() => deleteVariantMutation.mutate(variant.id)}
+                            disabled={deleteVariantMutation.isPending}
+                            data-testid={`button-delete-variant-${variant.id}`}
+                          >
+                            <Trash2 className="h-2.5 w-2.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -2431,8 +2551,26 @@ export default function ProjectDetail() {
                     data-testid="button-export-pdf"
                   >
                     {pdfLoading ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <FileDown className="h-3.5 w-3.5 mr-2 text-amber-400/60" />}
-                    .PDF (Book Format)
+                    .PDF (Print-Ready)
                   </Button>
+                  <div className="flex items-center gap-2 -mt-1">
+                    <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-wider shrink-0">Trim</span>
+                    <Select value={trimSizeId} onValueChange={setTrimSizeId}>
+                      <SelectTrigger className="h-7 text-[10px] bg-card/30 border-border/20 font-mono" data-testid="select-trim-size">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TRIM_SIZES.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-[10px]" data-testid={`option-trim-${t.id}`}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <a href={`/api/projects/${projectId}/export?format=epub`} download>
+                    <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30" data-testid="button-export-epub">
+                      <BookOpen className="h-3.5 w-3.5 mr-2 text-emerald-400/50" /> .EPUB (eReaders)
+                    </Button>
+                  </a>
                   <a href={`/api/projects/${projectId}/export?format=txt`} download>
                     <Button variant="outline" size="sm" className="w-full justify-start border-border/30 bg-card/20 font-mono text-[10px] hover:border-purple-500/30" data-testid="button-export-txt">
                       <FileText className="h-3.5 w-3.5 mr-2 text-muted-foreground/40" /> .TXT

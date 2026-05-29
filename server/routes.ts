@@ -10,7 +10,8 @@ import { extractStoryEntities } from "./graph";
 import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
-import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema } from "@shared/schema";
+import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema } from "@shared/schema";
+import { buildEpub } from "./epub";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { saveDbSeed } from "./seed";
@@ -129,6 +130,124 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+const COVER_VERTICAL_HINTS: Record<string, string> = {
+  money: "gold and dark blue palette, modern typography",
+  fitness: "bold red and white, dynamic typography",
+  spirituality: "purple and gold gradients, ethereal typography",
+  career: "corporate blue, clean modern design",
+  education: "forest green, knowledge symbols",
+  relationships: "soft coral and cream",
+  health: "teal and white, modern sans-serif",
+  mindset: "orange and black, bold typography",
+  parenting: "soft yellows and blues",
+  technology: "dark with neon accents",
+  cooking: "warm kitchen tones, rustic wood textures",
+  travel: "vibrant landscapes, compass motifs",
+  photography: "monochrome with color accents",
+  music: "sound wave patterns, bold gradients",
+  writing: "ink and quill motifs, parchment textures",
+  art: "paint splatter accents, vivid colors",
+  gardening: "botanical illustrations, earthy greens",
+  pets: "paw prints, soft pastels",
+  sports: "stadium lighting, dynamic action lines",
+  gaming: "pixel art accents, neon glows",
+  philosophy: "marble textures, deep navy and gold",
+  history: "aged parchment, vintage maps, sepia tones",
+  science: "molecular structures, lab blue and white",
+  psychology: "brain visualization, warm gradients",
+  sociology: "interconnected figures, muted earth tones",
+  politics: "capitol imagery, red white blue",
+  law: "scales of justice, dark leather textures",
+  business: "professional polish, power palette",
+  marketing: "bright gradients, bold callouts",
+  sales: "confident red and black typography",
+  "real-estate": "luxury home photography, gold accents",
+  crypto: "blockchain patterns, digital gold",
+  ai: "neural network visuals, electric blue",
+  cybersecurity: "shield motifs, matrix green on black",
+  productivity: "clock and checklist motifs, minimalist",
+  minimalism: "vast whitespace, single accent color",
+  sustainability: "leaf patterns, earth greens",
+  fashion: "high-contrast black and white, chic fonts",
+  beauty: "soft pink and gold, floral accents",
+  diy: "workshop tools, craft paper textures",
+  "sci-fi": "space nebulae, holographic chrome text, starships",
+  fantasy: "enchanted landscapes, ornate gold filigree, magical glow",
+  horror: "ominous shadows, dripping blood red typography, moonlit fog",
+  romance: "soft bokeh, flowing fabrics, warm rose and gold",
+  thriller: "rain-soaked streets, high contrast shadows, tense red",
+  mystery: "foggy alleyways, dark teal and amber, detective aesthetic",
+  "literary-fiction": "abstract watercolor art, muted earth tones",
+  dystopian: "crumbling cityscapes, ash-grey skies, rebellious red",
+  erotica: "silk and satin textures, deep burgundy, intimate soft lighting",
+  memoir: "vintage photograph aesthetic, warm sepia and cream",
+  biography: "portrait silhouette, classic navy and gold",
+  "true-crime": "crime scene tape, noir photography, stark red",
+  comedy: "playful illustrations, bold vibrant colors",
+  adventure: "vast mountain landscapes, treasure maps",
+  "young-adult": "vibrant gradients, swooping motion lines",
+  children: "whimsical illustrations, bright primary colors",
+  poetry: "watercolor florals, delicate calligraphy, soft pastels",
+  drama: "theatrical curtain motifs, deep crimson and gold",
+  western: "desert sunset landscapes, leather textures",
+  novel: "classic design, rich colors, sophisticated typography",
+};
+
+function brandKitToHint(brandKit?: { name?: string; palette?: unknown; fonts?: unknown; logoUrl?: unknown } | null): string {
+  if (!brandKit) return "";
+  const parts: string[] = [];
+  const collect = (val: unknown): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.map((v) => String(v)).filter(Boolean);
+    if (typeof val === "object") return Object.values(val as Record<string, unknown>).map((v) => String(v)).filter(Boolean);
+    if (typeof val === "string") return [val];
+    return [];
+  };
+  const colors = collect(brandKit.palette);
+  const fonts = collect(brandKit.fonts);
+  if (colors.length) parts.push(`brand color palette: ${colors.slice(0, 6).join(", ")}`);
+  if (fonts.length) parts.push(`brand typography style: ${fonts.slice(0, 3).join(", ")}`);
+  if (typeof brandKit.logoUrl === "string" && brandKit.logoUrl.trim()) {
+    parts.push("reserve a small, clean area (typically near the spine or bottom corner) for an author/publisher logo imprint so the brand mark can sit comfortably without clutter");
+  }
+  if (!parts.length) return "";
+  return ` BRAND KIT (must be honored): ${parts.join("; ")}.`;
+}
+
+function buildCoverPrompt(args: {
+  project: { title: string; authorName?: string | null; vertical: string; description?: string | null };
+  dna?: { corePromise?: string | null; transformationArc?: string | null; frameworkSummary?: string | null } | null;
+  trend?: { summary?: string | null; nicheTopics?: string[] | null } | null;
+  chapterList: { title: string }[];
+  userPrompt: string;
+  userAvoid: string;
+  brandKit?: { name?: string; palette?: unknown; fonts?: unknown; logoUrl?: unknown } | null;
+  variantDirective?: string;
+}): string {
+  const { project, dna, trend, chapterList, userPrompt, userAvoid, brandKit, variantDirective } = args;
+  const contentContext: string[] = [];
+  if (project.description) contentContext.push(`Book description: ${project.description}`);
+  if (dna?.corePromise) contentContext.push(`Core promise: ${dna.corePromise}`);
+  if (dna?.transformationArc) contentContext.push(`Transformation arc: ${dna.transformationArc}`);
+  if (dna?.frameworkSummary) contentContext.push(`Framework: ${dna.frameworkSummary}`);
+  if (trend?.summary) contentContext.push(`Market context: ${trend.summary.slice(0, 200)}`);
+  if (trend?.nicheTopics?.length) contentContext.push(`Niche: ${trend.nicheTopics.slice(0, 2).join("; ")}`);
+  if (chapterList.length > 0) {
+    const titles = chapterList.slice(0, 6).map((c) => c.title).join(", ");
+    contentContext.push(`Key chapters: ${titles}`);
+  }
+  const bookContext = contentContext.length > 0
+    ? `\n\nThis book is specifically about: ${contentContext.join(". ")}. The cover imagery, symbols, and color palette MUST reflect this specific subject matter — not generic category art.`
+    : "";
+  const colorHint = COVER_VERTICAL_HINTS[project.vertical] || "modern design, premium feel";
+  const customSection = userPrompt ? ` Additional creative direction: ${userPrompt}.` : "";
+  const avoidSection = userAvoid ? ` IMPORTANT — Do NOT use these styles: ${userAvoid}.` : "";
+  const brandSection = brandKitToHint(brandKit);
+  const variantSection = variantDirective ? ` VARIANT DIRECTION: ${variantDirective}.` : "";
+  const author = project.authorName || "Unknown Author";
+  return `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${author}. Color/typography hints: ${colorHint}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${author}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).${bookContext}${brandSection}${customSection}${avoidSection}${variantSection} CRITICAL: The cover art, imagery, and visual metaphors must be UNIQUE to this specific book's subject matter. Do NOT use generic category imagery — create visuals that could ONLY belong to this particular book.`;
+}
+
 async function runStep(projectId: number, stepName: string, model: string, fn: () => Promise<{ result: any; tokens: number; costOverride?: number }>) {
   const step = await storage.createRunStep({
     projectId,
@@ -212,6 +331,7 @@ const patchProjectSchema = z.object({
   coverImageUrl: z.string().nullable().optional(),
   seriesId: z.number().int().positive().nullable().optional(),
   styleFingerprintId: z.number().int().positive().nullable().optional(),
+  brandKitId: z.number().int().positive().nullable().optional(),
 }).strict();
 
 function parseId(raw: string): number | null {
@@ -362,6 +482,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/chapters\/\d+\/humanize/,
       /\/api\/projects\/\d+\/chapters\/\d+\/beta-readers/,
       /\/api\/projects\/\d+\/generate-cover/,
+      /\/api\/projects\/\d+\/cover-variants$/,
       /\/api\/projects\/\d+\/chapters\/\d+\/generate-audio/,
       /\/api\/projects\/\d+\/generate-audiobook/,
       /\/api\/projects\/\d+\/extract-graph/,
@@ -721,7 +842,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const abTests = await storage.getAbTests(id);
       const seriesRef = project.seriesId ? await storage.getSeries(project.seriesId) : undefined;
       const styleFingerprint = project.styleFingerprintId ? await storage.getStyleFingerprint(project.styleFingerprintId) : undefined;
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint });
+      const coverVariants = await storage.getCoverVariants(id);
+      const exportJobs = await storage.getExportJobs(id);
+      const brandKit = project.brandKitId ? await storage.getBrandKit(project.brandKitId) : undefined;
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1077,8 +1201,8 @@ Return JSON exactly:
       const id = parseId(req.params.id);
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const format = (req.query.format as string) || "txt";
-      if (format !== "txt" && format !== "html") {
-        return res.status(400).json({ error: "Invalid format. Must be 'txt' or 'html'" });
+      if (format !== "txt" && format !== "html" && format !== "epub") {
+        return res.status(400).json({ error: "Invalid format. Must be 'txt', 'html', or 'epub'" });
       }
       const project = await storage.getProject(id);
       if (!project) return res.status(404).json({ error: "Not found" });
@@ -1089,6 +1213,19 @@ Return JSON exactly:
       }
       const authorName = project.authorName || "Unknown Author";
       const title = project.title;
+
+      if (format === "epub") {
+        const epub = buildEpub({
+          title,
+          authorName,
+          language: project.targetLanguage || "en",
+          chapters: completedChapters,
+        });
+        await storage.createExportJob({ projectId: id, format: "epub", language: project.targetLanguage || "en", status: "complete" });
+        res.setHeader("Content-Type", "application/epub+zip");
+        res.setHeader("Content-Disposition", `attachment; filename="${slugify(title)}.epub"`);
+        return res.send(epub);
+      }
 
       if (format === "html") {
         const html = buildHtmlExport(title, authorName, completedChapters);
@@ -2177,97 +2314,22 @@ Return JSON with:
       const dna = await storage.getBookDna(id);
       const trend = await storage.getTrendReportByProject(id);
       const chapterList = await storage.getChapters(id);
+      const brandKit = project.brandKitId ? await storage.getBrandKit(project.brandKitId) : undefined;
 
-      const contentContext: string[] = [];
-      if (project.description) contentContext.push(`Book description: ${project.description}`);
-      if (dna?.corePromise) contentContext.push(`Core promise: ${dna.corePromise}`);
-      if (dna?.transformationArc) contentContext.push(`Transformation arc: ${dna.transformationArc}`);
-      if (dna?.frameworkSummary) contentContext.push(`Framework: ${dna.frameworkSummary}`);
-      if (trend?.summary) contentContext.push(`Market context: ${trend.summary.slice(0, 200)}`);
-      if (trend?.nicheTopics?.length) contentContext.push(`Niche: ${trend.nicheTopics.slice(0, 2).join("; ")}`);
-      if (chapterList.length > 0) {
-        const titles = chapterList.slice(0, 6).map(c => c.title).join(", ");
-        contentContext.push(`Key chapters: ${titles}`);
-      }
-
-      const bookContext = contentContext.length > 0
-        ? `\n\nThis book is specifically about: ${contentContext.join(". ")}. The cover imagery, symbols, and color palette MUST reflect this specific subject matter — not generic category art.`
-        : "";
-
-      const verticalHints: Record<string, string> = {
-        money: "gold and dark blue palette, modern typography",
-        fitness: "bold red and white, dynamic typography",
-        spirituality: "purple and gold gradients, ethereal typography",
-        career: "corporate blue, clean modern design",
-        education: "forest green, knowledge symbols",
-        relationships: "soft coral and cream",
-        health: "teal and white, modern sans-serif",
-        mindset: "orange and black, bold typography",
-        parenting: "soft yellows and blues",
-        technology: "dark with neon accents",
-        cooking: "warm kitchen tones, rustic wood textures",
-        travel: "vibrant landscapes, compass motifs",
-        photography: "monochrome with color accents",
-        music: "sound wave patterns, bold gradients",
-        writing: "ink and quill motifs, parchment textures",
-        art: "paint splatter accents, vivid colors",
-        gardening: "botanical illustrations, earthy greens",
-        pets: "paw prints, soft pastels",
-        sports: "stadium lighting, dynamic action lines",
-        gaming: "pixel art accents, neon glows",
-        philosophy: "marble textures, deep navy and gold",
-        history: "aged parchment, vintage maps, sepia tones",
-        science: "molecular structures, lab blue and white",
-        psychology: "brain visualization, warm gradients",
-        sociology: "interconnected figures, muted earth tones",
-        politics: "capitol imagery, red white blue",
-        law: "scales of justice, dark leather textures",
-        business: "professional polish, power palette",
-        marketing: "bright gradients, bold callouts",
-        sales: "confident red and black typography",
-        "real-estate": "luxury home photography, gold accents",
-        crypto: "blockchain patterns, digital gold",
-        ai: "neural network visuals, electric blue",
-        cybersecurity: "shield motifs, matrix green on black",
-        productivity: "clock and checklist motifs, minimalist",
-        minimalism: "vast whitespace, single accent color",
-        sustainability: "leaf patterns, earth greens",
-        fashion: "high-contrast black and white, chic fonts",
-        beauty: "soft pink and gold, floral accents",
-        diy: "workshop tools, craft paper textures",
-        "sci-fi": "space nebulae, holographic chrome text, starships",
-        fantasy: "enchanted landscapes, ornate gold filigree, magical glow",
-        horror: "ominous shadows, dripping blood red typography, moonlit fog",
-        romance: "soft bokeh, flowing fabrics, warm rose and gold",
-        thriller: "rain-soaked streets, high contrast shadows, tense red",
-        mystery: "foggy alleyways, dark teal and amber, detective aesthetic",
-        "literary-fiction": "abstract watercolor art, muted earth tones",
-        dystopian: "crumbling cityscapes, ash-grey skies, rebellious red",
-        erotica: "silk and satin textures, deep burgundy, intimate soft lighting",
-        memoir: "vintage photograph aesthetic, warm sepia and cream",
-        biography: "portrait silhouette, classic navy and gold",
-        "true-crime": "crime scene tape, noir photography, stark red",
-        comedy: "playful illustrations, bold vibrant colors",
-        adventure: "vast mountain landscapes, treasure maps",
-        "young-adult": "vibrant gradients, swooping motion lines",
-        children: "whimsical illustrations, bright primary colors",
-        poetry: "watercolor florals, delicate calligraphy, soft pastels",
-        drama: "theatrical curtain motifs, deep crimson and gold",
-        western: "desert sunset landscapes, leather textures",
-        novel: "classic design, rich colors, sophisticated typography",
-      };
-
-      const colorHint = verticalHints[project.vertical] || "modern design, premium feel";
-
-      const userPrompt = coverPrompt || project.coverPrompt || "";
-      const userAvoid = avoidStyles || project.coverAvoidStyles || "";
-      const customSection = userPrompt ? ` Additional creative direction: ${userPrompt}.` : "";
-      const avoidSection = userAvoid ? ` IMPORTANT — Do NOT use these styles: ${userAvoid}.` : "";
+      const prompt = buildCoverPrompt({
+        project,
+        dna,
+        trend,
+        chapterList,
+        userPrompt: coverPrompt || project.coverPrompt || "",
+        userAvoid: avoidStyles || project.coverAvoidStyles || "",
+        brandKit,
+      });
 
       const imageUrl = await runStep(id, "Cover Generation", IMAGE_MODEL, async () => {
         const completion = await openai.images.generate({
           model: IMAGE_MODEL,
-          prompt: `Create a hyper-realistic, print-ready book cover for "${project.title}" by ${project.authorName || "Unknown Author"}. Color/typography hints: ${colorHint}. Requirements: photorealistic 3D book cover mockup with realistic lighting, shadows, and depth. The title text "${project.title}" must be prominently displayed in elegant, high-contrast typography. The author name "${project.authorName || "Unknown Author"}" must appear clearly at the bottom. The design should look like a bestselling ${isFiction(project.vertical) ? "fiction" : "non-fiction"} book you'd find on Amazon — polished, professional, with strong thumbnail readability. Use cinematic lighting, subtle textures, and premium finishes. No real human faces. Portrait orientation (tall book format).${bookContext}${customSection}${avoidSection} CRITICAL: The cover art, imagery, and visual metaphors must be UNIQUE to this specific book's subject matter. Do NOT use generic category imagery — create visuals that could ONLY belong to this particular book.`,
+          prompt,
           size: "1024x1536",
           n: 1,
         });
@@ -2287,6 +2349,157 @@ Return JSON with:
       res.json({ coverImageUrl: imageUrl });
     } catch (err: any) {
       await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Cover Variant Studio ---
+  const COVER_VARIANT_DIRECTIVES = [
+    "bold typographic treatment with a single striking central symbol",
+    "atmospheric photographic scene with cinematic depth",
+    "minimalist negative-space design with one focal accent",
+    "rich illustrative artwork with layered detail and texture",
+  ];
+
+  app.post("/api/projects/:id/cover-variants", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      const countSchema = z.object({
+        count: z.number().int().min(1).max(4).optional(),
+        coverPrompt: z.string().optional(),
+        avoidStyles: z.string().optional(),
+      });
+      const { count, coverPrompt, avoidStyles } = countSchema.parse(req.body || {});
+      const n = count ?? 2;
+
+      const dna = await storage.getBookDna(id);
+      const trend = await storage.getTrendReportByProject(id);
+      const chapterList = await storage.getChapters(id);
+      const brandKit = project.brandKitId ? await storage.getBrandKit(project.brandKitId) : undefined;
+
+      const userPrompt = coverPrompt || project.coverPrompt || "";
+      const userAvoid = avoidStyles || project.coverAvoidStyles || "";
+
+      const created = [];
+      for (let i = 0; i < n; i++) {
+        const directive = COVER_VARIANT_DIRECTIVES[i % COVER_VARIANT_DIRECTIVES.length];
+        const prompt = buildCoverPrompt({
+          project,
+          dna,
+          trend,
+          chapterList,
+          userPrompt,
+          userAvoid,
+          brandKit,
+          variantDirective: directive,
+        });
+        const imageUrl = await runStep(id, "Cover Variant", IMAGE_MODEL, async () => {
+          const completion = await openai.images.generate({
+            model: IMAGE_MODEL,
+            prompt,
+            size: "1024x1536",
+            n: 1,
+          });
+          const imageB64 = (completion.data?.[0] as any)?.b64_json;
+          let url = (completion.data?.[0] as any)?.url;
+          if (imageB64) url = `data:image/png;base64,${imageB64}`;
+          return { result: url, tokens: 1 };
+        });
+        const variant = await storage.createCoverVariant({ projectId: id, imageUrl, prompt: directive });
+        created.push(variant);
+      }
+
+      res.json({ variants: created });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/cover-variants/:variantId/select", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      const variantId = parseId(req.params.variantId);
+      if (!id || !variantId) return res.status(400).json({ error: "Invalid ID" });
+      const variants = await storage.getCoverVariants(id);
+      const variant = variants.find(v => v.id === variantId);
+      if (!variant) return res.status(404).json({ error: "Variant not found" });
+      await storage.selectCoverVariant(id, variantId);
+      await storage.updateProject(id, { coverImageUrl: variant.imageUrl });
+      res.json({ success: true, coverImageUrl: variant.imageUrl });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/projects/:id/cover-variants/:variantId", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      const variantId = parseId(req.params.variantId);
+      if (!id || !variantId) return res.status(400).json({ error: "Invalid ID" });
+      const variants = await storage.getCoverVariants(id);
+      if (!variants.some(v => v.id === variantId)) return res.status(404).json({ error: "Variant not found" });
+      await storage.deleteCoverVariant(variantId);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- Author Brand Kits ---
+  app.get("/api/brand-kits", async (_req, res) => {
+    try {
+      const kits = await storage.getBrandKits();
+      res.json(kits);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/brand-kits", async (req, res) => {
+    try {
+      const data = insertBrandKitSchema.parse(req.body);
+      const kit = await storage.createBrandKit(data);
+      if (kit.isDefault) {
+        const others = (await storage.getBrandKits()).filter(k => k.id !== kit.id && k.isDefault);
+        await Promise.all(others.map(k => storage.updateBrandKit(k.id, { isDefault: false })));
+      }
+      res.status(201).json(kit);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/brand-kits/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid brand kit ID" });
+      const data = insertBrandKitSchema.partial().parse(req.body);
+      const existing = await storage.getBrandKit(id);
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      const updated = await storage.updateBrandKit(id, data);
+      if (data.isDefault) {
+        const others = (await storage.getBrandKits()).filter(k => k.id !== id && k.isDefault);
+        await Promise.all(others.map(k => storage.updateBrandKit(k.id, { isDefault: false })));
+      }
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/brand-kits/:id", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid brand kit ID" });
+      const existing = await storage.getBrandKit(id);
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      await storage.deleteBrandKit(id);
+      res.status(204).send();
+    } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });

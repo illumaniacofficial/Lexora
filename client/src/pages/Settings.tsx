@@ -48,7 +48,131 @@ const aiModelOptions = [
 const exportFormatOptions = [
   { value: "html", label: "HTML" },
   { value: "txt", label: "Plain Text" },
+  { value: "epub", label: "EPUB" },
 ];
+
+interface BrandKitItem {
+  id: number;
+  name: string;
+  palette: string[] | null;
+  fonts: string[] | null;
+  logoUrl: string | null;
+  isDefault: boolean;
+}
+
+function BrandKitManager() {
+  const { toast } = useToast();
+  const { data: kits, isLoading } = useQuery<BrandKitItem[]>({ queryKey: ["/api/brand-kits"] });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [name, setName] = useState("");
+  const [palette, setPalette] = useState("");
+  const [fonts, setFonts] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [isDefault, setIsDefault] = useState(false);
+
+  const reset = () => {
+    setEditingId(null); setName(""); setPalette(""); setFonts(""); setLogoUrl(""); setIsDefault(false);
+  };
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["/api/brand-kits"] });
+
+  const buildPayload = () => ({
+    name: name.trim(),
+    palette: palette.split(",").map(s => s.trim()).filter(Boolean),
+    fonts: fonts.split(",").map(s => s.trim()).filter(Boolean),
+    logoUrl: logoUrl.trim() || null,
+    isDefault,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: () => editingId
+      ? apiRequest("PATCH", `/api/brand-kits/${editingId}`, buildPayload())
+      : apiRequest("POST", "/api/brand-kits", buildPayload()),
+    onSuccess: () => { invalidate(); reset(); toast({ title: editingId ? "Brand kit updated" : "Brand kit created" }); },
+    onError: (e: any) => toast({ title: "Save failed", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/brand-kits/${id}`),
+    onSuccess: () => { invalidate(); if (editingId) reset(); toast({ title: "Brand kit deleted" }); },
+    onError: (e: any) => toast({ title: "Delete failed", description: e.message, variant: "destructive" }),
+  });
+
+  const startEdit = (kit: BrandKitItem) => {
+    setEditingId(kit.id);
+    setName(kit.name);
+    setPalette((kit.palette || []).join(", "));
+    setFonts((kit.fonts || []).join(", "));
+    setLogoUrl(kit.logoUrl || "");
+    setIsDefault(kit.isDefault);
+  };
+
+  return (
+    <Card className="border-border/20 bg-card/30">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+          <Image className="h-3.5 w-3.5 text-pink-400/70" /> Author Brand Kits
+        </CardTitle>
+        <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Reusable color palettes, fonts, and logos applied to AI cover generation</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : (kits && kits.length > 0) ? (
+          <div className="space-y-2">
+            {kits.map(kit => (
+              <div key={kit.id} className="flex items-center gap-3 p-3 rounded-lg bg-card/30 border border-border/20" data-testid={`brand-kit-${kit.id}`}>
+                <div className="flex gap-1 shrink-0">
+                  {(kit.palette || []).slice(0, 5).map((c, i) => (
+                    <span key={i} className="h-5 w-5 rounded-full border border-border/30" style={{ backgroundColor: c }} title={c} />
+                  ))}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[12px] font-bold truncate" data-testid={`text-brand-kit-name-${kit.id}`}>{kit.name}</p>
+                    {kit.isDefault && <Badge variant="outline" className="text-[8px] font-mono border-pink-500/30 text-pink-300">DEFAULT</Badge>}
+                  </div>
+                  {(kit.fonts && kit.fonts.length > 0) && (
+                    <p className="text-[9px] font-mono text-muted-foreground/40 truncate">{kit.fonts.join(" · ")}</p>
+                  )}
+                </div>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-[10px] font-mono border-border/30" onClick={() => startEdit(kit)} data-testid={`button-edit-brand-kit-${kit.id}`}>Edit</Button>
+                <Button type="button" size="sm" variant="outline" className="h-7 w-7 p-0 border-red-500/20 text-red-400 hover:border-red-500/40" onClick={() => deleteMutation.mutate(kit.id)} disabled={deleteMutation.isPending} aria-label="Delete brand kit" data-testid={`button-delete-brand-kit-${kit.id}`}>
+                  <AlertCircle className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] font-mono text-muted-foreground/40">No brand kits yet. Create one below.</p>
+        )}
+
+        <div className="space-y-3 pt-3 border-t border-border/10">
+          <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider">{editingId ? "Edit Brand Kit" : "New Brand Kit"}</p>
+          <div className="space-y-2">
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Kit name (e.g., Thriller Series)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-brand-kit-name" />
+            <Input value={palette} onChange={e => setPalette(e.target.value)} placeholder="Palette colors, comma-separated (e.g., #0B132B, #C9A227)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-brand-kit-palette" />
+            <Input value={fonts} onChange={e => setFonts(e.target.value)} placeholder="Fonts, comma-separated (e.g., Playfair Display, Inter)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-brand-kit-fonts" />
+            <Input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="Logo URL (optional)" className="h-9 bg-card/30 border-border/30 font-mono text-[12px]" data-testid="input-brand-kit-logo" />
+            <div className="flex items-center gap-2">
+              <Switch checked={isDefault} onCheckedChange={setIsDefault} data-testid="switch-brand-kit-default" />
+              <span className="text-[10px] font-mono text-muted-foreground/50">Set as default kit</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" className="neon-glow text-white border-0 font-mono text-[11px]" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !name.trim()} data-testid="button-save-brand-kit">
+              {saveMutation.isPending ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Save className="h-3 w-3 mr-1.5" />}
+              {editingId ? "UPDATE" : "CREATE"}
+            </Button>
+            {editingId && (
+              <Button type="button" size="sm" variant="outline" className="font-mono text-[11px] border-border/30" onClick={reset} data-testid="button-cancel-brand-kit">CANCEL</Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Settings() {
   const { toast } = useToast();
@@ -409,6 +533,8 @@ export default function Settings() {
           </div>
         </form>
       </Form>
+
+      <BrandKitManager />
     </div>
   );
 }
