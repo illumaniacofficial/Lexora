@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Settings, MessageSquare,
-  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, Lightbulb,
+  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, Lightbulb, BarChart3,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { BookRequest } from "@shared/schema";
@@ -21,6 +21,7 @@ const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
+  { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Library", url: "/library", icon: Library },
   { title: "Requests", url: "/requests", icon: Lightbulb },

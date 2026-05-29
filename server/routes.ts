@@ -9,7 +9,8 @@ import { deriveStyleProfile, buildStyleContext } from "./style";
 import { extractStoryEntities } from "./graph";
 import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
-import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema } from "@shared/schema";
+import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
+import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema } from "@shared/schema";
 import crypto from "crypto";
 import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop } from "./autopilot-engine";
 import { saveDbSeed } from "./seed";
@@ -368,6 +369,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       /\/api\/projects\/\d+\/chapters\/\d+\/inline-ai/,
       /\/api\/projects\/\d+\/competitor-teardown/,
       /\/api\/projects\/\d+\/kdp-optimizer/,
+      /\/api\/projects\/\d+\/ab-test$/,
       /\/api\/series\/\d+\/bible/,
     ];
     if (
@@ -556,6 +558,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const chapterList = await storage.getChapters(bookId);
       const marketing = await storage.getMarketingAsset(bookId);
+      storage.createAnalyticsEvent({ projectId: bookId, eventType: "read", value: 1, metadata: { token: req.params.token } }).catch(() => {});
       res.json({
         id: project.id,
         title: project.title,
@@ -714,9 +717,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const chapterAnalyses = await storage.getChapterAnalyses(id);
       const storyEntities = await storage.getStoryEntities({ projectId: id });
       const marketReports = await storage.getMarketReports(id);
+      const revenueForecasts = await storage.getRevenueForecasts(id);
+      const abTests = await storage.getAbTests(id);
       const seriesRef = project.seriesId ? await storage.getSeries(project.seriesId) : undefined;
       const styleFingerprint = project.styleFingerprintId ? await storage.getStyleFingerprint(project.styleFingerprintId) : undefined;
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, series: seriesRef, styleFingerprint });
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1853,6 +1858,128 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
     }
   });
 
+  app.post("/api/projects/:id/revenue-forecast", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      const forecastBody = z.object({
+        assumptions: z.object({
+          listPrice: z.coerce.number().optional(),
+          royaltyRate: z.coerce.number().optional(),
+          monthlyUnits: z.coerce.number().optional(),
+          monthlyGrowth: z.coerce.number().optional(),
+          months: z.coerce.number().optional(),
+          platformFeePerUnit: z.coerce.number().optional(),
+        }).partial().optional(),
+      }).parse(req.body || {});
+      const { assumptions, projections } = computeRevenueForecast(forecastBody.assumptions || {});
+      const saved = await storage.createRevenueForecast({
+        projectId,
+        assumptions,
+        projections,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/ab-test", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+      const { testType } = z.object({
+        testType: z.enum(["title", "blurb", "hook"]).default("title"),
+      }).parse(req.body || {});
+      const dna = await storage.getBookDna(projectId);
+      const marketing = await storage.getMarketingAsset(projectId);
+
+      const generated = await runStep(
+        projectId,
+        `A/B Test — ${testType}`,
+        FAST_MODEL,
+        async () => {
+          const { result, tokens } = await generateAbVariants(project, dna, marketing, testType);
+          return { result, tokens };
+        },
+      );
+
+      const saved = await storage.createAbTest({
+        projectId,
+        testType,
+        variants: generated.variants,
+        winnerIndex: null,
+      });
+      res.json(saved);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/ab-test/:testId/winner", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const testId = parseId(req.params.testId);
+      if (!projectId || !testId) return res.status(400).json({ error: "Invalid ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      const tests = await storage.getAbTests(projectId);
+      const test = tests.find(t => t.id === testId);
+      if (!test) return res.status(404).json({ error: "Test not found" });
+
+      const variants = Array.isArray(test.variants) ? (test.variants as any[]) : [];
+      const { winnerIndex } = z.object({ winnerIndex: z.coerce.number().int() }).parse(req.body || {});
+      if (winnerIndex < 0 || winnerIndex >= variants.length) {
+        return res.status(400).json({ error: "Invalid winner index" });
+      }
+
+      const updated = await storage.updateAbTest(testId, { winnerIndex });
+      const winnerText = typeof variants[winnerIndex]?.text === "string" ? variants[winnerIndex].text : "";
+
+      if (winnerText) {
+        if (test.testType === "title") {
+          await storage.updateProject(projectId, { title: winnerText });
+        } else if (test.testType === "blurb" || test.testType === "hook") {
+          const marketing = await storage.getMarketingAsset(projectId);
+          const existingHooks = Array.isArray(marketing?.hooks) ? marketing!.hooks : [];
+          const payload = insertMarketingAssetSchema.parse({
+            ...(marketing || {}),
+            projectId,
+            ...(test.testType === "blurb"
+              ? { shortBlurb: winnerText }
+              : { hooks: [winnerText, ...existingHooks.filter(h => h !== winnerText)] }),
+          });
+          await storage.upsertMarketingAsset(payload);
+        }
+      }
+
+      res.json(updated);
+      saveDbSeed().catch(() => {});
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/analytics", async (_req, res) => {
+    try {
+      const projects = await storage.getProjects();
+      const events = await storage.getAnalyticsEvents();
+      const allRunSteps = (await Promise.all(projects.map(p => storage.getRunSteps(p.id)))).flat();
+      const analytics = aggregatePortfolioAnalytics(projects, allRunSteps, events);
+      res.json(analytics);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const AUDIO_DIR = path.resolve("uploads/audio");
   fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
@@ -1946,6 +2073,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       const dlName = `${slugify(project?.title || "book")}-ch${chapter.chapterNumber}.mp3`;
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Content-Disposition", `attachment; filename="${dlName}"`);
+      storage.createAnalyticsEvent({ projectId, eventType: "listen", value: 1, metadata: { chapterId } }).catch(() => {});
       fs.createReadStream(filePath).pipe(res);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

@@ -27,9 +27,10 @@ import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport } from "@shared/schema";
-import { Network, Library, Fingerprint, Plus, Trash2 } from "lucide-react";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest } from "@shared/schema";
+import { Network, Library, Fingerprint, Plus, Trash2, DollarSign, FlaskConical, Trophy } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 
 interface ProjectDetailData {
   project: Project;
@@ -41,9 +42,17 @@ interface ProjectDetailData {
   chapterAnalyses?: ChapterAnalysis[];
   storyEntities?: StoryEntity[];
   marketReports?: MarketReport[];
+  revenueForecasts?: RevenueForecast[];
+  abTests?: AbTest[];
   series?: Series;
   styleFingerprint?: StyleFingerprint;
 }
+
+interface ForecastMonthData { month: number; units: number; gross: number; royalty: number; cumulative: number }
+interface ForecastScenarioData { name: string; multiplier: number; totalRoyalty: number; totalUnits: number; months: ForecastMonthData[] }
+interface RevenueProjectionData { scenarios: ForecastScenarioData[]; baseTotalRoyalty: number; baseTotalUnits: number; perUnitRoyalty: number }
+interface ForecastAssumptionsData { listPrice: number; royaltyRate: number; monthlyUnits: number; monthlyGrowth: number; months: number; platformFeePerUnit: number }
+interface AbVariantData { text: string; appealScore: number; ctr: number; rationale: string }
 
 interface EntityProfile { description?: string; role?: string; traits?: string }
 interface EntityRelationship { to: string; relation: string }
@@ -1146,6 +1155,307 @@ interface KdpOptimizationData {
   summary: string;
 }
 
+const fmtMoney = (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+function ForecasterPanel({ projectId, latest, onChanged }: {
+  projectId: number;
+  latest?: RevenueForecast;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const saved = latest?.assumptions as ForecastAssumptionsData | undefined;
+  const [listPrice, setListPrice] = useState(String(saved?.listPrice ?? 9.99));
+  const [royaltyRate, setRoyaltyRate] = useState(String((saved?.royaltyRate ?? 0.7) * 100));
+  const [monthlyUnits, setMonthlyUnits] = useState(String(saved?.monthlyUnits ?? 150));
+  const [monthlyGrowth, setMonthlyGrowth] = useState(String((saved?.monthlyGrowth ?? 0.08) * 100));
+  const [months, setMonths] = useState(String(saved?.months ?? 12));
+  const [platformFee, setPlatformFee] = useState(String(saved?.platformFeePerUnit ?? 0.5));
+
+  const projection = latest?.projections as RevenueProjectionData | undefined;
+
+  const mutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/revenue-forecast`, {
+      assumptions: {
+        listPrice: parseFloat(listPrice) || 0,
+        royaltyRate: (parseFloat(royaltyRate) || 0) / 100,
+        monthlyUnits: parseInt(monthlyUnits) || 0,
+        monthlyGrowth: (parseFloat(monthlyGrowth) || 0) / 100,
+        months: parseInt(months) || 12,
+        platformFeePerUnit: parseFloat(platformFee) || 0,
+      },
+    }),
+    onSuccess: () => { onChanged(); toast({ title: "Revenue forecast updated" }); },
+    onError: (e: any) => toast({ title: "Forecast failed", description: e.message, variant: "destructive" }),
+  });
+
+  const chartData = (() => {
+    if (!projection) return [];
+    const base = projection.scenarios.find(s => s.name === "Base");
+    const low = projection.scenarios.find(s => s.name === "Conservative");
+    const high = projection.scenarios.find(s => s.name === "Optimistic");
+    const len = base?.months.length || 0;
+    return Array.from({ length: len }, (_, i) => ({
+      month: `M${i + 1}`,
+      Conservative: low?.months[i]?.cumulative ?? 0,
+      Base: base?.months[i]?.cumulative ?? 0,
+      Optimistic: high?.months[i]?.cumulative ?? 0,
+    }));
+  })();
+
+  const inputs: { label: string; value: string; set: (v: string) => void; testId: string; suffix?: string }[] = [
+    { label: "List Price", value: listPrice, set: setListPrice, testId: "input-list-price", suffix: "$" },
+    { label: "Royalty Rate", value: royaltyRate, set: setRoyaltyRate, testId: "input-royalty-rate", suffix: "%" },
+    { label: "Units / Month", value: monthlyUnits, set: setMonthlyUnits, testId: "input-monthly-units" },
+    { label: "Growth / Month", value: monthlyGrowth, set: setMonthlyGrowth, testId: "input-monthly-growth", suffix: "%" },
+    { label: "Months", value: months, set: setMonths, testId: "input-months" },
+    { label: "Platform Fee / Unit", value: platformFee, set: setPlatformFee, testId: "input-platform-fee", suffix: "$" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-emerald-300">
+            <DollarSign className="h-4 w-4" /> Royalty & Revenue Forecaster
+          </CardTitle>
+          <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+            Model royalties across conservative, base, and optimistic scenarios. Deterministic — no AI credits used.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {inputs.map(inp => (
+              <div key={inp.testId} className="space-y-1">
+                <label className="text-[9px] font-mono uppercase tracking-[0.15em] text-muted-foreground/50">{inp.label}{inp.suffix ? ` (${inp.suffix})` : ""}</label>
+                <Input
+                  type="number"
+                  value={inp.value}
+                  onChange={e => inp.set(e.target.value)}
+                  className="h-8 text-[12px] font-mono bg-card/40 border-border/30"
+                  data-testid={inp.testId}
+                />
+              </div>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-[10px] font-mono bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 border border-emerald-500/30"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+            data-testid="button-run-forecast"
+          >
+            {mutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <DollarSign className="h-3 w-3 mr-1" />}
+            {projection ? "Recalculate Forecast" : "Run Forecast"}
+          </Button>
+
+          {projection && (
+            <div className="space-y-4 pt-1">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {projection.scenarios.map(s => (
+                  <div key={s.name} className="rounded-lg border border-border/20 bg-card/40 p-3" data-testid={`card-scenario-${s.name.toLowerCase()}`}>
+                    <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-muted-foreground/40">{s.name}</p>
+                    <p className="text-lg font-bold text-emerald-300 mt-1" data-testid={`text-royalty-${s.name.toLowerCase()}`}>{fmtMoney(s.totalRoyalty)}</p>
+                    <p className="text-[9px] font-mono text-muted-foreground/50 mt-0.5">{s.totalUnits.toLocaleString()} units</p>
+                  </div>
+                ))}
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                  <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-emerald-400/60">Royalty / Unit</p>
+                  <p className="text-lg font-bold text-emerald-300 mt-1">${projection.perUnitRoyalty.toFixed(2)}</p>
+                </div>
+              </div>
+
+              <div className="h-64 w-full" data-testid="chart-forecast">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradOpt" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#34d399" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradBase" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a78bfa" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#a78bfa" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} stroke="rgba(255,255,255,0.1)" />
+                    <YAxis tick={{ fontSize: 10, fill: "rgba(255,255,255,0.4)" }} stroke="rgba(255,255,255,0.1)" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                    <RechartsTooltip
+                      contentStyle={{ background: "rgba(10,10,20,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
+                      formatter={(v: number) => fmtMoney(v)}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Area type="monotone" dataKey="Optimistic" stroke="#34d399" fill="url(#gradOpt)" strokeWidth={1.5} />
+                    <Area type="monotone" dataKey="Base" stroke="#a78bfa" fill="url(#gradBase)" strokeWidth={1.5} />
+                    <Area type="monotone" dataKey="Conservative" stroke="#f59e0b" fill="none" strokeWidth={1.5} strokeDasharray="4 3" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AbLabPanel({ projectId, tests, onChanged }: {
+  projectId: number;
+  tests: AbTest[];
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [testType, setTestType] = useState<"title" | "blurb" | "hook">("title");
+
+  const genMutation = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/ab-test`, { testType }),
+    onSuccess: () => { onChanged(); toast({ title: "Variants generated" }); },
+    onError: (e: any) => toast({ title: "Generation failed", description: e.message, variant: "destructive" }),
+  });
+  const winnerMutation = useMutation({
+    mutationFn: ({ testId, winnerIndex }: { testId: number; winnerIndex: number }) =>
+      apiRequest("POST", `/api/projects/${projectId}/ab-test/${testId}/winner`, { winnerIndex }),
+    onSuccess: () => { onChanged(); toast({ title: "Winner applied to your book" }); },
+    onError: (e: any) => toast({ title: "Apply failed", description: e.message, variant: "destructive" }),
+  });
+
+  const typeLabel: Record<string, string> = { title: "Title", blurb: "Blurb", hook: "Hook" };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/20 bg-card/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-mono flex items-center gap-1.5 text-cyan-300">
+            <FlaskConical className="h-4 w-4" /> A/B Test Lab
+          </CardTitle>
+          <p className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+            Generate and score competing variants, then apply the winner directly to your book.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Select value={testType} onValueChange={(v) => setTestType(v as any)}>
+              <SelectTrigger className="h-8 w-36 text-[11px] font-mono bg-card/40 border-border/30" data-testid="select-ab-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="title">Title</SelectItem>
+                <SelectItem value="blurb">Blurb</SelectItem>
+                <SelectItem value="hook">Hook</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="h-8 text-[10px] font-mono bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30 border border-cyan-500/30"
+              onClick={() => genMutation.mutate()}
+              disabled={genMutation.isPending}
+              data-testid="button-generate-variants"
+            >
+              {genMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <FlaskConical className="h-3 w-3 mr-1" />}
+              Generate Variants
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {tests.length === 0 ? (
+        <Card className="border-border/20 bg-card/30"><CardContent className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground/40 text-[11px] font-mono">No A/B tests yet — generate variants to start.</p>
+        </CardContent></Card>
+      ) : (
+        tests.map(test => {
+          const variants = (Array.isArray(test.variants) ? test.variants : []) as AbVariantData[];
+          return (
+            <Card key={test.id} className="border-border/20 bg-card/30" data-testid={`card-abtest-${test.id}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-[11px] font-mono text-foreground/70 flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/30 text-cyan-300">{typeLabel[test.testType] || test.testType}</Badge>
+                    <span className="text-muted-foreground/40">
+                      {test.createdAt ? new Date(test.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                    </span>
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {variants.map((v, i) => {
+                  const isWinner = test.winnerIndex === i;
+                  return (
+                    <div
+                      key={i}
+                      className={cn(
+                        "rounded-lg border p-3 space-y-1.5",
+                        isWinner ? "border-emerald-500/40 bg-emerald-500/5" : "border-border/20 bg-card/40"
+                      )}
+                      data-testid={`variant-${test.id}-${i}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-[12px] text-foreground/85 leading-relaxed flex-1">{v.text}</p>
+                        <div className="flex flex-col items-end shrink-0">
+                          <span className="text-[13px] font-bold text-cyan-300">{v.appealScore}</span>
+                          <span className="text-[8px] font-mono text-muted-foreground/40">appeal</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] text-muted-foreground/55 leading-snug flex-1">{v.rationale}</p>
+                        <span className="text-[9px] font-mono text-muted-foreground/45 shrink-0">CTR {v.ctr}%</span>
+                      </div>
+                      <div>
+                        {isWinner ? (
+                          <Badge className="text-[8px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 gap-1">
+                            <Trophy className="h-2.5 w-2.5" /> Applied Winner
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-[9px] font-mono text-emerald-300/70 hover:text-emerald-200 hover:bg-emerald-500/10 px-2"
+                            onClick={() => winnerMutation.mutate({ testId: test.id, winnerIndex: i })}
+                            disabled={winnerMutation.isPending}
+                            data-testid={`button-pick-winner-${test.id}-${i}`}
+                          >
+                            <Trophy className="h-2.5 w-2.5 mr-1" /> Pick as Winner
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function BusinessPanel({ projectId, forecasts, tests, onChanged }: {
+  projectId: number;
+  forecasts: RevenueForecast[];
+  tests: AbTest[];
+  onChanged: () => void;
+}) {
+  return (
+    <Tabs defaultValue="forecaster" className="w-full">
+      <TabsList className="bg-card/40 border border-border/20 h-8">
+        <TabsTrigger value="forecaster" className="text-[9px] font-mono px-2 h-6" data-testid="tab-business-forecaster">
+          <DollarSign className="h-3 w-3 mr-1" /> Forecaster
+        </TabsTrigger>
+        <TabsTrigger value="ablab" className="text-[9px] font-mono px-2 h-6" data-testid="tab-business-ablab">
+          <FlaskConical className="h-3 w-3 mr-1" /> A/B Lab
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="forecaster" className="mt-3">
+        <ForecasterPanel projectId={projectId} latest={forecasts[0]} onChanged={onChanged} />
+      </TabsContent>
+      <TabsContent value="ablab" className="mt-3">
+        <AbLabPanel projectId={projectId} tests={tests} onChanged={onChanged} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
 function MarketPanel({ projectId, reports, hasOutline, onChanged }: {
   projectId: number;
   reports: MarketReport[];
@@ -1777,6 +2087,9 @@ export default function ProjectDetail() {
               <TabsTrigger value="pacing" data-testid="tab-pacing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
                 <Activity className="h-3 w-3" /> Pacing
               </TabsTrigger>
+              <TabsTrigger value="business" data-testid="tab-business" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <DollarSign className="h-3 w-3" /> Business
+              </TabsTrigger>
               <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
                 <FileText className="h-3 w-3" /> Logs
               </TabsTrigger>
@@ -1949,6 +2262,15 @@ export default function ProjectDetail() {
                 isPending={pacingMutation.isPending}
                 canAnalyze={completedChapters.length >= 2}
                 chapterCount={completedChapters.length}
+              />
+            </TabsContent>
+
+            <TabsContent value="business" className="mt-4">
+              <BusinessPanel
+                projectId={projectId}
+                forecasts={data.revenueForecasts || []}
+                tests={data.abTests || []}
+                onChanged={invalidate}
               />
             </TabsContent>
 
