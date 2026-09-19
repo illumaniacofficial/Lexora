@@ -7,3 +7,4 @@ export * from "./concepts";
 export * from "./boardroom";
 export * from "./studioReview";
 export * from "./modelRouter";
+export * from "./ollama";
