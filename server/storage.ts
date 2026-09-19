@@ -16,6 +16,7 @@ import {
   revenueForecasts, abTests, analyticsEvents, coverVariants, exportJobs, membershipTiers,
   readerMemberships, storefrontOrders, referrals, launchSchedules, mediaAssets, notifications,
   bookEditions, editionChapters, workspaceMembers, chapterComments, chapterVersions, audioTracks,
+  studioProperties, propertyProjects, creativeArtifacts, continuitySnapshots, conceptDossiers, triadDraws,
   type Series, type InsertSeries, type StyleFingerprint, type InsertStyleFingerprint,
   type BrandKit, type InsertBrandKit, type StoryEntity, type InsertStoryEntity,
   type ChapterAnalysis, type InsertChapterAnalysis, type MarketReport, type InsertMarketReport,
@@ -29,6 +30,12 @@ import {
   type WorkspaceMember, type InsertWorkspaceMember, type ChapterComment, type InsertChapterComment,
   type ChapterVersion, type InsertChapterVersion,
   type AudioTrack, type InsertAudioTrack,
+  type StudioProperty, type InsertStudioProperty,
+  type PropertyProject, type InsertPropertyProject,
+  type CreativeArtifactRow, type InsertCreativeArtifact,
+  type ContinuitySnapshot, type InsertContinuitySnapshot,
+  type ConceptDossierRow, type InsertConceptDossier,
+  type TriadDrawRow, type InsertTriadDraw,
 } from "@shared/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 
@@ -872,6 +879,155 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteAudioTrack(id: number) {
     await db.delete(audioTracks).where(eq(audioTracks.id, id));
+  }
+
+  async getStudioProperties(): Promise<StudioProperty[]> {
+    return db.select().from(studioProperties).orderBy(desc(studioProperties.updatedAt));
+  }
+
+  async getStudioProperty(id: string): Promise<StudioProperty | undefined> {
+    const [property] = await db.select().from(studioProperties).where(eq(studioProperties.id, id));
+    return property;
+  }
+
+  async getStudioPropertyByProject(projectId: number): Promise<StudioProperty | undefined> {
+    const rows = await db
+      .select({ property: studioProperties })
+      .from(propertyProjects)
+      .innerJoin(studioProperties, eq(propertyProjects.propertyId, studioProperties.id))
+      .where(eq(propertyProjects.projectId, projectId))
+      .limit(1);
+    return rows[0]?.property;
+  }
+
+  async createStudioProperty(data: InsertStudioProperty): Promise<StudioProperty> {
+    const [created] = await db.insert(studioProperties).values(data).returning();
+    return created;
+  }
+
+  async updateStudioProperty(id: string, data: Partial<InsertStudioProperty>): Promise<StudioProperty> {
+    const [updated] = await db
+      .update(studioProperties)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(studioProperties.id, id))
+      .returning();
+    return updated;
+  }
+
+  async linkProjectToProperty(data: InsertPropertyProject): Promise<PropertyProject> {
+    const [existing] = await db.select().from(propertyProjects).where(eq(propertyProjects.projectId, data.projectId));
+    if (existing) {
+      const [updated] = await db
+        .update(propertyProjects)
+        .set({
+          propertyId: data.propertyId,
+          relation: data.relation ?? existing.relation,
+          isPrimary: data.isPrimary ?? existing.isPrimary,
+        })
+        .where(eq(propertyProjects.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(propertyProjects).values(data).returning();
+    return created;
+  }
+
+  async getPropertyProject(projectId: number): Promise<PropertyProject | undefined> {
+    const [row] = await db.select().from(propertyProjects).where(eq(propertyProjects.projectId, projectId));
+    return row;
+  }
+
+  async createCreativeArtifact(data: InsertCreativeArtifact): Promise<CreativeArtifactRow> {
+    const [created] = await db.insert(creativeArtifacts).values(data).returning();
+    return created;
+  }
+
+  async getCreativeArtifacts(opts: { projectId?: number; propertyId?: string; chapterId?: number; state?: string }): Promise<CreativeArtifactRow[]> {
+    const conditions = [];
+    if (opts.projectId != null) conditions.push(eq(creativeArtifacts.projectId, opts.projectId));
+    if (opts.propertyId != null) conditions.push(eq(creativeArtifacts.propertyId, opts.propertyId));
+    if (opts.chapterId != null) conditions.push(eq(creativeArtifacts.chapterId, opts.chapterId));
+    if (opts.state != null) conditions.push(eq(creativeArtifacts.state, opts.state));
+
+    const query = db.select().from(creativeArtifacts);
+    if (conditions.length === 0) return query.orderBy(desc(creativeArtifacts.createdAt));
+    return query.where(and(...conditions)).orderBy(desc(creativeArtifacts.createdAt));
+  }
+
+  async updateCreativeArtifactState(id: string, state: string): Promise<CreativeArtifactRow | undefined> {
+    const [updated] = await db
+      .update(creativeArtifacts)
+      .set({ state })
+      .where(eq(creativeArtifacts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getContinuitySnapshot(projectId: number): Promise<ContinuitySnapshot | undefined> {
+    const [snapshot] = await db
+      .select()
+      .from(continuitySnapshots)
+      .where(eq(continuitySnapshots.projectId, projectId));
+    return snapshot;
+  }
+
+  async upsertContinuitySnapshot(data: InsertContinuitySnapshot): Promise<ContinuitySnapshot> {
+    return db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(continuitySnapshots)
+        .where(eq(continuitySnapshots.projectId, data.projectId));
+
+      if (existing) {
+        const [updated] = await tx
+          .update(continuitySnapshots)
+          .set({
+            ...data,
+            version: Math.max(existing.version + 1, data.version ?? 1),
+            updatedAt: new Date(),
+          })
+          .where(eq(continuitySnapshots.id, existing.id))
+          .returning();
+        return updated;
+      }
+
+      const [created] = await tx.insert(continuitySnapshots).values(data).returning();
+      return created;
+    });
+  }
+
+  async createConceptDossier(data: InsertConceptDossier): Promise<ConceptDossierRow> {
+    const [created] = await db.insert(conceptDossiers).values(data).returning();
+    return created;
+  }
+
+  async getConceptDossiers(propertyId?: string): Promise<ConceptDossierRow[]> {
+    if (propertyId) {
+      return db
+        .select()
+        .from(conceptDossiers)
+        .where(eq(conceptDossiers.propertyId, propertyId))
+        .orderBy(desc(conceptDossiers.createdAt));
+    }
+    return db.select().from(conceptDossiers).orderBy(desc(conceptDossiers.createdAt));
+  }
+
+  async updateConceptDossier(id: string, data: Partial<InsertConceptDossier>): Promise<ConceptDossierRow | undefined> {
+    const [updated] = await db
+      .update(conceptDossiers)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(conceptDossiers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createTriadDraw(data: InsertTriadDraw): Promise<TriadDrawRow> {
+    const [created] = await db.insert(triadDraws).values(data).returning();
+    return created;
+  }
+
+  async getTriadDraws(limit = 50): Promise<TriadDrawRow[]> {
+    return db.select().from(triadDraws).orderBy(desc(triadDraws.createdAt)).limit(limit);
   }
 
   async getDashboardStats() {
