@@ -8,3 +8,5 @@ export * from "./boardroom";
 export * from "./studioReview";
 export * from "./modelRouter";
 export * from "./ollama";
+export * from "./propertyService";
+export * from "./scribe";
