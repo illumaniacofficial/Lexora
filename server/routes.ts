@@ -1940,7 +1940,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error("Continuity approval postflight:", continuityWarning);
       }
 
-      res.json({ chapter: updated, continuity, continuityWarning });
+      if (continuityWarning) {
+        res.setHeader("X-Lexora-Continuity-Warning", encodeURIComponent(continuityWarning.slice(0, 300)));
+      }
+      res.json(updated);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
