@@ -33,6 +33,7 @@ import { scribeChat } from "./core/scribe";
 import { drawTriad, getTriadDeckStats } from "./core/triadEngine";
 import { hashArtifactContent } from "./core/artifacts";
 import { isOllamaAvailable } from "./core/ollama";
+import { captureContinuityForApprovedChapter, archiveContinuityForChapter } from "./core/continuityService";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -1923,7 +1924,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "approvalStatus must be approved, rejected, pending, or none" });
       }
       const updated = await storage.updateChapter(chapterId, { approvalStatus: status });
-      res.json(updated);
+
+      let continuity: any = null;
+      let continuityWarning: string | null = null;
+      try {
+        if (status === "approved") {
+          continuity = await captureContinuityForApprovedChapter(projectId, chapterId);
+        } else {
+          continuity = await archiveContinuityForChapter(projectId, chapterId);
+        }
+      } catch (continuityError: any) {
+        // Approval itself remains authoritative even if postflight extraction
+        // cannot run (for example no local/cloud model is available).
+        continuityWarning = continuityError?.message || "Continuity postflight failed";
+        console.error("Continuity approval postflight:", continuityWarning);
+      }
+
+      res.json({ chapter: updated, continuity, continuityWarning });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
