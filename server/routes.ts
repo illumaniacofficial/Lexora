@@ -14,13 +14,8 @@ import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSche
 import { buildEpub } from "./epub";
 import { buildDocx } from "./docx";
 import { buildMobi } from "./mobi";
-import {
-  createBookCheckout,
-  createMembershipCheckout,
-  verifyAndFulfillSession,
-  syncTierStripePrice,
-  readerHasBookAccess,
-} from "./commerce";
+import { readerHasBookAccess } from "./storeAccess";
+import { getConfig } from "./config/env";
 import crypto from "crypto";
 import { generateLaunchPlan, type LaunchItem } from "./launch";
 import { generateAudiobook, generateAudioTrailer, generateVideoTrailer, DEFAULT_NARRATOR_VOICE, synthText } from "./media";
@@ -363,12 +358,21 @@ const aiRateLimit = rateLimit({
 });
 
 async function ensureAdminUser() {
-  const existing = await storage.getUserByUsername("admin");
-  if (!existing) {
-    const hashed = await bcrypt.hash("lexora2026", 12);
-    await storage.createUser({ username: "admin", password: hashed });
-    console.log("Admin user created (username: admin)");
+  const { admin, production } = getConfig();
+  const existing = await storage.getUserByUsername(admin.username);
+  if (existing) return;
+
+  if (!admin.initialPassword) {
+    throw new Error(
+      `No admin account exists for "${admin.username}". Set ADMIN_INITIAL_PASSWORD before first boot.`,
+    );
   }
+
+  const hashed = await bcrypt.hash(admin.initialPassword, 12);
+  await storage.createUser({ username: admin.username, password: hashed });
+  console.log(
+    `Admin user created (username: ${admin.username})${production ? "" : " for local development"}`,
+  );
 }
 
 function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -404,7 +408,7 @@ async function getWorkspaceRole(req: Request): Promise<WorkspaceRole | null> {
       return member.role;
     }
     const user = await storage.getUser(uid);
-    return user?.username === "admin" ? "owner" : "viewer";
+    return user?.username === getConfig().admin.username ? "owner" : "viewer";
   } catch {
     return "viewer";
   }
@@ -446,7 +450,17 @@ async function captureChapterVersion(chapterId: number, note: string) {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  const config = getConfig();
   await ensureAdminUser();
+
+  // Private Studio mode keeps historical storefront data readable to admins but
+  // removes the public storefront surface from normal runtime.
+  if (config.studio.privateMode) {
+    app.use("/api/store", (req, res, next) => {
+      if (req.session?.role === "admin" && req.session?.adminId) return next();
+      return res.status(404).json({ error: "Storefront is disabled in private studio mode" });
+    });
+  }
 
   // Gate premium chapter audio: files at /uploads/audio/.../project-{id}-chapter-{id}.mp3
   // have predictable paths, so re-check book access before serving for paid books.
@@ -906,6 +920,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/store/:token/checkout", async (req, res) => {
     try {
+      if (!config.studio.commerceEnabled) {
+        return res.status(410).json({ error: "Commerce is disabled in private studio mode" });
+      }
       const invite = await storage.getInviteByToken(req.params.token);
       if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
       if (req.session?.role !== "reader" || !req.session.readerId) {
@@ -926,6 +943,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         projects.push(p);
       }
       const refCode = typeof req.body?.refCode === "string" ? req.body.refCode.trim().slice(0, 64) : null;
+      const { createBookCheckout } = await import("./commerce");
       const url = await createBookCheckout({
         projects,
         readerId: req.session.readerId,
@@ -941,6 +959,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/store/:token/membership-checkout", async (req, res) => {
     try {
+      if (!config.studio.commerceEnabled) {
+        return res.status(410).json({ error: "Commerce is disabled in private studio mode" });
+      }
       const invite = await storage.getInviteByToken(req.params.token);
       if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
       if (req.session?.role !== "reader" || !req.session.readerId) {
@@ -950,6 +971,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (isNaN(tierId) || tierId < 1) return res.status(400).json({ error: "Invalid tier ID" });
       const tier = (await storage.getMembershipTiers()).find(t => t.id === tierId);
       if (!tier || !tier.isActive) return res.status(404).json({ error: "Tier not found" });
+      const { createMembershipCheckout, syncTierStripePrice } = await import("./commerce");
       const priceId = tier.stripePriceId || (await syncTierStripePrice(tier));
       const refCode = typeof req.body?.refCode === "string" ? req.body.refCode.trim().slice(0, 64) : null;
       const url = await createMembershipCheckout({
@@ -968,10 +990,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/store/:token/checkout/verify", async (req, res) => {
     try {
+      if (!config.studio.commerceEnabled) {
+        return res.status(410).json({ error: "Commerce is disabled in private studio mode" });
+      }
       const invite = await storage.getInviteByToken(req.params.token);
       if (!invite || !invite.isActive) return res.status(404).json({ error: "Invalid invite" });
       const sessionId = req.query.session_id as string;
       if (!sessionId) return res.status(400).json({ error: "Missing session_id" });
+      const { verifyAndFulfillSession } = await import("./commerce");
       const result = await verifyAndFulfillSession(sessionId);
       res.json(result);
     } catch (err: any) {
@@ -1038,11 +1064,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         stripePriceId: null,
       });
       let synced = tier;
-      try {
-        const priceId = await syncTierStripePrice(tier);
-        synced = { ...tier, stripePriceId: priceId };
-      } catch (e: any) {
-        console.error("Tier Stripe sync failed (saved without price):", e?.message || e);
+      if (config.studio.commerceEnabled) {
+        try {
+          const { syncTierStripePrice } = await import("./commerce");
+          const priceId = await syncTierStripePrice(tier);
+          synced = { ...tier, stripePriceId: priceId };
+        } catch (e: any) {
+          console.error("Tier Stripe sync failed (saved without price):", e?.message || e);
+        }
       }
       res.status(201).json(synced);
     } catch (err: any) {
@@ -1057,9 +1086,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!id) return res.status(400).json({ error: "Invalid tier ID" });
       const data = tierBodySchema.partial().parse(req.body);
       const updated = await storage.updateMembershipTier(id, data);
-      // Re-sync price when the amount changed.
-      if (data.priceUsd != null && (updated.priceUsd || 0) > 0) {
+      // Re-sync price only when commerce is explicitly enabled.
+      if (config.studio.commerceEnabled && data.priceUsd != null && (updated.priceUsd || 0) > 0) {
         try {
+          const { syncTierStripePrice } = await import("./commerce");
           const priceId = await syncTierStripePrice(updated);
           if (priceId !== updated.stripePriceId) updated.stripePriceId = priceId;
         } catch (e: any) {
