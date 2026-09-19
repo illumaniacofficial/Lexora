@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Settings, MessageSquare,
-  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, Lightbulb, BarChart3,
+  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, Lightbulb, BarChart3, Sparkles,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { BookRequest } from "@shared/schema";
@@ -20,13 +20,14 @@ import logoPath from "@assets/image_1772031076380.png";
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderOpen },
+  { title: "Concept Lab", url: "/concept-lab", icon: Sparkles },
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
   { title: "Referrals", url: "/referrals", icon: Share2 },
   { title: "Library", url: "/library", icon: Library },
   { title: "Requests", url: "/requests", icon: Lightbulb },
-  { title: "Chat Studio", url: "/chat", icon: MessageSquare },
+  { title: "Scribe", url: "/chat", icon: MessageSquare },
   { title: "Autopilot", url: "/autopilot", icon: Bot },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
