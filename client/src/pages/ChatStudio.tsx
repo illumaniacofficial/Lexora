@@ -8,9 +8,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import type { ChatConversation, ChatMessage } from "@shared/schema";
+
+interface ProjectOption { id: number; title: string; status: string }
 
 function MarkdownContent({ content }: { content: string }) {
   const lines = content.split("\n");
@@ -125,11 +128,16 @@ export default function ChatStudio() {
   });
   const [input, setInput] = useState(() => localStorage.getItem(DRAFT_KEY) || "");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: conversations = [], isLoading: convsLoading, error: convsError } = useQuery<ChatConversation[]>({
     queryKey: ["/api/chat/conversations"],
+  });
+
+  const { data: projects = [] } = useQuery<ProjectOption[]>({
+    queryKey: ["/api/projects"],
   });
 
   const { data: messages = [], isLoading: msgsLoading, error: msgsError } = useQuery<ChatMessage[]>({
@@ -145,7 +153,7 @@ export default function ChatStudio() {
 
   const createConv = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/chat/conversations", { title: "New Conversation" });
+      const res = await apiRequest("POST", "/api/chat/conversations", { title: "New Conversation", projectId: selectedProjectId });
       return res.json();
     },
     onSuccess: (conv: ChatConversation) => {
@@ -197,12 +205,18 @@ export default function ChatStudio() {
     }
   }, [convsLoading, conversations, activeConvId]);
 
+  useEffect(() => {
+    if (!activeConvId) return;
+    const active = conversations.find((conv) => conv.id === activeConvId);
+    if (active) setSelectedProjectId(active.projectId ?? null);
+  }, [activeConvId, conversations]);
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || sendMessage.isPending) return;
 
     if (!activeConvId) {
-      const res = await apiRequest("POST", "/api/chat/conversations", { title: "New Conversation" });
+      const res = await apiRequest("POST", "/api/chat/conversations", { title: "New Conversation", projectId: selectedProjectId });
       const conv: ChatConversation = await res.json();
       queryClient.invalidateQueries({ queryKey: ["/api/chat/conversations"] });
       setActiveConvId(conv.id);
@@ -230,14 +244,16 @@ export default function ChatStudio() {
 
   const selectConversation = (id: number) => {
     setActiveConvId(id);
+    const conversation = conversations.find((item) => item.id === id);
+    setSelectedProjectId(conversation?.projectId ?? null);
     setSidebarOpen(false);
   };
 
   return (
     <div className="flex h-full overflow-hidden relative" data-testid="page-chat-studio">
       <Helmet>
-        <title>Chat Studio | Lexora</title>
-        <meta name="description" content="Chat with AI to plan, structure, and write books step by step" />
+        <title>Scribe | Lexora</title>
+        <meta name="description" content="Work with Scribe using project canon, continuity, and Book Genome context" />
       </Helmet>
 
       {sidebarOpen && (
@@ -261,6 +277,26 @@ export default function ChatStudio() {
             <button onClick={() => setSidebarOpen(false)} className="md:hidden text-muted-foreground/60 hover:text-foreground p-1" aria-label="Close sidebar">
               <PanelLeftClose className="h-4 w-4" />
             </button>
+          </div>
+          <div className="mb-2">
+            <Select
+              value={selectedProjectId ? String(selectedProjectId) : "general"}
+              onValueChange={(value) => setSelectedProjectId(value === "general" ? null : Number(value))}
+              disabled={!!activeConvId}
+            >
+              <SelectTrigger className="h-8 text-[10px] font-mono bg-card/30 border-border/25" data-testid="select-scribe-project">
+                <SelectValue placeholder="General intake" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="general">General intake</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={String(project.id)}>{project.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[8px] font-mono text-muted-foreground/30 mt-1 px-1">
+              {activeConvId ? "Project is locked to this conversation." : "Link a project to give Scribe its canon and continuity."}
+            </p>
           </div>
           <Button
             onClick={() => createConv.mutate()}
@@ -332,7 +368,7 @@ export default function ChatStudio() {
           </button>
           <div className="flex-1 min-w-0">
             <p className="text-[13px] font-semibold truncate">
-              {activeConvId ? conversations.find(c => c.id === activeConvId)?.title || "Chat" : "Chat Studio"}
+              {activeConvId ? conversations.find(c => c.id === activeConvId)?.title || "Scribe" : "Scribe"}
             </p>
           </div>
           <Button
@@ -356,9 +392,9 @@ export default function ChatStudio() {
                   <Bot className="h-7 w-7 md:h-8 md:w-8 text-purple-400" />
                 </div>
               </div>
-              <h2 className="text-xl md:text-2xl font-bold text-foreground mb-2 md:mb-3">Chat <span className="shimmer-text">Studio</span></h2>
+              <h2 className="text-xl md:text-2xl font-bold text-foreground mb-2 md:mb-3"><span className="shimmer-text">Scribe</span></h2>
               <p className="text-muted-foreground text-[13px] md:text-sm leading-relaxed mb-5 md:mb-6">
-                Send a prompt, outline, or entire book structure and let AI generate your book step by step.
+                Link a project and Scribe will work from its Property, Book Genome, accepted chapters, series context, and continuity state.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-3 text-left">
                 {suggestions.map((item, i) => {
