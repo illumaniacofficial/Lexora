@@ -6,6 +6,10 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import pg from "pg";
+import { getConfig, requireDatabaseUrl } from "./config/env";
+
+const config = getConfig();
+const databaseUrl = requireDatabaseUrl();
 
 const app = express();
 const httpServer = createServer(app);
@@ -26,37 +30,11 @@ declare module "express-session" {
 
 app.set("trust proxy", 1);
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-}));
-
-// Stripe webhook MUST be registered BEFORE express.json() so the raw body is
-// available for signature verification.
-app.post(
-  "/api/stripe/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const signature = req.headers["stripe-signature"];
-    if (!signature) {
-      return res.status(400).json({ error: "Missing stripe-signature" });
-    }
-    try {
-      const sig = Array.isArray(signature) ? signature[0] : signature;
-      if (!Buffer.isBuffer(req.body)) {
-        console.error(
-          "STRIPE WEBHOOK ERROR: req.body is not a Buffer (express.json ran first).",
-        );
-        return res.status(500).json({ error: "Webhook processing error" });
-      }
-      const { WebhookHandlers } = await import("./webhookHandlers");
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
-      res.status(200).json({ received: true });
-    } catch (error: any) {
-      console.error("Webhook error:", error?.message || error);
-      res.status(400).json({ error: "Webhook processing error" });
-    }
-  },
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
 );
 
 app.use(
@@ -69,7 +47,7 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-const sessionPool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const sessionPool = new pg.Pool({ connectionString: databaseUrl });
 
 async function ensureSessionTable() {
   await sessionPool.query(`
@@ -94,14 +72,14 @@ app.use(
       pool: sessionPool,
       tableName: "session",
     }),
-    secret: process.env.SESSION_SECRET || "lexora-dev-secret-change-me",
+    secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1000,
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: config.production,
+      sameSite: "lax",
     },
   }),
 );
@@ -117,65 +95,24 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// Request logs intentionally omit response bodies. Manuscript, auth, research,
+// and generated content must not be copied into production logs.
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+  const requestPath = req.path;
 
   res.on("finish", () => {
+    if (!requestPath.startsWith("/api")) return;
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
-    }
+    log(`${req.method} ${requestPath} ${res.statusCode} in ${duration}ms`);
   });
 
   next();
 });
 
-async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.warn("Skipping Stripe init: DATABASE_URL is not set.");
-    return;
-  }
-  try {
-    const { runMigrations } = await import("stripe-replit-sync");
-    const { getStripeSync } = await import("./stripeClient");
-    log("Initializing Stripe schema...", "stripe");
-    await runMigrations({ databaseUrl });
-    const stripeSync = await getStripeSync();
-    const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-    if (domain) {
-      const webhookBaseUrl = `https://${domain}`;
-      await stripeSync.findOrCreateManagedWebhook(`${webhookBaseUrl}/api/stripe/webhook`);
-      log("Stripe webhook configured", "stripe");
-    }
-    stripeSync
-      .syncBackfill()
-      .then(() => log("Stripe data synced", "stripe"))
-      .catch((err) => console.error("Error syncing Stripe data:", err?.message || err));
-  } catch (error: any) {
-    // Non-fatal: the app must still boot if Stripe setup fails.
-    console.error("Failed to initialize Stripe (continuing):", error?.message || error);
-  }
-}
-
 (async () => {
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch(console.error);
-
-  await initStripe();
 
   await registerRoutes(httpServer, app);
 
@@ -192,22 +129,23 @@ async function initStripe() {
     return res.status(status).json({ message });
   });
 
-  if (process.env.NODE_ENV === "production") {
+  if (config.production) {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
 
-  const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
-      port,
+      port: config.port,
       host: "0.0.0.0",
       reusePort: true,
     },
     () => {
-      log(`serving on port ${port}`);
+      log(
+        `serving on port ${config.port} [${config.studio.runtimeMode}]${config.studio.privateMode ? " private-studio" : ""}`,
+      );
     },
   );
 })();
