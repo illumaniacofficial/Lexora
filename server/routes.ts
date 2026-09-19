@@ -1395,6 +1395,261 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ---- Revival Studio: Properties, Artifacts, Continuity, Concept Lab ----
+
+  app.get("/api/runtime/status", async (_req, res) => {
+    const localAvailable = await isOllamaAvailable();
+    res.json({
+      runtimeMode: config.studio.runtimeMode,
+      privateStudio: config.studio.privateMode,
+      commerceEnabled: config.studio.commerceEnabled,
+      cloudConfigured: config.openai.configured,
+      local: {
+        provider: "ollama",
+        model: config.ollama.model,
+        available: localAvailable,
+      },
+    });
+  });
+
+  app.get("/api/properties", async (_req, res) => {
+    try {
+      res.json(await storage.getStudioProperties());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/properties", async (req, res) => {
+    try {
+      const data = studioPropertyCreateSchema.parse(req.body);
+      const property = await storage.createStudioProperty({
+        id: crypto.randomUUID(),
+        workingTitle: data.workingTitle,
+        canonicalTitle: data.canonicalTitle ?? null,
+        status: data.status || "idea",
+        format: data.format || "custom",
+        seriesIntent: data.seriesIntent || "standalone",
+        legacyVertical: data.legacyVertical ?? null,
+        classification: data.classification || {},
+        targetContract: data.targetContract || {},
+      });
+      res.status(201).json(property);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/properties/:id", async (req, res) => {
+    try {
+      const property = await storage.getStudioProperty(req.params.id);
+      if (!property) return res.status(404).json({ error: "Property not found" });
+      const dossiers = await storage.getConceptDossiers(property.id);
+      const artifacts = await storage.getCreativeArtifacts({ propertyId: property.id });
+      res.json({ property, dossiers, artifacts });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/properties/:id", async (req, res) => {
+    try {
+      const data = studioPropertyPatchSchema.parse(req.body);
+      const updated = await storage.updateStudioProperty(req.params.id, data);
+      if (!updated) return res.status(404).json({ error: "Property not found" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/property/ensure", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      res.json(await ensurePropertyForProject(id));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/studio-context", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const property = await ensurePropertyForProject(id);
+      const continuity = await storage.getContinuitySnapshot(id);
+      const artifacts = await storage.getCreativeArtifacts({ projectId: id });
+      res.json({
+        property,
+        continuity,
+        artifacts: artifacts.map((artifact) => ({
+          id: artifact.id,
+          type: artifact.type,
+          version: artifact.version,
+          parentArtifactId: artifact.parentArtifactId,
+          chapterId: artifact.chapterId,
+          createdBy: artifact.createdBy,
+          runtimeId: artifact.runtimeId,
+          model: artifact.model,
+          contentHash: artifact.contentHash,
+          state: artifact.state,
+          createdAt: artifact.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/artifacts", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      res.json(await storage.getCreativeArtifacts({ projectId: id }));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/artifacts", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const data = artifactCreateSchema.parse(req.body);
+      const property = await ensurePropertyForProject(id);
+      const existing = await storage.getCreativeArtifacts({ projectId: id });
+      const version = existing.filter((artifact) => artifact.type === data.type).length + 1;
+      const artifact = await storage.createCreativeArtifact({
+        id: crypto.randomUUID(),
+        propertyId: property.id,
+        projectId: id,
+        chapterId: data.chapterId ?? null,
+        type: data.type,
+        version,
+        parentArtifactId: data.parentArtifactId ?? null,
+        createdBy: data.createdBy || "user",
+        runtimeId: data.runtimeId ?? null,
+        model: data.model ?? null,
+        promptVersion: data.promptVersion ?? null,
+        context: data.context || {},
+        content: data.content,
+        contentHash: hashArtifactContent(data.content),
+        estimatedCostUsd: data.estimatedCostUsd ?? null,
+        state: data.state || "generated",
+      });
+      res.status(201).json(artifact);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/artifacts/:id/state", async (req, res) => {
+    try {
+      const state = z.enum([
+        "generated",
+        "reviewing",
+        "accepted",
+        "canonical",
+        "superseded",
+        "rejected",
+        "archived",
+        "published",
+      ]).parse(req.body?.state);
+      const artifact = await storage.updateCreativeArtifactState(req.params.id, state);
+      if (!artifact) return res.status(404).json({ error: "Artifact not found" });
+      res.json(artifact);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/projects/:id/continuity", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      res.json((await storage.getContinuitySnapshot(id)) || null);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/projects/:id/continuity", async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const data = continuityBodySchema.parse(req.body);
+      await ensurePropertyForProject(id);
+      const snapshot = await storage.upsertContinuitySnapshot({
+        projectId: id,
+        version: 1,
+        state: data.state,
+        lastAcceptedChapterId: data.lastAcceptedChapterId ?? null,
+      });
+      res.json(snapshot);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/concept-lab/triad", async (_req, res) => {
+    try {
+      res.json({
+        deck: getTriadDeckStats(),
+        recent: await storage.getTriadDraws(25),
+        law: "NO DISCARD BEFORE SYNTHESIS",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/triad/draw", async (req, res) => {
+    try {
+      const input = triadDrawRequestSchema.parse(req.body || {});
+      const draw = drawTriad({
+        mode: input.mode,
+        contextTags: input.contextTags,
+        locked: input.locked as any,
+        wildcardChance: input.wildcardChance,
+      });
+      const saved = await storage.createTriadDraw({
+        id: draw.id,
+        mode: draw.mode,
+        whoCard: draw.who,
+        whatCard: draw.what,
+        howCard: draw.how,
+        lockedAxes: draw.lockedAxes,
+        wildcards: draw.wildcards,
+        status: draw.status,
+      });
+      res.status(201).json({
+        ...saved,
+        synthesisRequired: true,
+        law: "NO DISCARD BEFORE SYNTHESIS",
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/dossiers", async (req, res) => {
+    try {
+      const data = conceptDossierCreateSchema.parse(req.body);
+      const dossier = await storage.createConceptDossier({
+        id: crypto.randomUUID(),
+        propertyId: data.propertyId ?? null,
+        sourceType: data.sourceType,
+        source: data.source || {},
+        dossier: data.dossier,
+        status: data.status || "candidate",
+      });
+      res.status(201).json(dossier);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/projects", async (req, res) => {
     try {
       const data = insertProjectSchema.parse(req.body);
