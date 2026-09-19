@@ -78,3 +78,39 @@ export interface ChapterPostflightDelta {
   readerPromises: string[];
   worldRuleChanges: string[];
 }
+
+export interface CanonicalContinuityState {
+  approvedChapterIds: number[];
+  chapterSummaries: Array<{ chapterId: number; chapterNumber: number; title: string; summary: string }>;
+  characters: CharacterState[];
+  relationships: RelationshipState[];
+  timeline: TimelineEvent[];
+  openLoops: OpenNarrativeLoop[];
+  continuityObjects: ContinuityObject[];
+  acceptedFacts: string[];
+  worldRules: string[];
+  secretsRevealed: string[];
+  foreshadowing: string[];
+  readerPromises: string[];
+  requiresRebuild?: boolean;
+  updatedThroughChapterId?: number | null;
+}
+
+export function emptyContinuityState(): CanonicalContinuityState {
+  return {
+    approvedChapterIds: [],
+    chapterSummaries: [],
+    characters: [],
+    relationships: [],
+    timeline: [],
+    openLoops: [],
+    continuityObjects: [],
+    acceptedFacts: [],
+    worldRules: [],
+    secretsRevealed: [],
+    foreshadowing: [],
+    readerPromises: [],
+    requiresRebuild: false,
+    updatedThroughChapterId: null,
+  };
+}
