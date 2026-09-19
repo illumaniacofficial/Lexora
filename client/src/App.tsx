@@ -18,6 +18,7 @@ const Projects = lazy(() => import("@/pages/Projects"));
 const NewProject = lazy(() => import("@/pages/NewProject"));
 const ProjectDetail = lazy(() => import("@/pages/ProjectDetail"));
 const TrendIntelligence = lazy(() => import("@/pages/TrendIntelligence"));
+const ConceptLab = lazy(() => import("@/pages/ConceptLab"));
 const Marketing = lazy(() => import("@/pages/Marketing"));
 const Autopilot = lazy(() => import("@/pages/Autopilot"));
 const Library = lazy(() => import("@/pages/Library"));
@@ -88,6 +89,7 @@ function AdminRouter() {
         <Route path="/projects" component={Projects} />
         <Route path="/projects/new" component={NewProject} />
         <Route path="/projects/:id" component={ProjectDetail} />
+        <Route path="/concept-lab" component={ConceptLab} />
         <Route path="/trends" component={TrendIntelligence} />
         <Route path="/marketing" component={Marketing} />
         <Route path="/autopilot" component={Autopilot} />
