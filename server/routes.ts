@@ -29,11 +29,12 @@ import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { estimateCost } from "./cost";
 import { ensurePropertyForProject } from "./core/propertyService";
-import { scribeChat } from "./core/scribe";
+import { scribeChat, buildScribeContext } from "./core/scribe";
 import { drawTriad, getTriadDeckStats } from "./core/triadEngine";
 import { hashArtifactContent } from "./core/artifacts";
 import { isOllamaAvailable } from "./core/ollama";
 import { captureContinuityForApprovedChapter, archiveContinuityForChapter } from "./core/continuityService";
+import { buildChapterDraftInstructions } from "./core/chapterCraft";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -2544,57 +2545,29 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       const priorChapters = await storage.getChapters(projectId);
       const continuityExtras = await loadContinuityExtras(project);
-      const consistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber, continuityExtras);
-      const styleContext = await loadStyleContext(project.styleFingerprintId);
+      const legacyConsistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber, continuityExtras);
+      const scribeContext = await buildScribeContext(projectId);
+      const studioProperty = await ensurePropertyForProject(projectId);
+      const chapterInstructions = buildChapterDraftInstructions({
+        project,
+        chapter,
+        property: studioProperty,
+      });
+      const usingLegacyFallback = scribeContext.contextManifest.notes.some((note) =>
+        note.startsWith("legacy-fallback:"),
+      );
 
       const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
-        const fiction = isFiction(project.vertical);
-        const systemPrompt = (dna
-          ? `You are a professional ${fiction ? "fiction author" : "author"} writing ${fiction ? `a ${project.vertical} novel` : `in the ${project.vertical} niche`}.
-Book: "${project.title}"
-Core Promise: ${dna.corePromise}
-Reader Avatar: ${dna.readerAvatar}
-Tone Rules: ${dna.toneRules}
-Framework: ${dna.frameworkSummary}
-Transformation Arc: ${dna.transformationArc}
-Write in ${project.targetLanguage}.`
-          : `You are a professional ${fiction ? "fiction author" : "author"} writing a ${project.vertical} ${fiction ? "novel" : "book"} titled "${project.title}". Write in ${project.targetLanguage}.`)
-          + (styleContext ? `\n\n${styleContext}` : "");
-
-        const chapterInstructions = fiction
-          ? `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
-
-Blueprint: ${chapter.blueprint}
-
-Write a complete, immersive chapter of approximately 2000-3000 words. Include:
-- Vivid scene-setting and sensory details
-- Natural dialogue that reveals character
-- Rising tension and conflict
-- Character development and emotional depth
-- A compelling hook ending that pulls readers to the next chapter
-
-Write the full chapter content only, no meta-commentary. Show, don't tell.`
-          : `Write Chapter ${chapter.chapterNumber}: "${chapter.title}"
-
-Blueprint: ${chapter.blueprint}
-
-Write a complete, compelling chapter of approximately 1500-2000 words. Include:
-- Strong opening hook
-- Core concepts with clear explanations
-- Practical examples and case studies
-- Actionable frameworks or exercises
-- Chapter summary and key takeaways
-
-Write the full chapter content only, no meta-commentary.`;
-
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
           messages: [{
             role: "system",
-            content: systemPrompt,
+            content: `${scribeContext.systemPrompt}\n\nYou are now drafting the next manuscript chapter. Treat the Creative Target Contract as the quality definition for this work.`,
           }, {
             role: "user",
-            content: consistencyContext ? `${consistencyContext}\n\n---\n\n${chapterInstructions}` : chapterInstructions,
+            content: usingLegacyFallback && legacyConsistencyContext
+              ? `${legacyConsistencyContext}\n\n---\n\n${chapterInstructions}`
+              : chapterInstructions,
           }],
           max_completion_tokens: 8192,
         });
