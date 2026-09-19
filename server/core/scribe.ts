@@ -51,9 +51,14 @@ export async function buildScribeContext(projectId: number): Promise<ScribeConte
     ? await storage.getStyleFingerprint(project.styleFingerprintId)
     : undefined;
 
-  const accepted = chapters
-    .filter((chapter) => chapter.status === "complete")
+  const explicitlyApproved = chapters
+    .filter((chapter) => chapter.approvalStatus === "approved")
     .sort((a, b) => a.chapterNumber - b.chapterNumber);
+  const accepted = explicitlyApproved.length > 0
+    ? explicitlyApproved
+    : chapters
+        .filter((chapter) => chapter.status === "complete")
+        .sort((a, b) => a.chapterNumber - b.chapterNumber);
 
   const recent = accepted.slice(-3).map((chapter) => ({
     id: chapter.id,
@@ -134,6 +139,9 @@ SCRIBE LAWS
       sourceArtifactIds: [],
       notes: [
         continuity ? `continuity-snapshot-v${continuity.version}` : "no-continuity-snapshot-yet",
+        explicitlyApproved.length === 0 && accepted.length > 0
+          ? "legacy-fallback:completed-chapters-used-because-no-explicit-approvals-exist"
+          : "canon-source:explicitly-approved-chapters",
         `runtime-mode:${getConfig().studio.runtimeMode}`,
       ],
     },
