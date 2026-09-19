@@ -23,6 +23,9 @@ const rawSchema = z.object({
 
   ELEVENLABS_API_KEY: z.string().optional(),
 
+  OLLAMA_BASE_URL: z.string().url().optional(),
+  OLLAMA_MODEL: z.string().optional(),
+
   LEXORA_RUNTIME_MODE: z.enum(runtimeModes).optional(),
   LEXORA_PRIVATE_STUDIO: z.string().optional(),
   LEXORA_COMMERCE_ENABLED: z.string().optional(),
@@ -80,6 +83,11 @@ function buildConfig() {
     elevenLabs: {
       apiKey: env.ELEVENLABS_API_KEY || null,
       configured: Boolean(env.ELEVENLABS_API_KEY),
+    },
+
+    ollama: {
+      baseURL: env.OLLAMA_BASE_URL || "http://127.0.0.1:11434",
+      model: env.OLLAMA_MODEL || "qwen3.5:4b",
     },
 
     studio: {
