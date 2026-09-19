@@ -7,6 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import helmet from "helmet";
 import pg from "pg";
 import { getConfig, requireDatabaseUrl } from "./config/env";
+import { ensureRevivalSchema } from "./revival-schema";
 
 const config = getConfig();
 const databaseUrl = requireDatabaseUrl();
@@ -111,6 +112,8 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  await ensureRevivalSchema();
+
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch(console.error);
 
