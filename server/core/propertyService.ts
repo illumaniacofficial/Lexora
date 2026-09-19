@@ -112,26 +112,24 @@ export async function ensurePropertyForProject(projectId: number): Promise<Studi
   const targetContract = legacyTargetContract(project);
   const id = crypto.randomUUID();
 
-  const property = await storage.createStudioProperty({
-    id,
-    workingTitle: project.title,
-    canonicalTitle: project.status === "complete" ? project.title : null,
-    status: project.status === "complete" ? "published" : "in-production",
-    format: classification.format,
-    seriesIntent: classification.seriesIntent,
-    legacyVertical: project.vertical,
-    classification,
-    targetContract,
-  });
-
-  await storage.linkProjectToProperty({
-    propertyId: id,
-    projectId,
-    relation: "book",
-    isPrimary: true,
-  });
-
-  return property;
+  return storage.createStudioPropertyWithProjectLink(
+    {
+      id,
+      workingTitle: project.title,
+      canonicalTitle: project.status === "complete" ? project.title : null,
+      status: project.status === "complete" ? "published" : "in-production",
+      format: classification.format,
+      seriesIntent: classification.seriesIntent,
+      legacyVertical: project.vertical,
+      classification,
+      targetContract,
+    },
+    {
+      projectId,
+      relation: "book",
+      isPrimary: true,
+    },
+  );
 }
 
 export async function createPropertyForProject(project: Project): Promise<StudioProperty> {

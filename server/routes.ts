@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL } from "./openai";
+import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL, OPENAI_CONFIGURED } from "./openai";
 import { buildConsistencyContext, type ContinuityExtras } from "./consistency";
 import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
 import { deriveStyleProfile, buildStyleContext } from "./style";
@@ -319,6 +319,9 @@ Return ONLY JSON: { "score": <number 1-10>, "reason": "<brief one-sentence justi
         ],
       });
     } else {
+      if (runtime.studio.runtimeMode === "off-grid") {
+        throw new Error("Cannot evaluate chapter quality in off-grid mode because Ollama is unavailable.");
+      }
       const completion = await openai.chat.completions.create({
         model: FAST_MODEL,
         messages: [
@@ -340,6 +343,15 @@ Return ONLY JSON: { "score": <number 1-10>, "reason": "<brief one-sentence justi
   } catch {
     return 7.0;
   }
+}
+
+function reportContinuityWarning(res: Response, context: string, error: any) {
+  const message = error?.message || "Continuity archive failed";
+  console.error(`${context}:`, message);
+  res.setHeader(
+    "X-Lexora-Continuity-Warning",
+    encodeURIComponent(`${context}: ${message}`.slice(0, 300)),
+  );
 }
 
 const trendAnalyzeSchema = z.object({
@@ -1999,13 +2011,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Snapshot the current state before overwriting so rollback is reversible.
       await captureChapterVersion(chapterId, "Before rollback");
 
+      const contentChanged =
+        chapter.title !== version.title ||
+        (chapter.content || "") !== (version.content || "");
+      const invalidatedApproval = contentChanged && chapter.approvalStatus === "approved";
       const updated = await storage.updateChapter(chapterId, {
         title: version.title,
         content: version.content,
         wordCount: version.wordCount,
         lastEditedAt: new Date(),
-        ...(chapter.approvalStatus === "approved" ? { approvalStatus: "none" } : {}),
+        ...(invalidatedApproval ? { approvalStatus: "none" as const } : {}),
       });
+      if (invalidatedApproval) {
+        await archiveContinuityForChapter(projectId, chapterId).catch((continuityError: any) => {
+          reportContinuityWarning(res, "Continuity archive after version rollback", continuityError);
+        });
+      }
 
       const refreshed = await storage.getChapters(projectId);
       const totalWords = refreshed.reduce((s, c) => s + c.wordCount, 0);
@@ -2618,13 +2639,22 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       const wordCount = result.split(/\s+/).length;
       const qualityScore = await evaluateChapterQuality(result, chapter.title, project.vertical);
+      const invalidatedApproval = chapter.approvalStatus === "approved";
 
       await storage.updateChapter(chapterId, {
         content: result,
         wordCount,
         qualityScore,
         status: "complete",
+        // A regenerated chapter is new content and must re-enter the owner gate.
+        ...(invalidatedApproval ? { approvalStatus: "none" as const } : {}),
       });
+
+      if (invalidatedApproval) {
+        await archiveContinuityForChapter(projectId, chapterId).catch((continuityError: any) => {
+          reportContinuityWarning(res, "Continuity archive after regeneration", continuityError);
+        });
+      }
 
       const allChapters = await storage.getChapters(projectId);
       const totalWords = allChapters.reduce((sum, c) => sum + c.wordCount, 0);
@@ -2676,14 +2706,20 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       const { content } = req.body;
       if (typeof content !== "string") return res.status(400).json({ error: "Content is required" });
       const contentChanged = (chapter.content || "") !== content;
+      const invalidatedApproval = contentChanged && chapter.approvalStatus === "approved";
       const wordCount = content.trim().split(/\s+/).filter(Boolean).length;
       const updated = await storage.updateChapter(chapterId, {
         content,
         wordCount,
         lastEditedAt: new Date(),
         // Editing invalidates a prior approval — send it back through the gate.
-        ...(contentChanged && chapter.approvalStatus === "approved" ? { approvalStatus: "none" } : {}),
+        ...(invalidatedApproval ? { approvalStatus: "none" as const } : {}),
       });
+      if (invalidatedApproval) {
+        await archiveContinuityForChapter(projectId, chapterId).catch((continuityError: any) => {
+          reportContinuityWarning(res, "Continuity archive after manual edit", continuityError);
+        });
+      }
       const allChapters = await storage.getChapters(projectId);
       const totalWords = allChapters.reduce((s, c) => s + (c.id === chapterId ? wordCount : c.wordCount), 0);
       await storage.updateProject(projectId, { wordCount: totalWords });
@@ -2713,8 +2749,18 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       const consistencyContext = buildConsistencyContext(allChapters, chapter.chapterNumber, reviseExtras);
       const styleContext = await loadStyleContext(project.styleFingerprintId);
       const fiction = isFiction(project.vertical);
+      const localAvailable = await isOllamaAvailable();
+      const useLocalRevision =
+        (config.studio.runtimeMode === "off-grid" && localAvailable) ||
+        (config.studio.runtimeMode === "hybrid" && localAvailable) ||
+        (!config.openai.configured && localAvailable);
 
-      const result = await runStep(projectId, `Revise Ch.${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
+      if (config.studio.runtimeMode === "off-grid" && !localAvailable) {
+        return res.status(503).json({ error: "Cannot revise chapter in off-grid mode because Ollama is unavailable." });
+      }
+
+      const revisionModel = useLocalRevision ? `ollama:${config.ollama.model}` : HIGH_MODEL;
+      const result = await runStep(projectId, `Revise Ch.${chapter.chapterNumber}: ${chapter.title}`, revisionModel, async () => {
         const systemPrompt = (dna
           ? `You are a professional ${fiction ? "fiction author" : "author"} revising a chapter ${fiction ? `for a ${project.vertical} novel` : `in the ${project.vertical} niche`}.
 Book: "${project.title}"
@@ -2744,16 +2790,29 @@ Apply this instruction faithfully. Rewrite the full chapter so the instruction i
 
 Stay 100% consistent with the rest of the book (names, facts, timeline, terminology, tone, and callbacks established in the story bible above). Keep the chapter ${lengthHint}. Return ONLY the full revised chapter content, no meta-commentary or notes.`;
 
-        const completion = await openai.chat.completions.create({
-          model: HIGH_MODEL,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          max_completion_tokens: 8192,
-        });
-        const content = completion.choices[0].message.content || "";
-        const tokens = completion.usage?.total_tokens || 3000;
+        let content: string;
+        let tokens: number;
+        if (useLocalRevision) {
+          content = await ollamaChat({
+            model: config.ollama.model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          });
+          tokens = Math.ceil((systemPrompt.length + userPrompt.length + content.length) / 4);
+        } else {
+          const completion = await openai.chat.completions.create({
+            model: HIGH_MODEL,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            max_completion_tokens: 8192,
+          });
+          content = completion.choices[0].message.content || "";
+          tokens = completion.usage?.total_tokens || 3000;
+        }
         return { result: content, tokens };
       });
 
@@ -2762,6 +2821,7 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       const wordCount = result.trim().split(/\s+/).filter(Boolean).length;
       const qualityScore = await evaluateChapterQuality(result, chapter.title, project.vertical);
 
+      const invalidatedApproval = chapter.approvalStatus === "approved";
       const updated = await storage.updateChapter(chapterId, {
         content: result,
         wordCount,
@@ -2769,8 +2829,13 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         status: "complete",
         lastEditedAt: new Date(),
         // Revision invalidates a prior approval — send it back through the gate.
-        ...(chapter.approvalStatus === "approved" ? { approvalStatus: "none" } : {}),
+        ...(invalidatedApproval ? { approvalStatus: "none" as const } : {}),
       });
+      if (invalidatedApproval) {
+        await archiveContinuityForChapter(projectId, chapterId).catch((continuityError: any) => {
+          reportContinuityWarning(res, "Continuity archive after AI revision", continuityError);
+        });
+      }
 
       await captureChapterVersion(chapterId, instruction ? "AI revision" : "AI polish");
 
@@ -2948,14 +3013,20 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
       await captureChapterVersion(chapterId, "Before humanize pass");
       const wordCount = humanized.newContent.trim().split(/\s+/).filter(Boolean).length;
       const qualityScore = await evaluateChapterQuality(humanized.newContent, chapter.title, project.vertical);
+      const invalidatedApproval = chapter.approvalStatus === "approved";
       await storage.updateChapter(chapterId, {
         content: humanized.newContent,
         wordCount,
         qualityScore,
         status: "complete",
         lastEditedAt: new Date(),
-        ...(chapter.approvalStatus === "approved" ? { approvalStatus: "none" as const } : {}),
+        ...(invalidatedApproval ? { approvalStatus: "none" as const } : {}),
       });
+      if (invalidatedApproval) {
+        await archiveContinuityForChapter(projectId, chapterId).catch((continuityError: any) => {
+          reportContinuityWarning(res, "Continuity archive after humanize pass", continuityError);
+        });
+      }
       await captureChapterVersion(chapterId, "After humanize pass");
 
       const refreshed = await storage.getChapters(projectId);
@@ -4906,18 +4977,43 @@ Return JSON with:
         aiContent = result.text;
         scribeRuntime = { runtime: result.runtime, model: result.model };
       } else {
-        const completion = await openai.chat.completions.create({
-          model: HIGH_MODEL,
-          messages: [
-            {
-              role: "system",
-              content: `You are Lexora's Scribe intake assistant. This conversation is not linked to a Property yet, so treat ideas as exploration rather than canon. Help the user develop books across fiction and nonfiction, adapt craft to the intended reader, and encourage linking the conversation to a project once a concept becomes real. Be creative, structured, and concise when possible.`,
-            },
-            ...chatHistory,
-          ],
-          max_completion_tokens: 8192,
-        });
-        aiContent = completion.choices[0].message.content || "I couldn't generate a response. Please try again.";
+        const intakeSystem = {
+          role: "system" as const,
+          content: `You are Lexora's Scribe intake assistant. This conversation is not linked to a Property yet, so treat ideas as exploration rather than canon. Help the user develop books across fiction and nonfiction, adapt craft to the intended reader, and encourage linking the conversation to a project once a concept becomes real. Be creative, structured, and concise when possible.`,
+        };
+        const localIntakePreferred =
+          config.studio.runtimeMode === "off-grid" ||
+          config.studio.runtimeMode === "hybrid";
+
+        if (localIntakePreferred && await isOllamaAvailable()) {
+          aiContent = await ollamaChat({
+            model: config.ollama.model,
+            messages: [intakeSystem, ...chatHistory],
+          });
+          scribeRuntime = { runtime: "local", model: config.ollama.model };
+        } else if (config.studio.runtimeMode === "off-grid") {
+          const offlineError = new Error("Lexora is in off-grid mode but the configured Ollama runtime is unavailable.") as Error & { status?: number };
+          offlineError.status = 503;
+          throw offlineError;
+        } else if (!OPENAI_CONFIGURED && await isOllamaAvailable()) {
+          aiContent = await ollamaChat({
+            model: config.ollama.model,
+            messages: [intakeSystem, ...chatHistory],
+          });
+          scribeRuntime = { runtime: "local", model: config.ollama.model };
+        } else if (!OPENAI_CONFIGURED) {
+          throw new Error("No available Scribe intake runtime. Configure OpenAI or start Ollama locally.");
+        } else {
+          const completion = await openai.chat.completions.create({
+            model: HIGH_MODEL,
+            messages: [
+              intakeSystem,
+              ...chatHistory,
+            ],
+            max_completion_tokens: 8192,
+          });
+          aiContent = completion.choices[0].message.content || "I couldn't generate a response. Please try again.";
+        }
       }
 
       const aiMsg = await storage.createChatMessage({
@@ -4940,7 +5036,7 @@ Return JSON with:
       });
     } catch (err: any) {
       console.error("Chat error:", err.message);
-      res.status(500).json({ error: err.message });
+      res.status(err?.status === 503 ? 503 : 500).json({ error: err.message });
     }
   });
 

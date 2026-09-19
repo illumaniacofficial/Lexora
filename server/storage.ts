@@ -915,21 +915,53 @@ export class DatabaseStorage implements IStorage {
   }
 
   async linkProjectToProperty(data: InsertPropertyProject): Promise<PropertyProject> {
-    const [existing] = await db.select().from(propertyProjects).where(eq(propertyProjects.projectId, data.projectId));
-    if (existing) {
-      const [updated] = await db
-        .update(propertyProjects)
-        .set({
+    const [linked] = await db
+      .insert(propertyProjects)
+      .values(data)
+      .onConflictDoUpdate({
+        target: propertyProjects.projectId,
+        set: {
           propertyId: data.propertyId,
-          relation: data.relation ?? existing.relation,
-          isPrimary: data.isPrimary ?? existing.isPrimary,
-        })
-        .where(eq(propertyProjects.id, existing.id))
-        .returning();
-      return updated;
-    }
-    const [created] = await db.insert(propertyProjects).values(data).returning();
-    return created;
+          relation: data.relation ?? "book",
+          isPrimary: data.isPrimary ?? true,
+        },
+      })
+      .returning();
+    return linked;
+  }
+
+  async createStudioPropertyWithProjectLink(
+    propertyData: InsertStudioProperty,
+    linkData: Omit<InsertPropertyProject, "propertyId">,
+  ): Promise<StudioProperty> {
+    return db.transaction(async (tx) => {
+      // Serialize legacy bridge creation per Project. This prevents concurrent
+      // first-touch requests from creating orphan/duplicate Properties.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`property-project:${linkData.projectId}`}, 0))`,
+      );
+
+      const [existingLink] = await tx
+        .select()
+        .from(propertyProjects)
+        .where(eq(propertyProjects.projectId, linkData.projectId));
+
+      if (existingLink) {
+        const [existingProperty] = await tx
+          .select()
+          .from(studioProperties)
+          .where(eq(studioProperties.id, existingLink.propertyId));
+        if (existingProperty) return existingProperty;
+        throw new Error(`Property ${existingLink.propertyId} linked to Project ${linkData.projectId} was not found.`);
+      }
+
+      const [property] = await tx.insert(studioProperties).values(propertyData).returning();
+      await tx.insert(propertyProjects).values({
+        ...linkData,
+        propertyId: property.id,
+      }).returning();
+      return property;
+    });
   }
 
   async getPropertyProject(projectId: number): Promise<PropertyProject | undefined> {
@@ -972,28 +1004,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertContinuitySnapshot(data: InsertContinuitySnapshot): Promise<ContinuitySnapshot> {
-    return db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(continuitySnapshots)
-        .where(eq(continuitySnapshots.projectId, data.projectId));
-
-      if (existing) {
-        const [updated] = await tx
-          .update(continuitySnapshots)
-          .set({
-            ...data,
-            version: Math.max(existing.version + 1, data.version ?? 1),
-            updatedAt: new Date(),
-          })
-          .where(eq(continuitySnapshots.id, existing.id))
-          .returning();
-        return updated;
-      }
-
-      const [created] = await tx.insert(continuitySnapshots).values(data).returning();
-      return created;
-    });
+    const [snapshot] = await db
+      .insert(continuitySnapshots)
+      .values(data)
+      .onConflictDoUpdate({
+        target: continuitySnapshots.projectId,
+        set: {
+          state: data.state,
+          lastAcceptedChapterId: data.lastAcceptedChapterId ?? null,
+          version: sql<number>`greatest(${continuitySnapshots.version} + 1, excluded.version)`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return snapshot;
   }
 
   async createConceptDossier(data: InsertConceptDossier): Promise<ConceptDossierRow> {
