@@ -28,6 +28,11 @@ import path from "path";
 import bcrypt from "bcryptjs";
 import rateLimit from "express-rate-limit";
 import { estimateCost } from "./cost";
+import { ensurePropertyForProject } from "./core/propertyService";
+import { scribeChat } from "./core/scribe";
+import { drawTriad, getTriadDeckStats } from "./core/triadEngine";
+import { hashArtifactContent } from "./core/artifacts";
+import { isOllamaAvailable } from "./core/ollama";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -322,6 +327,53 @@ const trendAnalyzeSchema = z.object({
   vertical: z.string().min(1, "Vertical is required"),
   keywords: z.string().optional().default(""),
 });
+
+const studioPropertyCreateSchema = z.object({
+  workingTitle: z.string().min(1).max(300),
+  canonicalTitle: z.string().max(300).nullable().optional(),
+  status: z.string().min(1).optional(),
+  format: z.string().min(1).optional(),
+  seriesIntent: z.string().min(1).optional(),
+  legacyVertical: z.string().nullable().optional(),
+  classification: z.record(z.any()).optional(),
+  targetContract: z.record(z.any()).optional(),
+}).strict();
+
+const studioPropertyPatchSchema = studioPropertyCreateSchema.partial();
+
+const artifactCreateSchema = z.object({
+  type: z.string().min(1).max(120),
+  chapterId: z.number().int().positive().nullable().optional(),
+  parentArtifactId: z.string().nullable().optional(),
+  createdBy: z.string().min(1).optional(),
+  runtimeId: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  promptVersion: z.string().nullable().optional(),
+  context: z.record(z.any()).optional(),
+  content: z.any(),
+  estimatedCostUsd: z.number().min(0).nullable().optional(),
+  state: z.string().min(1).optional(),
+}).strict();
+
+const continuityBodySchema = z.object({
+  state: z.record(z.any()),
+  lastAcceptedChapterId: z.number().int().positive().nullable().optional(),
+}).strict();
+
+const conceptDossierCreateSchema = z.object({
+  propertyId: z.string().nullable().optional(),
+  sourceType: z.string().min(1),
+  source: z.record(z.any()).optional(),
+  dossier: z.record(z.any()),
+  status: z.string().optional(),
+}).strict();
+
+const triadDrawRequestSchema = z.object({
+  mode: z.enum(["pure-chaos", "intelligent-draw", "forbidden-combination"]).optional(),
+  contextTags: z.array(z.string()).optional(),
+  locked: z.record(z.any()).optional(),
+  wildcardChance: z.number().min(0).max(1).optional(),
+}).strict();
 
 const patchProjectSchema = z.object({
   title: z.string().min(1).optional(),
@@ -1347,6 +1399,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const data = insertProjectSchema.parse(req.body);
       const project = await storage.createProject(data);
+      // Every new legacy Project is immediately wrapped in a first-class Property.
+      // This is additive and keeps the original Project contract intact.
+      await ensurePropertyForProject(project.id);
       res.status(201).json(project);
       saveDbSeed().catch(() => {});
     } catch (err: any) {
@@ -1382,7 +1437,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ...e,
         chapters: await storage.getEditionChapters(e.id),
       })));
-      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules, mediaAssets, editions });
+      const studioProperty = await ensurePropertyForProject(id);
+      const continuitySnapshot = await storage.getContinuitySnapshot(id);
+      const artifactRows = await storage.getCreativeArtifacts({ projectId: id });
+      const artifactSummary = artifactRows.map((artifact) => ({
+        id: artifact.id,
+        type: artifact.type,
+        version: artifact.version,
+        chapterId: artifact.chapterId,
+        createdBy: artifact.createdBy,
+        runtimeId: artifact.runtimeId,
+        model: artifact.model,
+        state: artifact.state,
+        contentHash: artifact.contentHash,
+        createdAt: artifact.createdAt,
+      }));
+      res.json({ project, chapters, runSteps, bookDna, marketing, trendReport, chapterAnalyses, storyEntities, marketReports, revenueForecasts, abTests, series: seriesRef, styleFingerprint, coverVariants, exportJobs, brandKit, launchSchedules, mediaAssets, editions, studioProperty, continuitySnapshot, artifactSummary });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -4537,32 +4607,30 @@ Return JSON with:
         content: m.content,
       }));
 
-      const completion = await openai.chat.completions.create({
-        model: HIGH_MODEL,
-        messages: [
-          {
-            role: "system",
-            content: `You are Lexora, an expert AI book architect and writing partner. You help users plan, structure, and write books across all genres — fiction (sci-fi, fantasy, horror, romance, thriller, mystery, erotica, literary fiction, etc.) and non-fiction (self-help, business, education, etc.).
+      let aiContent: string;
+      let scribeRuntime: { runtime: "local" | "cloud"; model: string } | null = null;
 
-Your capabilities:
-1. Help brainstorm book concepts, titles, and premises
-2. Create detailed outlines with chapter breakdowns
-3. Develop character profiles, world-building, and plot arcs for fiction
-4. Write individual chapters or scenes on request
-5. Provide feedback and suggestions on writing style, pacing, and structure
-6. Generate book DNA (core promise, reader avatar, tone rules, transformation arc)
-7. Help with marketing copy, blurbs, and descriptions
-
-When the user provides a book structure or prompt, follow their guidance precisely. Be creative, detailed, and professional. Format your responses with clear markdown headings and structure when generating outlines or long-form content.
-
-If the user wants to generate an entire book step by step, guide them through: concept → outline → chapter-by-chapter writing. Ask clarifying questions when needed.`,
-          },
-          ...chatHistory,
-        ],
-        max_completion_tokens: 8192,
-      });
-
-      const aiContent = completion.choices[0].message.content || "I couldn't generate a response. Please try again.";
+      if (conv.projectId) {
+        const result = await scribeChat({
+          projectId: conv.projectId,
+          history: chatHistory,
+        });
+        aiContent = result.text;
+        scribeRuntime = { runtime: result.runtime, model: result.model };
+      } else {
+        const completion = await openai.chat.completions.create({
+          model: HIGH_MODEL,
+          messages: [
+            {
+              role: "system",
+              content: `You are Lexora's Scribe intake assistant. This conversation is not linked to a Property yet, so treat ideas as exploration rather than canon. Help the user develop books across fiction and nonfiction, adapt craft to the intended reader, and encourage linking the conversation to a project once a concept becomes real. Be creative, structured, and concise when possible.`,
+            },
+            ...chatHistory,
+          ],
+          max_completion_tokens: 8192,
+        });
+        aiContent = completion.choices[0].message.content || "I couldn't generate a response. Please try again.";
+      }
 
       const aiMsg = await storage.createChatMessage({
         conversationId: convId,
@@ -4575,7 +4643,13 @@ If the user wants to generate an entire book step by step, guide them through: c
         await storage.updateChatConversation(convId, { title: firstLine || "New Conversation" });
       }
 
-      res.json({ userMessage: userMsg, assistantMessage: aiMsg });
+      res.json({
+        userMessage: userMsg,
+        assistantMessage: aiMsg,
+        director: conv.projectId ? "scribe" : "scribe-intake",
+        runtime: scribeRuntime?.runtime ?? "cloud",
+        model: scribeRuntime?.model ?? HIGH_MODEL,
+      });
     } catch (err: any) {
       console.error("Chat error:", err.message);
       res.status(500).json({ error: err.message });
