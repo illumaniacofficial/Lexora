@@ -32,7 +32,7 @@ import { ensurePropertyForProject } from "./core/propertyService";
 import { scribeChat, buildScribeContext } from "./core/scribe";
 import { drawTriad, getTriadDeckStats } from "./core/triadEngine";
 import { hashArtifactContent } from "./core/artifacts";
-import { isOllamaAvailable } from "./core/ollama";
+import { isOllamaAvailable, ollamaChat } from "./core/ollama";
 import { captureContinuityForApprovedChapter, archiveContinuityForChapter } from "./core/continuityService";
 import { buildChapterDraftInstructions } from "./core/chapterCraft";
 
@@ -299,24 +299,41 @@ async function runStep(projectId: number, stepName: string, model: string, fn: (
 
 async function evaluateChapterQuality(chapterContent: string, title: string, vertical: string): Promise<number> {
   try {
-    const completion = await openai.chat.completions.create({
-      model: FAST_MODEL,
-      messages: [{
-        role: "system",
-        content: "You are a professional book editor and quality evaluator. Respond ONLY with valid JSON.",
-      }, {
-        role: "user",
-        content: `Rate this chapter on a scale of 1-10 based on: clarity, engagement, actionable value, structure, and writing quality. The chapter is from a ${vertical} book, titled "${title}".
+    const runtime = getConfig();
+    const prompt = `Rate this chapter on a scale of 1-10 based on reader fit, clarity, engagement, structure, and writing quality. The chapter is from a ${vertical} book, titled "${title}".
 
 Chapter content (first 2000 chars):
 ${chapterContent.slice(0, 2000)}
 
-Return JSON with: { "score": <number 1-10>, "reason": "<brief one-sentence justification>" }`,
-      }],
-      max_completion_tokens: 256,
-      response_format: { type: "json_object" },
-    });
-    const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+Return ONLY JSON: { "score": <number 1-10>, "reason": "<brief one-sentence justification>" }`;
+
+    let raw: string;
+    const preferLocal = runtime.studio.runtimeMode === "off-grid" || runtime.studio.runtimeMode === "hybrid";
+    if (preferLocal && await isOllamaAvailable()) {
+      raw = await ollamaChat({
+        model: runtime.ollama.model,
+        temperature: 0.1,
+        messages: [
+          { role: "system", content: "You are Redactor's lightweight quality evaluator. Return strict JSON only." },
+          { role: "user", content: prompt },
+        ],
+      });
+    } else {
+      const completion = await openai.chat.completions.create({
+        model: FAST_MODEL,
+        messages: [
+          { role: "system", content: "You are a professional book editor and quality evaluator. Respond ONLY with valid JSON." },
+          { role: "user", content: prompt },
+        ],
+        max_completion_tokens: 256,
+        response_format: { type: "json_object" },
+      });
+      raw = completion.choices[0].message.content || "{}";
+    }
+
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    const parsed = JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : raw);
     const score = parseFloat(parsed.score);
     if (isNaN(score) || score < 1 || score > 10) return 7.0;
     return Math.round(score * 10) / 10;
@@ -2557,18 +2574,41 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         note.startsWith("legacy-fallback:"),
       );
 
-      const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, HIGH_MODEL, async () => {
+      const localAvailable = await isOllamaAvailable();
+      const useLocalDraft =
+        (config.studio.runtimeMode === "off-grid" && localAvailable) ||
+        (config.studio.runtimeMode === "hybrid" && localAvailable) ||
+        (!config.openai.configured && localAvailable);
+
+      if (config.studio.runtimeMode === "off-grid" && !localAvailable) {
+        throw new Error("Cannot draft chapter in off-grid mode because Ollama is unavailable.");
+      }
+
+      const draftModel = useLocalDraft ? `ollama:${config.ollama.model}` : HIGH_MODEL;
+      const userDraftPrompt = usingLegacyFallback && legacyConsistencyContext
+        ? `${legacyConsistencyContext}\n\n---\n\n${chapterInstructions}`
+        : chapterInstructions;
+      const systemDraftPrompt = `${scribeContext.systemPrompt}\n\nYou are now drafting the next manuscript chapter. Treat the Creative Target Contract as the quality definition for this work.`;
+
+      const result = await runStep(projectId, `Chapter ${chapter.chapterNumber}: ${chapter.title}`, draftModel, async () => {
+        if (useLocalDraft) {
+          const content = await ollamaChat({
+            model: config.ollama.model,
+            messages: [
+              { role: "system", content: systemDraftPrompt },
+              { role: "user", content: userDraftPrompt },
+            ],
+          });
+          const tokens = Math.ceil((systemDraftPrompt.length + userDraftPrompt.length + content.length) / 4);
+          return { result: content, tokens };
+        }
+
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
-          messages: [{
-            role: "system",
-            content: `${scribeContext.systemPrompt}\n\nYou are now drafting the next manuscript chapter. Treat the Creative Target Contract as the quality definition for this work.`,
-          }, {
-            role: "user",
-            content: usingLegacyFallback && legacyConsistencyContext
-              ? `${legacyConsistencyContext}\n\n---\n\n${chapterInstructions}`
-              : chapterInstructions,
-          }],
+          messages: [
+            { role: "system", content: systemDraftPrompt },
+            { role: "user", content: userDraftPrompt },
+          ],
           max_completion_tokens: 8192,
         });
         const content = completion.choices[0].message.content || "";
