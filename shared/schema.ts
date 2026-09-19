@@ -795,12 +795,50 @@ export const triadDraws = pgTable("triad_draws", {
   index("triad_draws_created_idx").on(table.createdAt),
 ]);
 
+export const artifactStreams = pgTable("artifact_streams", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  propertyId: varchar("property_id", { length: 64 }).references(() => studioProperties.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  chapterId: integer("chapter_id").references(() => chapters.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  nextVersion: integer("next_version").notNull().default(1),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  unique("artifact_streams_scope_type_unique").on(table.propertyId, table.projectId, table.chapterId, table.type),
+  index("artifact_streams_property_idx").on(table.propertyId),
+  index("artifact_streams_project_idx").on(table.projectId),
+]);
+
+export const conceptSynthesisRuns = pgTable("concept_synthesis_runs", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  triadDrawId: varchar("triad_draw_id", { length: 64 }).notNull().references(() => triadDraws.id, { onDelete: "cascade" }),
+  propertyId: varchar("property_id", { length: 64 }).references(() => studioProperties.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("generated"),
+  context: jsonb("context").notNull().default(sql`'{}'::jsonb`),
+  oracleAnalysis: jsonb("oracle_analysis").notNull().default(sql`'{}'::jsonb`),
+  directions: jsonb("directions").notNull().default(sql`'[]'::jsonb`),
+  contributions: jsonb("contributions").notNull().default(sql`'[]'::jsonb`),
+  runtime: jsonb("runtime").notNull().default(sql`'{}'::jsonb`),
+  selectedDirectionId: varchar("selected_direction_id", { length: 64 }),
+  selectedDossierId: varchar("selected_dossier_id", { length: 64 }).references(() => conceptDossiers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("concept_synthesis_runs_draw_idx").on(table.triadDrawId),
+  index("concept_synthesis_runs_property_idx").on(table.propertyId),
+  index("concept_synthesis_runs_status_idx").on(table.status),
+  index("concept_synthesis_runs_created_idx").on(table.createdAt),
+]);
+
 export const insertStudioPropertySchema = createInsertSchema(studioProperties).omit({ createdAt: true, updatedAt: true });
 export const insertPropertyProjectSchema = createInsertSchema(propertyProjects).omit({ createdAt: true });
 export const insertCreativeArtifactSchema = createInsertSchema(creativeArtifacts).omit({ createdAt: true });
 export const insertContinuitySnapshotSchema = createInsertSchema(continuitySnapshots).omit({ createdAt: true, updatedAt: true });
 export const insertConceptDossierSchema = createInsertSchema(conceptDossiers).omit({ createdAt: true, updatedAt: true });
 export const insertTriadDrawSchema = createInsertSchema(triadDraws).omit({ createdAt: true });
+export const insertArtifactStreamSchema = createInsertSchema(artifactStreams).omit({ createdAt: true, updatedAt: true });
+export const insertConceptSynthesisRunSchema = createInsertSchema(conceptSynthesisRuns).omit({ createdAt: true, updatedAt: true });
 
 export type StudioProperty = typeof studioProperties.$inferSelect;
 export type InsertStudioProperty = z.infer<typeof insertStudioPropertySchema>;
@@ -814,3 +852,7 @@ export type ConceptDossierRow = typeof conceptDossiers.$inferSelect;
 export type InsertConceptDossier = z.infer<typeof insertConceptDossierSchema>;
 export type TriadDrawRow = typeof triadDraws.$inferSelect;
 export type InsertTriadDraw = z.infer<typeof insertTriadDrawSchema>;
+export type ArtifactStreamRow = typeof artifactStreams.$inferSelect;
+export type InsertArtifactStream = z.infer<typeof insertArtifactStreamSchema>;
+export type ConceptSynthesisRunRow = typeof conceptSynthesisRuns.$inferSelect;
+export type InsertConceptSynthesisRun = z.infer<typeof insertConceptSynthesisRunSchema>;

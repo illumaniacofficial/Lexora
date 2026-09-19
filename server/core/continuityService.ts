@@ -282,8 +282,6 @@ export async function rebuildContinuitySnapshot(projectId: number): Promise<Cano
 
 export async function captureContinuityForApprovedChapter(projectId: number, chapterId: number) {
   const extracted = await extractDelta(projectId, chapterId);
-  const existing = await storage.getCreativeArtifacts({ projectId, chapterId });
-  const version = existing.filter((artifact) => artifact.type === "continuity-delta").length + 1;
   const content = {
     chapterNumber: extracted.chapter.chapterNumber,
     title: extracted.chapter.title,
@@ -291,13 +289,12 @@ export async function captureContinuityForApprovedChapter(projectId: number, cha
     delta: extracted.delta,
   };
 
-  const artifact = await storage.createCreativeArtifact({
+  const artifact = await storage.createCreativeArtifactWithAtomicVersion({
     id: crypto.randomUUID(),
     propertyId: extracted.property.id,
     projectId,
     chapterId,
     type: "continuity-delta",
-    version,
     parentArtifactId: null,
     createdBy: "scribe",
     runtimeId: extracted.runtimeId,

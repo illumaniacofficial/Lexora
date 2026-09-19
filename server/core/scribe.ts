@@ -154,16 +154,12 @@ async function saveScribeArtifact(opts: {
   runtimeId: string;
   model: string;
 }) {
-  const existing = await storage.getCreativeArtifacts({ projectId: opts.context.projectId });
-  const version = existing.filter((artifact) => artifact.type === "scribe-chat-response").length + 1;
-
-  await storage.createCreativeArtifact({
+  await storage.createCreativeArtifactWithAtomicVersion({
     id: crypto.randomUUID(),
     propertyId: opts.context.propertyId,
     projectId: opts.context.projectId,
     chapterId: null,
     type: "scribe-chat-response",
-    version,
     parentArtifactId: null,
     createdBy: "scribe",
     runtimeId: opts.runtimeId,

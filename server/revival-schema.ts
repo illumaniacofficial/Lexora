@@ -96,6 +96,46 @@ export async function ensureRevivalSchema(): Promise<void> {
       created_at timestamp NOT NULL DEFAULT now()
     )`,
     `CREATE INDEX IF NOT EXISTS triad_draws_created_idx ON triad_draws(created_at)`,
+
+    `CREATE TABLE IF NOT EXISTS artifact_streams (
+      id varchar(64) PRIMARY KEY,
+      property_id varchar(64) REFERENCES studio_properties(id) ON DELETE CASCADE,
+      project_id integer REFERENCES projects(id) ON DELETE CASCADE,
+      chapter_id integer REFERENCES chapters(id) ON DELETE CASCADE,
+      type text NOT NULL,
+      next_version integer NOT NULL DEFAULT 1,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS artifact_streams_scope_type_unique
+      ON artifact_streams(
+        coalesce(property_id, ''),
+        coalesce(project_id, -1),
+        coalesce(chapter_id, -1),
+        type
+      )`,
+    `CREATE INDEX IF NOT EXISTS artifact_streams_property_idx ON artifact_streams(property_id)`,
+    `CREATE INDEX IF NOT EXISTS artifact_streams_project_idx ON artifact_streams(project_id)`,
+
+    `CREATE TABLE IF NOT EXISTS concept_synthesis_runs (
+      id varchar(64) PRIMARY KEY,
+      triad_draw_id varchar(64) NOT NULL REFERENCES triad_draws(id) ON DELETE CASCADE,
+      property_id varchar(64) REFERENCES studio_properties(id) ON DELETE SET NULL,
+      status text NOT NULL DEFAULT 'generated',
+      context jsonb NOT NULL DEFAULT '{}'::jsonb,
+      oracle_analysis jsonb NOT NULL DEFAULT '{}'::jsonb,
+      directions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      contributions jsonb NOT NULL DEFAULT '[]'::jsonb,
+      runtime jsonb NOT NULL DEFAULT '{}'::jsonb,
+      selected_direction_id varchar(64),
+      selected_dossier_id varchar(64) REFERENCES concept_dossiers(id) ON DELETE SET NULL,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_draw_idx ON concept_synthesis_runs(triad_draw_id)`,
+    `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_property_idx ON concept_synthesis_runs(property_id)`,
+    `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_status_idx ON concept_synthesis_runs(status)`,
+    `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_created_idx ON concept_synthesis_runs(created_at)`,
   ];
 
   for (const statement of statements) {

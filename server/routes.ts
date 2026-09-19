@@ -402,8 +402,54 @@ const conceptDossierCreateSchema = z.object({
 const triadDrawRequestSchema = z.object({
   mode: z.enum(["pure-chaos", "intelligent-draw", "forbidden-combination"]).optional(),
   contextTags: z.array(z.string()).optional(),
+  context: z.object({
+    audience: z.string().optional(),
+    format: z.string().optional(),
+    genre: z.string().optional(),
+    topic: z.string().optional(),
+    tone: z.string().optional(),
+    purpose: z.string().optional(),
+    ageBand: z.string().optional(),
+    maturity: z.string().optional(),
+    seriesIntent: z.string().optional(),
+    marketObjective: z.string().optional(),
+    language: z.string().optional(),
+    additionalNotes: z.string().optional(),
+  }).optional(),
   locked: z.record(z.any()).optional(),
   wildcardChance: z.number().min(0).max(1).optional(),
+}).strict();
+
+const triadSynthesisRequestSchema = z.object({
+  drawId: z.string().min(1),
+  context: z.object({
+    audience: z.string().optional(),
+    format: z.string().optional(),
+    genre: z.string().optional(),
+    topic: z.string().optional(),
+    tone: z.string().optional(),
+    purpose: z.string().optional(),
+    ageBand: z.string().optional(),
+    maturity: z.string().optional(),
+    seriesIntent: z.string().optional(),
+    marketObjective: z.string().optional(),
+    language: z.string().optional(),
+    additionalNotes: z.string().optional(),
+  }).optional(),
+}).strict();
+
+const conceptDossierFromDirectionSchema = z.object({
+  synthesisRunId: z.string().min(1),
+  directionId: z.string().min(1),
+  propertyId: z.string().nullable().optional(),
+}).strict();
+
+const conceptDossierGreenlightSchema = z.object({
+  dossierId: z.string().min(1),
+}).strict();
+
+const conceptDirectionSelectSchema = z.object({
+  directionId: z.string().min(1),
 }).strict();
 
 const patchProjectSchema = z.object({
@@ -1549,15 +1595,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!id) return res.status(400).json({ error: "Invalid project ID" });
       const data = artifactCreateSchema.parse(req.body);
       const property = await ensurePropertyForProject(id);
-      const existing = await storage.getCreativeArtifacts({ projectId: id });
-      const version = existing.filter((artifact) => artifact.type === data.type).length + 1;
-      const artifact = await storage.createCreativeArtifact({
+      const artifact = await storage.createCreativeArtifactWithAtomicVersion({
         id: crypto.randomUUID(),
         propertyId: property.id,
         projectId: id,
         chapterId: data.chapterId ?? null,
         type: data.type,
-        version,
         parentArtifactId: data.parentArtifactId ?? null,
         createdBy: data.createdBy || "user",
         runtimeId: data.runtimeId ?? null,
@@ -1641,6 +1684,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const draw = drawTriad({
         mode: input.mode,
         contextTags: input.contextTags,
+        context: input.context,
         locked: input.locked as any,
         wildcardChance: input.wildcardChance,
       });
@@ -1676,6 +1720,121 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: data.status || "candidate",
       });
       res.status(201).json(dossier);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/triad/synthesize", async (req, res) => {
+    try {
+      const input = triadSynthesisRequestSchema.parse(req.body || {});
+      const draw = await storage.getTriadDraw(input.drawId);
+      if (!draw) return res.status(404).json({ error: "Triad draw not found" });
+
+      const { synthesizeTriadConcept } = await import("./core/conceptSynthesisService");
+      const result = await synthesizeTriadConcept(draw, input.context || {});
+
+      await storage.updateConceptSynthesisRun(result.synthesisRunId, {
+        status: "completed",
+        directions: result.directions,
+        contributions: result.contributions,
+        runtime: result.runtime,
+      });
+
+      res.status(201).json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/concept-lab/triad/synthesis/:drawId", async (req, res) => {
+    try {
+      const runs = await storage.getConceptSynthesisRuns({ triadDrawId: req.params.drawId, limit: 1 });
+      if (runs.length === 0) return res.status(404).json({ error: "No synthesis found for this draw" });
+      res.json(runs[0]);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/triad/synthesis/:id/select", async (req, res) => {
+    try {
+      const input = conceptDirectionSelectSchema.parse(req.body || {});
+      const run = await storage.getConceptSynthesisRun(req.params.id);
+      if (!run) return res.status(404).json({ error: "Synthesis run not found" });
+
+      const directions = (run.directions as any[]) || [];
+      const selected = directions.find((item) => item?.id === input.directionId);
+      if (!selected) return res.status(404).json({ error: "Direction not found in this synthesis run" });
+
+      // Alternatives are preserved as archived records rather than deleted.
+      const archivedAlternatives = directions
+        .filter((item) => item?.id !== input.directionId)
+        .map((item) => ({ directionId: item.id, workingTitle: item.workingTitle, archivedAt: new Date().toISOString() }));
+
+      const updated = await storage.updateConceptSynthesisRun(req.params.id, {
+        selectedDirectionId: input.directionId,
+        status: "selected",
+        runtime: {
+          ...(run.runtime as Record<string, unknown>),
+          archivedAlternatives,
+        },
+      });
+
+      res.json({ synthesisRun: updated, selectedDirectionId: input.directionId, archivedAlternatives });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/dossiers/from-direction", async (req, res) => {
+    try {
+      const input = conceptDossierFromDirectionSchema.parse(req.body);
+      const run = await storage.getConceptSynthesisRun(input.synthesisRunId);
+      if (!run) return res.status(404).json({ error: "Synthesis run not found" });
+
+      const { dossierFromDirection } = await import("./core/conceptDossierMapping");
+      const synthesis = {
+        drawId: run.triadDrawId,
+        synthesisRunId: run.id,
+        context: run.context as any,
+        oracle: run.oracleAnalysis as any,
+        directions: run.directions as any,
+        contributions: run.contributions as any,
+        runtime: run.runtime as any,
+      };
+      const dossier = dossierFromDirection(synthesis, input.directionId);
+
+      const created = await storage.createConceptDossier({
+        id: dossier.id,
+        propertyId: input.propertyId ?? null,
+        sourceType: "triad",
+        source: { drawId: run.triadDrawId, directionId: input.directionId, synthesisRunId: run.id },
+        dossier: dossier,
+        status: "developing",
+      });
+
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/dossiers/:id/greenlight", async (req, res) => {
+    try {
+      const input = conceptDossierGreenlightSchema.parse(req.body);
+      const dossier = await storage.getConceptDossier(input.dossierId);
+      if (!dossier) return res.status(404).json({ error: "Dossier not found" });
+
+      const { createPropertyFromDossier } = await import("./core/conceptPropertyService");
+      const property = await createPropertyFromDossier(dossier.dossier as any);
+
+      await storage.updateConceptDossier(input.dossierId, {
+        status: "greenlit",
+        dossier: { ...(dossier.dossier as Record<string, unknown>), status: "greenlit" },
+      });
+
+      res.status(201).json({ property, dossier });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }

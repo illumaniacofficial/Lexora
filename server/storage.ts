@@ -17,6 +17,7 @@ import {
   readerMemberships, storefrontOrders, referrals, launchSchedules, mediaAssets, notifications,
   bookEditions, editionChapters, workspaceMembers, chapterComments, chapterVersions, audioTracks,
   studioProperties, propertyProjects, creativeArtifacts, continuitySnapshots, conceptDossiers, triadDraws,
+  artifactStreams, conceptSynthesisRuns,
   type Series, type InsertSeries, type StyleFingerprint, type InsertStyleFingerprint,
   type BrandKit, type InsertBrandKit, type StoryEntity, type InsertStoryEntity,
   type ChapterAnalysis, type InsertChapterAnalysis, type MarketReport, type InsertMarketReport,
@@ -36,6 +37,8 @@ import {
   type ContinuitySnapshot, type InsertContinuitySnapshot,
   type ConceptDossierRow, type InsertConceptDossier,
   type TriadDrawRow, type InsertTriadDraw,
+  type ArtifactStreamRow, type InsertArtifactStream,
+  type ConceptSynthesisRunRow, type InsertConceptSynthesisRun,
 } from "@shared/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 
@@ -974,6 +977,54 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async createCreativeArtifactWithAtomicVersion(
+    data: Omit<InsertCreativeArtifact, "version"> & { version?: number },
+  ): Promise<CreativeArtifactRow> {
+    return db.transaction(async (tx) => {
+      const streamId = [
+        data.propertyId || "none",
+        data.projectId ?? "none",
+        data.chapterId ?? "none",
+        data.type,
+      ].join(":");
+
+      const [stream] = await tx
+        .insert(artifactStreams)
+        .values({
+          id: streamId,
+          propertyId: data.propertyId ?? null,
+          projectId: data.projectId ?? null,
+          chapterId: data.chapterId ?? null,
+          type: data.type,
+          nextVersion: 1,
+        })
+        .onConflictDoNothing({ target: artifactStreams.id })
+        .returning();
+
+      const [lockedStream] = await tx
+        .select()
+        .from(artifactStreams)
+        .where(eq(artifactStreams.id, stream?.id || streamId))
+        .for("update");
+
+      if (!lockedStream) {
+        throw new Error(`Unable to initialize artifact stream for ${data.type}`);
+      }
+
+      const version = lockedStream.nextVersion;
+      await tx
+        .update(artifactStreams)
+        .set({ nextVersion: version + 1, updatedAt: new Date() })
+        .where(eq(artifactStreams.id, lockedStream.id));
+
+      const [created] = await tx
+        .insert(creativeArtifacts)
+        .values({ ...data, version })
+        .returning();
+      return created;
+    });
+  }
+
   async getCreativeArtifacts(opts: { projectId?: number; propertyId?: string; chapterId?: number; state?: string }): Promise<CreativeArtifactRow[]> {
     const conditions = [];
     if (opts.projectId != null) conditions.push(eq(creativeArtifacts.projectId, opts.projectId));
@@ -1036,6 +1087,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(conceptDossiers).orderBy(desc(conceptDossiers.createdAt));
   }
 
+  async getConceptDossier(id: string): Promise<ConceptDossierRow | undefined> {
+    const [dossier] = await db.select().from(conceptDossiers).where(eq(conceptDossiers.id, id));
+    return dossier;
+  }
+
   async updateConceptDossier(id: string, data: Partial<InsertConceptDossier>): Promise<ConceptDossierRow | undefined> {
     const [updated] = await db
       .update(conceptDossiers)
@@ -1052,6 +1108,53 @@ export class DatabaseStorage implements IStorage {
 
   async getTriadDraws(limit = 50): Promise<TriadDrawRow[]> {
     return db.select().from(triadDraws).orderBy(desc(triadDraws.createdAt)).limit(limit);
+  }
+
+  async getTriadDraw(id: string): Promise<TriadDrawRow | undefined> {
+    const [draw] = await db.select().from(triadDraws).where(eq(triadDraws.id, id));
+    return draw;
+  }
+
+  async updateTriadDraw(id: string, data: Partial<InsertTriadDraw>): Promise<TriadDrawRow | undefined> {
+    const [updated] = await db
+      .update(triadDraws)
+      .set(data)
+      .where(eq(triadDraws.id, id))
+      .returning();
+    return updated;
+  }
+
+  async createConceptSynthesisRun(data: InsertConceptSynthesisRun): Promise<ConceptSynthesisRunRow> {
+    const [created] = await db.insert(conceptSynthesisRuns).values(data).returning();
+    return created;
+  }
+
+  async getConceptSynthesisRun(id: string): Promise<ConceptSynthesisRunRow | undefined> {
+    const [run] = await db.select().from(conceptSynthesisRuns).where(eq(conceptSynthesisRuns.id, id));
+    return run;
+  }
+
+  async getConceptSynthesisRuns(opts: { triadDrawId?: string; propertyId?: string; limit?: number } = {}): Promise<ConceptSynthesisRunRow[]> {
+    const conditions = [];
+    if (opts.triadDrawId) conditions.push(eq(conceptSynthesisRuns.triadDrawId, opts.triadDrawId));
+    if (opts.propertyId) conditions.push(eq(conceptSynthesisRuns.propertyId, opts.propertyId));
+    const query = db.select().from(conceptSynthesisRuns);
+    const rows = conditions.length > 0
+      ? await query.where(and(...conditions)).orderBy(desc(conceptSynthesisRuns.createdAt)).limit(opts.limit ?? 25)
+      : await query.orderBy(desc(conceptSynthesisRuns.createdAt)).limit(opts.limit ?? 25);
+    return rows;
+  }
+
+  async updateConceptSynthesisRun(
+    id: string,
+    data: Partial<InsertConceptSynthesisRun>,
+  ): Promise<ConceptSynthesisRunRow | undefined> {
+    const [updated] = await db
+      .update(conceptSynthesisRuns)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(conceptSynthesisRuns.id, id))
+      .returning();
+    return updated;
   }
 
   async getDashboardStats() {

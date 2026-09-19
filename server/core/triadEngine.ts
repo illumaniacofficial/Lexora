@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { TriadCard, TriadDraw, TriadMode, TriadAxis } from "./concepts";
+import type { ConceptContext, TriadCard, TriadDraw, TriadMode, TriadAxis } from "./concepts";
 
 const WHO: TriadCard[] = [
   { id: "who-businessman", axis: "who", label: "Businessman", text: "A very serious businessman", tags: ["adult", "business", "city", "status"], source: "curated" },
@@ -59,32 +59,81 @@ const WILDCARDS = [
   "THE VILLAIN TELLS HALF THE STORY",
 ];
 
-function randomItem<T>(items: T[]): T {
-  return items[crypto.randomInt(0, items.length)];
+function randomItem<T>(items: T[], randomInt: RandomInt = defaultRandomInt): T {
+  return items[randomInt(0, items.length)];
 }
 
-function tagScore(card: TriadCard, tags: string[]): number {
+export type RandomInt = (min: number, max: number) => number;
+
+export function defaultRandomInt(min: number, max: number): number {
+  return crypto.randomInt(min, max);
+}
+
+function normalizeTag(value: string | undefined): string | null {
+  const normalized = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || null;
+}
+
+export function conceptContextToTags(context: ConceptContext = {}): string[] {
+  const values = [
+    context.audience,
+    context.format,
+    context.genre,
+    context.topic,
+    context.tone,
+    context.purpose,
+    context.ageBand,
+    context.maturity,
+    context.seriesIntent,
+    context.marketObjective,
+    context.language,
+  ];
+  const tags = values
+    .flatMap((value) => [normalizeTag(value), ...(value || "").toLowerCase().split(/[^a-z0-9]+/)])
+    .filter((tag): tag is string => Boolean(tag && tag.length > 2));
+  return [...new Set(tags)];
+}
+
+export function tagScore(card: TriadCard, tags: string[]): number {
   if (tags.length === 0) return 1;
   return 1 + card.tags.filter((tag) => tags.includes(tag)).length * 3;
 }
 
-function weightedItem(cards: TriadCard[], tags: string[]): TriadCard {
+/**
+ * Pure, deterministic counterpart to weightedItem: given a roll in the range
+ * [0, totalWeight) it returns the card the weighted draw would select.
+ * Exposed so Intelligent Draw weighting can be tested without sampling.
+ */
+export function weightedCardForRoll(cards: TriadCard[], tags: string[], roll: number): TriadCard {
   const weights = cards.map((card) => tagScore(card, tags));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
-  let roll = crypto.randomInt(0, Math.max(1, total));
+  let remaining = Math.max(0, Math.min(roll, total - 1));
   for (let i = 0; i < cards.length; i++) {
-    roll -= weights[i];
-    if (roll < 0) return cards[i];
+    remaining -= weights[i];
+    if (remaining < 0) return cards[i];
   }
   return cards[cards.length - 1];
 }
 
-function overlap(a: TriadCard, b: TriadCard): number {
+export function totalWeight(cards: TriadCard[], tags: string[]): number {
+  return cards.reduce((sum, card) => sum + tagScore(card, tags), 0);
+}
+
+function weightedItem(cards: TriadCard[], tags: string[], randomInt: RandomInt = defaultRandomInt): TriadCard {
+  const total = totalWeight(cards, tags);
+  return weightedCardForRoll(cards, tags, randomInt(0, Math.max(1, total)));
+}
+
+export function cardAffinityOverlap(a: TriadCard, b: TriadCard): number {
   const aTags = new Set(a.tags);
   return b.tags.filter((tag) => aTags.has(tag)).length;
 }
 
-function forbiddenHow(who: TriadCard, what: TriadCard): TriadCard {
+function overlap(a: TriadCard, b: TriadCard): number {
+  return cardAffinityOverlap(a, b);
+}
+
+export function forbiddenHowCard(who: TriadCard, what: TriadCard): TriadCard {
   return [...HOW].sort((a, b) => {
     const scoreA = overlap(a, who) + overlap(a, what);
     const scoreB = overlap(b, who) + overlap(b, what);
@@ -92,27 +141,41 @@ function forbiddenHow(who: TriadCard, what: TriadCard): TriadCard {
   })[0];
 }
 
+function forbiddenHow(who: TriadCard, what: TriadCard): TriadCard {
+  return forbiddenHowCard(who, what);
+}
+
 export interface DrawTriadOptions {
   mode?: TriadMode;
   contextTags?: string[];
+  context?: ConceptContext;
   locked?: Partial<Record<TriadAxis, TriadCard>>;
   wildcardChance?: number;
+  /** Injectable integer RNG for deterministic tests. Defaults to crypto. */
+  randomInt?: RandomInt;
+  /** Injectable unit RNG for deterministic tests. Defaults to Math.random. */
+  random?: () => number;
 }
 
 export function drawTriad(options: DrawTriadOptions = {}): TriadDraw {
   const mode = options.mode || "pure-chaos";
-  const tags = options.contextTags || [];
+  const randomInt = options.randomInt || defaultRandomInt;
+  const random = options.random || (() => Math.random());
+  const tags = [
+    ...(options.contextTags || []),
+    ...conceptContextToTags(options.context),
+  ];
   const locked = options.locked || {};
 
   const choose = (cards: TriadCard[]) =>
-    mode === "intelligent-draw" ? weightedItem(cards, tags) : randomItem(cards);
+    mode === "intelligent-draw" ? weightedItem(cards, tags, randomInt) : randomItem(cards, randomInt);
 
   const who = locked.who || choose(WHO);
   const what = locked.what || choose(WHAT);
   const how = locked.how || (mode === "forbidden-combination" ? forbiddenHow(who, what) : choose(HOW));
 
   const chance = options.wildcardChance ?? 0.05;
-  const wildcard = Math.random() < chance ? [randomItem(WILDCARDS)] : [];
+  const wildcard = random() < chance ? [randomItem(WILDCARDS, randomInt)] : [];
 
   return {
     id: crypto.randomUUID(),
