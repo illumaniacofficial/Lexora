@@ -692,3 +692,125 @@ export type InsertChapterVersion = z.infer<typeof insertChapterVersionSchema>;
 export const insertAudioTrackSchema = createInsertSchema(audioTracks).omit({ createdAt: true });
 export type AudioTrack = typeof audioTracks.$inferSelect;
 export type InsertAudioTrack = z.infer<typeof insertAudioTrackSchema>;
+
+
+// ===================================================================
+// Lexora Revival — additive studio operating model
+// These tables sit above/alongside legacy projects. They are intentionally
+// additive so existing manuscripts remain readable without destructive migration.
+// ===================================================================
+
+export const studioProperties = pgTable("studio_properties", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  workingTitle: text("working_title").notNull(),
+  canonicalTitle: text("canonical_title"),
+  status: text("status").notNull().default("idea"),
+  format: text("format").notNull().default("custom"),
+  seriesIntent: text("series_intent").notNull().default("standalone"),
+  legacyVertical: text("legacy_vertical"),
+  classification: jsonb("classification").notNull().default(sql`'{}'::jsonb`),
+  targetContract: jsonb("target_contract").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("studio_properties_status_idx").on(table.status),
+  index("studio_properties_updated_idx").on(table.updatedAt),
+]);
+
+export const propertyProjects = pgTable("property_projects", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  propertyId: varchar("property_id", { length: 64 }).notNull().references(() => studioProperties.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  relation: text("relation").notNull().default("book"),
+  isPrimary: boolean("is_primary").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  unique("property_projects_project_unique").on(table.projectId),
+  index("property_projects_property_idx").on(table.propertyId),
+]);
+
+export const creativeArtifacts = pgTable("creative_artifacts", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  propertyId: varchar("property_id", { length: 64 }).references(() => studioProperties.id, { onDelete: "set null" }),
+  projectId: integer("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  chapterId: integer("chapter_id").references(() => chapters.id, { onDelete: "set null" }),
+  type: text("type").notNull(),
+  version: integer("version").notNull().default(1),
+  parentArtifactId: varchar("parent_artifact_id", { length: 64 }),
+  createdBy: text("created_by").notNull().default("system"),
+  runtimeId: text("runtime_id"),
+  model: text("model"),
+  promptVersion: text("prompt_version"),
+  context: jsonb("context").notNull().default(sql`'{}'::jsonb`),
+  content: jsonb("content").notNull().default(sql`'null'::jsonb`),
+  contentHash: text("content_hash").notNull(),
+  estimatedCostUsd: real("estimated_cost_usd"),
+  state: text("state").notNull().default("generated"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("creative_artifacts_property_idx").on(table.propertyId),
+  index("creative_artifacts_project_idx").on(table.projectId),
+  index("creative_artifacts_chapter_idx").on(table.chapterId),
+  index("creative_artifacts_state_idx").on(table.state),
+  index("creative_artifacts_created_idx").on(table.createdAt),
+]);
+
+export const continuitySnapshots = pgTable("continuity_snapshots", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  version: integer("version").notNull().default(1),
+  state: jsonb("state").notNull().default(sql`'{}'::jsonb`),
+  lastAcceptedChapterId: integer("last_accepted_chapter_id").references(() => chapters.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  unique("continuity_snapshots_project_unique").on(table.projectId),
+]);
+
+export const conceptDossiers = pgTable("concept_dossiers", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  propertyId: varchar("property_id", { length: 64 }).references(() => studioProperties.id, { onDelete: "set null" }),
+  sourceType: text("source_type").notNull(),
+  source: jsonb("source").notNull().default(sql`'{}'::jsonb`),
+  dossier: jsonb("dossier").notNull().default(sql`'{}'::jsonb`),
+  status: text("status").notNull().default("candidate"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("concept_dossiers_property_idx").on(table.propertyId),
+  index("concept_dossiers_status_idx").on(table.status),
+]);
+
+export const triadDraws = pgTable("triad_draws", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  mode: text("mode").notNull().default("pure-chaos"),
+  whoCard: jsonb("who_card").notNull(),
+  whatCard: jsonb("what_card").notNull(),
+  howCard: jsonb("how_card").notNull(),
+  lockedAxes: text("locked_axes").array().notNull().default(sql`ARRAY[]::text[]`),
+  wildcards: text("wildcards").array().notNull().default(sql`ARRAY[]::text[]`),
+  status: text("status").notNull().default("drawn"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => [
+  index("triad_draws_created_idx").on(table.createdAt),
+]);
+
+export const insertStudioPropertySchema = createInsertSchema(studioProperties).omit({ createdAt: true, updatedAt: true });
+export const insertPropertyProjectSchema = createInsertSchema(propertyProjects).omit({ createdAt: true });
+export const insertCreativeArtifactSchema = createInsertSchema(creativeArtifacts).omit({ createdAt: true });
+export const insertContinuitySnapshotSchema = createInsertSchema(continuitySnapshots).omit({ createdAt: true, updatedAt: true });
+export const insertConceptDossierSchema = createInsertSchema(conceptDossiers).omit({ createdAt: true, updatedAt: true });
+export const insertTriadDrawSchema = createInsertSchema(triadDraws).omit({ createdAt: true });
+
+export type StudioProperty = typeof studioProperties.$inferSelect;
+export type InsertStudioProperty = z.infer<typeof insertStudioPropertySchema>;
+export type PropertyProject = typeof propertyProjects.$inferSelect;
+export type InsertPropertyProject = z.infer<typeof insertPropertyProjectSchema>;
+export type CreativeArtifactRow = typeof creativeArtifacts.$inferSelect;
+export type InsertCreativeArtifact = z.infer<typeof insertCreativeArtifactSchema>;
+export type ContinuitySnapshot = typeof continuitySnapshots.$inferSelect;
+export type InsertContinuitySnapshot = z.infer<typeof insertContinuitySnapshotSchema>;
+export type ConceptDossierRow = typeof conceptDossiers.$inferSelect;
+export type InsertConceptDossier = z.infer<typeof insertConceptDossierSchema>;
+export type TriadDrawRow = typeof triadDraws.$inferSelect;
+export type InsertTriadDraw = z.infer<typeof insertTriadDrawSchema>;
