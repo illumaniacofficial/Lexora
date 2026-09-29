@@ -48,7 +48,14 @@ export const queryClient = new QueryClient({
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,
-      retry: false,
+      // Safe reads recover from brief mobile/network failures. Authentication,
+      // permission, and not-found responses are real failures and are not retried.
+      retry: (failureCount, error: any) => {
+        const message = String(error?.message || "");
+        if (/^(401|403|404):/.test(message)) return false;
+        return failureCount < 2;
+      },
+      retryDelay: (attemptIndex) => Math.min(750 * 2 ** attemptIndex, 2500),
     },
     mutations: {
       retry: false,
