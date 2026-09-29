@@ -197,6 +197,7 @@ export interface IStorage {
   createEditionChapter(data: InsertEditionChapter): Promise<EditionChapter>;
   updateEditionChapter(id: number, data: Partial<InsertEditionChapter>): Promise<EditionChapter>;
   deleteEditionChapters(editionId: number): Promise<void>;
+  replaceEditionChapters(editionId: number, chapters: Omit<InsertEditionChapter, "editionId">[]): Promise<void>;
 
   getWorkspaceMembers(): Promise<WorkspaceMember[]>;
   createWorkspaceMember(data: InsertWorkspaceMember): Promise<WorkspaceMember>;
@@ -797,6 +798,14 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteEditionChapters(editionId: number) {
     await db.delete(editionChapters).where(eq(editionChapters.editionId, editionId));
+  }
+  async replaceEditionChapters(editionId: number, chapters: Omit<InsertEditionChapter, "editionId">[]) {
+    await db.transaction(async (tx) => {
+      await tx.delete(editionChapters).where(eq(editionChapters.editionId, editionId));
+      if (chapters.length > 0) {
+        await tx.insert(editionChapters).values(chapters.map((chapter) => ({ ...chapter, editionId })));
+      }
+    });
   }
 
   async getWorkspaceMembers() {
