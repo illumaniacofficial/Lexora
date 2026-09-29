@@ -20,6 +20,7 @@ export const DEFAULT_VOICE_ID = "fabb918a343d4591b428083a35980dc4";
 
 export const VOICE_OPTIONS: { value: NarratorVoice; label: string; description: string; isFree?: boolean; isFishAudio?: boolean; isUnavailable?: boolean }[] = [
   { value: "fabb918a343d4591b428083a35980dc4", label: "Sergio FA", description: "AI cloned author voice · Fish Audio", isFree: false, isFishAudio: true },
+  { value: "32f6c4cad6bb4a3dba1f3468186f2af5", label: "Sergio Joven", description: "Young Sergio clone · Spanish-capable · Fish Audio", isFree: false, isFishAudio: true },
   { value: "bbb58d698b5f46719fd04688dfac7359", label: "Nathan", description: "Warm US audiobook narrator · Fish Audio", isFree: false, isFishAudio: true },
   { value: "f6a19fe5ab494e1fa51bb1476d583a44", label: "Abby", description: "Smooth US audiobook narrator · Fish Audio", isFree: false, isFishAudio: true },
   { value: "e686ae649ee44f219a108aacba206c1a", label: "Marcus", description: "Calm, deep storyteller · Fish Audio", isFree: false, isFishAudio: true },
