@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -175,7 +176,11 @@ async function initStripe() {
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch(console.error);
 
-  await initStripe();
+  if (process.env.ENABLE_STRIPE === "true") {
+    await initStripe();
+  } else {
+    log("Stripe disabled (set ENABLE_STRIPE=true to enable)", "stripe");
+  }
 
   await registerRoutes(httpServer, app);
 
@@ -192,14 +197,9 @@ async function initStripe() {
     return res.status(status).json({ message });
   });
 
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
-  }
-
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // Frontend (client) is served separately by the Vite dev server on port 3000.
+  // This process is the API server only.
+  const port = parseInt(process.env.PORT || "8500", 10);
   httpServer.listen(
     {
       port,
