@@ -4874,6 +4874,10 @@ Return JSON with:
 
   const FISH_TTS_MODEL = "s2.1-pro";
   const FISH_TTS_CACHE_VERSION = "fish-s2.1-pro-v1";
+  // Coalesce identical concurrent synthesis requests so mobile retries do not
+  // create duplicate Fish generations/charges. Regeneration has its own lane:
+  // repeated taps while one regeneration is running share that fresh take.
+  const fishTtsInflight = new Map<string, Promise<{ ok: boolean; status: number; error?: string; audio?: Buffer }>>();
 
   app.post("/api/fish-tts", async (req, res) => {
     try {
@@ -4937,31 +4941,45 @@ Return JSON with:
         return res.json({ audio: base64Audio, format: "mp3" });
       }
 
-      const response = await fetch("https://api.fish.audio/v1/tts", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "model": FISH_TTS_MODEL,
-        },
-        body: JSON.stringify({
-          text: trimmed,
-          reference_id: voice,
-          format: "mp3",
-          latency: "normal",
-          normalize: true,
-          chunk_length: 200,
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => "Unknown error");
-        console.error("Fish Audio TTS error:", response.status, errText);
-        return res.status(response.status).json({ error: `Fish Audio error: ${errText}` });
+      const inflightKey = `${cacheKey}:${shouldRegenerate ? "regenerate" : "normal"}`;
+      let generation = fishTtsInflight.get(inflightKey);
+      if (!generation) {
+        generation = (async () => {
+          const response = await fetch("https://api.fish.audio/v1/tts", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${apiKey}`,
+              "Content-Type": "application/json",
+              "model": FISH_TTS_MODEL,
+            },
+            body: JSON.stringify({
+              text: trimmed,
+              reference_id: voice,
+              format: "mp3",
+              latency: "normal",
+              normalize: true,
+              chunk_length: 200,
+            }),
+          });
+          if (!response.ok) {
+            const error = await response.text().catch(() => "Unknown error");
+            return { ok: false, status: response.status, error };
+          }
+          return { ok: true, status: response.status, audio: Buffer.from(await response.arrayBuffer()) };
+        })();
+        fishTtsInflight.set(inflightKey, generation);
+        generation.finally(() => {
+          if (fishTtsInflight.get(inflightKey) === generation) fishTtsInflight.delete(inflightKey);
+        }).catch(() => {});
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = Buffer.from(arrayBuffer);
+      const generated = await generation;
+      if (!generated.ok || !generated.audio) {
+        console.error("Fish Audio TTS error:", generated.status, generated.error || "Unknown error");
+        return res.status(generated.status || 502).json({ error: `Fish Audio error: ${generated.error || "Unknown error"}` });
+      }
+
+      const audioBuffer = generated.audio;
       const base64Audio = audioBuffer.toString("base64");
 
       fs.writeFileSync(diskFile, audioBuffer);
