@@ -591,18 +591,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // In-memory work cannot survive a process restart. Recover only the transient
   // "generating" marker; never touch completed manuscript content.
   try {
-    let recovered = 0;
+    let recoveredChapters = 0;
+    let recoveredProjects = 0;
+    const transientProjectStates = new Set(["trend_analysis", "outlining", "marketing"]);
     for (const project of await storage.getProjects()) {
-      for (const chapter of await storage.getChapters(project.id)) {
+      const projectChapters = await storage.getChapters(project.id);
+      for (const chapter of projectChapters) {
         if (chapter.status === "generating") {
           await storage.updateChapter(chapter.id, { status: "pending" });
-          recovered++;
+          recoveredChapters++;
         }
       }
+
+      // A process restart bypasses route-level catch/finally blocks. Derive a
+      // stable project state only from durable chapter data; never delete work.
+      if (transientProjectStates.has(project.status)) {
+        const hasChapters = projectChapters.length > 0;
+        const allComplete = hasChapters && projectChapters.every((chapter) => chapter.status === "complete");
+        const stableStatus = !hasChapters ? "draft" : allComplete ? "editing" : "writing";
+        await storage.updateProject(project.id, { status: stableStatus });
+        recoveredProjects++;
+      }
     }
-    if (recovered > 0) console.warn(`Recovered ${recovered} interrupted chapter generation job(s) after restart.`);
+    if (recoveredChapters > 0 || recoveredProjects > 0) {
+      console.warn(`Recovered interrupted workflows after restart: ${recoveredChapters} chapter job(s), ${recoveredProjects} project workflow(s).`);
+    }
   } catch (err: any) {
-    console.error("Chapter job recovery warning:", err?.message || err);
+    console.error("Workflow recovery warning:", err?.message || err);
   }
 
   // Private Studio mode keeps historical storefront data readable to admins but
