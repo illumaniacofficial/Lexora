@@ -74,6 +74,7 @@ export async function callConceptRuntime(draw: TriadDraw | TriadDrawRow, context
 
   const completion = await openai.chat.completions.create({
     model: HIGH_MODEL,
+    reasoning_effort: "high",
     messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
     max_completion_tokens: 8192,
     response_format: { type: "json_object" },
