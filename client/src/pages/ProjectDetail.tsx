@@ -2423,8 +2423,11 @@ export default function ProjectDetail() {
   });
   const chapterMutation = useMutation({
     mutationFn: (chapterId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/generate`),
-    onSuccess: () => { invalidate(); toast({ title: "Chapter written" }); },
-    onError: (e: any) => toast({ title: "Chapter failed", description: e.message, variant: "destructive" }),
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Chapter writing started", description: "Lexora will keep writing in the background even if you leave this screen." });
+    },
+    onError: (e: any) => toast({ title: "Could not start chapter writing", description: e.message, variant: "destructive" }),
   });
   const marketingMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-marketing`),
