@@ -2795,6 +2795,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
+          reasoning_effort: "high",
           messages: [
             { role: "system", content: systemDraftPrompt },
             { role: "user", content: userDraftPrompt },
