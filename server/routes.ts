@@ -2,7 +2,6 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { db } from "./db";
 import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL, OPENAI_CONFIGURED } from "./openai";
 import { buildConsistencyContext, type ContinuityExtras } from "./consistency";
 import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
@@ -11,7 +10,7 @@ import { extractStoryEntities } from "./graph";
 import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
-import { users, insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema, LANGUAGES } from "@shared/schema";
+import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema, LANGUAGES } from "@shared/schema";
 import { buildEpub } from "./epub";
 import { buildDocx } from "./docx";
 import { buildMobi } from "./mobi";
@@ -27,7 +26,6 @@ import { z } from "zod";
 import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
 import { estimateCost } from "./cost";
 import { ensurePropertyForProject } from "./core/propertyService";
@@ -491,21 +489,7 @@ const aiRateLimit = rateLimit({
 async function ensureAdminUser() {
   const { admin, production } = getConfig();
   const existing = await storage.getUserByUsername(admin.username);
-  const forceReset = process.env.ADMIN_FORCE_RESET === "true";
-
-  if (existing) {
-    // One-time operator recovery hook. It is inert unless explicitly enabled,
-    // and reuses the already-secret ADMIN_INITIAL_PASSWORD managed by the host.
-    if (forceReset) {
-      if (!admin.initialPassword) {
-        throw new Error("ADMIN_FORCE_RESET requires ADMIN_INITIAL_PASSWORD.");
-      }
-      const hashed = await bcrypt.hash(admin.initialPassword, 12);
-      await db.update(users).set({ password: hashed }).where(eq(users.id, existing.id));
-      console.log(`Admin password reset (username: ${admin.username})`);
-    }
-    return;
-  }
+  if (existing) return;
 
   if (!admin.initialPassword) {
     throw new Error(
