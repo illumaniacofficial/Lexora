@@ -313,6 +313,20 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
         setDuration(audio.duration);
       };
 
+      // Playback/network failures stay local to the current narration page.
+      // Never change project state or navigation from the audio player.
+      audio.onerror = () => {
+        console.error("Audio element playback failed for current narration page");
+        setIsPlaying(false);
+        setIsLoading(false);
+        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+        toast({
+          title: "Narration paused",
+          description: "This page could not continue playing. Retry or regenerate it without leaving the book.",
+          variant: "destructive",
+        });
+      };
+
       const cumul = cumulWeightsRef.current;
       const updateProgress = () => {
         if (audio && audio.duration > 0) {
