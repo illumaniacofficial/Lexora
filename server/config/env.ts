@@ -73,7 +73,7 @@ function buildConfig() {
       apiKey: openAiApiKey,
       baseURL: openAiBaseUrl,
       fastModel: env.OPENAI_FAST_MODEL || "gpt-5-mini",
-      highModel: env.OPENAI_HIGH_MODEL || "gpt-5.1",
+      highModel: env.OPENAI_HIGH_MODEL || "gpt-5.6-sol",
       imageModel: env.OPENAI_IMAGE_MODEL || "gpt-image-1",
       configured: Boolean(openAiApiKey),
       usingLegacyReplitEnv:
