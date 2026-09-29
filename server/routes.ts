@@ -3720,7 +3720,9 @@ List the key proper nouns, character names, recurring terminology and brand term
       glossary = "";
     }
 
-    // 2) Translate each chapter, preserving structure, tone and the glossary.
+    // 2) Translate each chapter into memory first. Existing translated chapters
+    // stay untouched until the entire replacement is ready.
+    const translatedChapters: Array<{ chapterNumber: number; title: string; content: string; wordCount: number }> = [];
     for (const ch of chapters) {
       const translated = await runStep(projectId, `Translate Ch ${ch.chapterNumber} — ${tgtName}`, HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
@@ -3754,8 +3756,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
       }
 
       const wordCount = translated.split(/\s+/).filter(Boolean).length;
-      await storage.createEditionChapter({
-        editionId,
+      translatedChapters.push({
         chapterNumber: ch.chapterNumber,
         title: translatedTitle,
         content: translated,
@@ -3765,8 +3766,7 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
 
     // 3) QA pass — terminology/consistency/tone review recorded as a run step.
     try {
-      const editionChapterList = await storage.getEditionChapters(editionId);
-      const sample = editionChapterList.slice(0, 3).map(c => `## ${c.title}\n${(c.content || "").slice(0, 1200)}`).join("\n\n");
+      const sample = translatedChapters.slice(0, 3).map(c => `## ${c.title}\n${c.content.slice(0, 1200)}`).join("\n\n");
       await runStep(projectId, `Translation QA — ${tgtName}`, FAST_MODEL, async () => {
         const completion = await openai.chat.completions.create({
           model: FAST_MODEL,
@@ -3785,6 +3785,11 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
     } catch {
       /* QA is best-effort */
     }
+
+    // Copy-on-success: one DB transaction replaces the old translated chapter
+    // set only after every new chapter exists. A provider failure leaves the
+    // previous good edition intact.
+    await storage.replaceEditionChapters(editionId, translatedChapters);
   }
 
   app.post("/api/projects/:id/editions", async (req, res) => {
@@ -3817,7 +3822,6 @@ Preserve the author's voice, tone and meaning. Keep Markdown structure (headings
       let edition = existing;
       if (edition) {
         if (edition.status === "translating") return res.status(409).json({ error: "Translation already in progress" });
-        await storage.deleteEditionChapters(edition.id);
         edition = await storage.updateBookEdition(edition.id, { status: "translating" });
       } else {
         edition = await storage.createBookEdition({ projectId, language, status: "translating" });
