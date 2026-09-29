@@ -107,18 +107,22 @@ export async function seedDatabase() {
     const seedProjectCount = (seedData.projects || []).length;
     const existing = await db.select().from(projects);
 
-    if (existing.length >= seedProjectCount) return;
-
+    // SAFETY INVARIANT: this seed must never replace live data. db-seed.json is
+    // starter/demo data only, so it is applied exclusively to an EMPTY projects
+    // table. If any project already exists we treat the database as live and
+    // skip seeding entirely — a stale seed file can therefore never delete or
+    // reset user/project/chapter data during normal boot.
     if (existing.length > 0) {
-      console.log(`Production has ${existing.length} projects, seed has ${seedProjectCount}. Clearing and re-seeding...`);
-      const clearOrder = [...SEED_ORDER].reverse();
-      for (const key of clearOrder) {
-        const tableName = TABLE_MAP[key];
-        try {
-          await db.execute(sql.raw(`DELETE FROM "${tableName}"`));
-        } catch {}
-      }
+      console.log(`[seed] Database already has ${existing.length} project(s); skipping seed to preserve existing data.`);
+      return;
     }
+
+    if (seedProjectCount === 0) {
+      console.log("[seed] Seed file contains no projects; skipping seed.");
+      return;
+    }
+
+    console.log(`[seed] Empty database detected; seeding ${seedProjectCount} starter project(s) from db-seed.json...`);
 
     let totalInserted = 0;
     let errors = 0;
