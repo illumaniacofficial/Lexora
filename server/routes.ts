@@ -491,13 +491,16 @@ const aiRateLimit = rateLimit({
 async function ensureAdminUser() {
   const { admin, production } = getConfig();
   const existing = await storage.getUserByUsername(admin.username);
-  const resetPassword = process.env.ADMIN_RESET_PASSWORD;
+  const forceReset = process.env.ADMIN_FORCE_RESET === "true";
 
   if (existing) {
-    // One-time operator recovery hook. It is inert unless the temporary
-    // ADMIN_RESET_PASSWORD variable is explicitly present for a deployment.
-    if (resetPassword) {
-      const hashed = await bcrypt.hash(resetPassword, 12);
+    // One-time operator recovery hook. It is inert unless explicitly enabled,
+    // and reuses the already-secret ADMIN_INITIAL_PASSWORD managed by the host.
+    if (forceReset) {
+      if (!admin.initialPassword) {
+        throw new Error("ADMIN_FORCE_RESET requires ADMIN_INITIAL_PASSWORD.");
+      }
+      const hashed = await bcrypt.hash(admin.initialPassword, 12);
       await db.update(users).set({ password: hashed }).where(eq(users.id, existing.id));
       console.log(`Admin password reset (username: ${admin.username})`);
     }
