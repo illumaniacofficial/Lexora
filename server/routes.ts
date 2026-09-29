@@ -2656,6 +2656,7 @@ Return JSON exactly:
       const result = await runStep(id, "Book Outline + DNA", HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
+    reasoning_effort: "high",
           messages: [{
             role: "system",
             content: `You are a professional book architect specializing in the ${project.vertical} ${isFiction(project.vertical) ? "genre" : "niche"}. Respond ONLY with valid JSON.`,
@@ -3663,6 +3664,7 @@ List the key proper nouns, character names, recurring terminology and brand term
       const translated = await runStep(projectId, `Translate Ch ${ch.chapterNumber} — ${tgtName}`, HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
+    reasoning_effort: "high",
           messages: [{
             role: "system",
             content: `You are a professional literary translator translating a ${project.vertical} book from ${srcName} into ${tgtName}.
@@ -5172,6 +5174,7 @@ Return JSON with:
         } else {
           const completion = await openai.chat.completions.create({
             model: HIGH_MODEL,
+    reasoning_effort: "high",
             messages: [
               intakeSystem,
               ...chatHistory,
