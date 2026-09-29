@@ -4,19 +4,24 @@ on:
   push:
     branches:
       - revival/wave-01-foundation
+      - revival/wave-04-emergent-runtime
   pull_request:
     branches:
       - main
   workflow_dispatch:
+
+concurrency:
+  group: revival-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    name: TypeScript + Build
+    name: TypeScript + Regression + Build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,6 +37,9 @@ jobs:
 
       - name: TypeScript check
         run: npm run check
+
+      - name: Wave 03 regression gate
+        run: npm run verify:wave03
 
       - name: Production build
         run: npm run build
