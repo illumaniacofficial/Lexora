@@ -2398,7 +2398,9 @@ export default function ProjectDetail() {
 
   const { data, isLoading, isFetching, error, refetch } = useQuery<ProjectDetailData>({
     queryKey: ["/api/projects", projectId],
-    refetchInterval: 5000,
+    // Reading/listening is a stable session. Background project polling must not
+    // interrupt the reader or compete with long-running narration requests.
+    refetchInterval: showReader ? false : 5000,
   });
   const { data: workspaceMe } = useQuery<{ role: WorkspaceRole }>({ queryKey: ["/api/workspace/me"] });
   const role: WorkspaceRole = workspaceMe?.role ?? "viewer";
@@ -2605,7 +2607,9 @@ export default function ProjectDetail() {
     );
   }
 
-  if (error) {
+  // A transient background refetch error must never discard project data that
+  // is already loaded. Only show the fatal project error when no usable data exists.
+  if (error && !data) {
     return (
       <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
         <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
