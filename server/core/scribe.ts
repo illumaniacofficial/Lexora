@@ -227,6 +227,7 @@ export async function scribeChat(opts: {
 
   const completion = await openai.chat.completions.create({
     model: HIGH_MODEL,
+    reasoning_effort: "high",
     messages,
     max_completion_tokens: 8192,
   });
