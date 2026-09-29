@@ -2339,6 +2339,18 @@ function EditionsPanel({ projectId, project, editions, completedCount }: { proje
                 {statusBadge(edition.status)}
                 <span className="text-[9px] font-mono text-muted-foreground/40">{edition.chapters.length} ch</span>
                 <div className="flex-1" />
+                {edition.status === "failed" && (
+                  <Button
+                    size="sm" variant="outline"
+                    className="h-7 px-2 text-[9px] font-mono border-red-500/30 text-red-300 bg-red-500/5"
+                    onClick={() => translateMutation.mutate(edition.language)}
+                    disabled={translateMutation.isPending}
+                    data-testid={`button-retry-edition-${edition.id}`}
+                  >
+                    {translateMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                    RETRY
+                  </Button>
+                )}
                 {edition.status === "complete" && edition.chapters.length > 0 && (
                   <>
                     <DropdownMenu>
