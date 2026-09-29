@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, SkipForward, Columns2, Square, Repeat } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, RefreshCw, SkipForward, Columns2, Square, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
@@ -635,19 +635,32 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     return { projectId, chapterId: pg.chapterId, pageIndex: Math.max(0, pg.pageInChapter - 1) };
   }, [pages, projectId]);
 
-  const fetchAudio = useCallback(async (text: string, voice: NarratorVoice, ctx?: { projectId: number; chapterId: number; pageIndex: number }): Promise<string> => {
-    const cacheKey = `${voice}:${text.slice(0, 100)}:${text.length}`;
+  const fetchAudio = useCallback(async (text: string, voice: NarratorVoice, ctx?: { projectId: number; chapterId: number; pageIndex: number }, regenerate = false): Promise<string> => {
+    const cacheKey = `fish-s2.1-pro-v1:${voice}:${text.slice(0, 100)}:${text.length}`;
+    if (regenerate) audioCacheRef.current.delete(cacheKey);
     const cached = audioCacheRef.current.get(cacheKey);
-    if (cached) return cached;
+    if (!regenerate && cached) return cached;
     const endpoint = isFishAudioVoice(voice) ? "/api/fish-tts" : "/api/tts";
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voice, ...(ctx || {}) }),
-    });
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "Unknown error");
-      throw new Error(`TTS request failed (${response.status}): ${errBody}`);
+
+    let response: Response | null = null;
+    let lastError = "";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, voice, regenerate, ...(ctx || {}) }),
+        });
+        if (response.ok) break;
+        lastError = await response.text().catch(() => "Unknown error");
+        if (response.status < 500 && response.status !== 429) break;
+      } catch (err: any) {
+        lastError = err?.message || "Network error";
+      }
+      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 750));
+    }
+    if (!response?.ok) {
+      throw new Error(`TTS request failed${response ? ` (${response.status})` : ""}: ${lastError || "Unknown error"}`);
     }
     const data = await response.json();
     if (!data.audio || typeof data.audio !== "string" || data.audio.length < 100) {
@@ -711,7 +724,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     setNarrationLoading(false);
   }, [selectedVoice, pages, goToImmediate, isNarratablePage]);
 
-  const playPage = useCallback(async (pageIdx: number) => {
+  const playPage = useCallback(async (pageIdx: number, regenerate = false) => {
     const pageData = getPageText(pageIdx);
     if (!pageData) {
       toast({ title: "Cannot narrate this page", description: "No readable text found on this page.", variant: "destructive" });
@@ -755,22 +768,17 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         return;
       }
 
-      if (stickyFallbackVoiceRef.current) {
-        setReaderUsingFallback(true);
-        startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx, stickyFallbackVoiceRef.current);
-        return;
-      }
-
       let audioDataUrl: string;
       try {
-        audioDataUrl = await fetchAudio(cleanText, selectedVoice, pageAudioContext(pageIdx));
+        audioDataUrl = await fetchAudio(cleanText, selectedVoice, pageAudioContext(pageIdx), regenerate);
+        stickyFallbackVoiceRef.current = null;
+        setReaderUsingFallback(false);
       } catch (fetchErr: any) {
-        console.warn("AI TTS failed in reader, falling back to browser voice:", fetchErr.message);
+        console.warn("AI TTS failed in reader, falling back for this page only:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
         if (fallbackVoice) {
-          stickyFallbackVoiceRef.current = fallbackVoice.id;
           setReaderUsingFallback(true);
-          toast({ title: "Using free voice", description: "Premium voice unavailable — switched to a free browser voice automatically." });
+          toast({ title: "Narration recovered", description: "Premium narration failed for this page. Lexora will use a device voice here and retry the premium voice on the next page." });
           startBrowserNarration(strippedText, wordCount, lastPageIdx, pageIdx, fallbackVoice.id);
           return;
         }
@@ -834,6 +842,13 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   useEffect(() => { playPageRef.current = playPage; }, [playPage]);
 
   const playCurrentPage = useCallback(() => playPage(currentPage), [playPage, currentPage]);
+
+  const regenerateCurrentPage = useCallback(() => {
+    stickyFallbackVoiceRef.current = null;
+    setReaderUsingFallback(false);
+    stopNarration();
+    void playPage(currentPage, true);
+  }, [playPage, currentPage, stopNarration]);
 
   const toggleNarration = useCallback(() => {
     if (browserTTSRef.current) {
@@ -1090,6 +1105,15 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                   {narrationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : isNarrating ? <Pause className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
                   {narrationLoading ? "Generating..." : isNarrating ? "Playing…" : isBrowserVoice(selectedVoice) ? "Play (Free)" : "Play This Page"}
                 </Button>
+                {!isBrowserVoice(selectedVoice) && (
+                  <Button size="icon" variant="ghost" onClick={regenerateCurrentPage}
+                    disabled={narrationLoading}
+                    className="h-10 w-10 text-stone-400 hover:text-purple-300"
+                    data-testid="button-reader-regenerate" aria-label="Regenerate this page"
+                    title="Regenerate this page — bypass cached narration">
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                )}
                 {isNarrating && (
                   <Button size="icon" variant="ghost" onClick={() => stopNarration()}
                     className="h-10 w-10 text-stone-400 hover:text-red-400"
