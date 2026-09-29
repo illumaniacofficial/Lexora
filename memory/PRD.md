@@ -27,10 +27,16 @@ Supervisor programs are fixed (backend=uvicorn@8001 in /app/backend, frontend=ya
 ## Status (2026-06 / build date 2026-09-29)
 - ✅ App runs end-to-end. Admin login works (admin/lexora2026).
 - ✅ PostgreSQL provisioned, Drizzle schema pushed (40 tables), seeded 210 demo records (5 books).
-- ✅ Dashboard, Projects, Library, Trend Intel, Analytics, Marketing, Referrals, Requests, Chat Studio, Autopilot, Settings pages load with real seeded data.
+- ✅ All pages load with real seeded data: Dashboard, Projects, Library, Trend Intel, Analytics, Marketing, Referrals, Requests, Chat Studio, Autopilot, Settings.
 - ✅ Reverse-proxy + session cookies verified through :8001.
-- ⏳ Live AI generation pending real OpenAI key (placeholder set so app boots). ElevenLabs/Fish keys pending for premium narration.
+- ✅ LIVE AI verified with real OpenAI key: trend analysis (gpt-5-mini), book outline (gpt-5.1, 11 chapters), chapter writing (gpt-5.1, 3200+ words), marketing, chat SSE.
+- ✅ Long AI generations (outline, chapter) converted to background jobs returning HTTP 202 immediately; the ProjectDetail page polls GET /api/projects/:id every 5s and shows results as they complete — fixes the ingress ~100s edge-timeout 502.
+- ✅ Testing agent: 16/16 backend tests pass, all frontend pages render.
 - 🚫 Stripe intentionally disabled (ENABLE_STRIPE=false).
+
+## Known Notes
+- Vite HMR websocket is rate-limited (429) by the ingress in preview — dev-only console noise, non-blocking.
+- Unauthenticated deep-links render the login form in-place (client-side gate) rather than changing the URL — minor UX.
 
 ## Keys (backend env at /app/.env)
 - AI_INTEGRATIONS_OPENAI_API_KEY (+ BASE_URL=https://api.openai.com/v1)

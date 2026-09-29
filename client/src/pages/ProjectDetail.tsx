@@ -2416,12 +2416,12 @@ export default function ProjectDetail() {
   });
   const outlineMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-outline`),
-    onSuccess: () => { invalidate(); toast({ title: "Outline generated" }); },
+    onSuccess: () => { invalidate(); toast({ title: "Outline generation started", description: "Building your book blueprint — this updates automatically." }); },
     onError: (e: any) => toast({ title: "Outline failed", description: e.message, variant: "destructive" }),
   });
   const chapterMutation = useMutation({
     mutationFn: (chapterId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/generate`),
-    onSuccess: () => { invalidate(); toast({ title: "Chapter written" }); },
+    onSuccess: () => { invalidate(); toast({ title: "Writing chapter…", description: "The chapter is being written and will appear here shortly." }); },
     onError: (e: any) => toast({ title: "Chapter failed", description: e.message, variant: "destructive" }),
   });
   const marketingMutation = useMutation({

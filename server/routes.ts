@@ -2070,16 +2070,20 @@ Return JSON exactly:
   });
 
   app.post("/api/projects/:id/generate-outline", requireRole("editor"), async (req, res) => {
-    let prevStatus = "draft";
-    try {
-      const id = parseId(req.params.id);
-      if (!id) return res.status(400).json({ error: "Invalid project ID" });
-      const project = await storage.getProject(id);
-      if (!project) return res.status(404).json({ error: "Not found" });
-      prevStatus = project.status;
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ error: "Invalid project ID" });
+    const project = await storage.getProject(id);
+    if (!project) return res.status(404).json({ error: "Not found" });
+    const prevStatus = project.status;
 
-      await storage.updateProject(id, { status: "outlining" });
+    await storage.updateProject(id, { status: "outlining" });
+    // Long AI generation runs in the background; the client polls
+    // GET /api/projects/:id (refetchInterval) for the result. Returning early
+    // avoids the ingress ~100s edge timeout on synchronous requests.
+    res.status(202).json({ status: "started", message: "Outline generation started" });
 
+    (async () => {
+      try {
       const result = await runStep(id, "Book Outline + DNA", HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
@@ -2144,29 +2148,32 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         status: "writing",
       });
 
-      res.json({ dna: result, chapters: result.chapters });
-    } catch (err: any) {
-      await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
-      res.status(500).json({ error: err.message });
-    }
+        // Result is fetched by the client via polling GET /api/projects/:id.
+      } catch (err: any) {
+        await storage.updateProject(id, { status: prevStatus }).catch(() => {});
+        console.error("Outline generation failed:", err?.message || err);
+      }
+    })();
   });
 
   app.post("/api/projects/:id/chapters/:chapterId/generate", requireRole("editor"), async (req, res) => {
-    let activeChapterId: number | null = null;
-    try {
-      const projectId = parseId(req.params.id);
-      const chapterId = parseId(req.params.chapterId);
-      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+    const projectId = parseId(req.params.id);
+    const chapterId = parseId(req.params.chapterId);
+    if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
 
-      const project = await storage.getProject(projectId);
-      const chapter = await storage.getChapter(chapterId);
-      const dna = await storage.getBookDna(projectId);
+    const project = await storage.getProject(projectId);
+    const chapter = await storage.getChapter(chapterId);
+    const dna = await storage.getBookDna(projectId);
 
-      if (!project || !chapter) return res.status(404).json({ error: "Not found" });
+    if (!project || !chapter) return res.status(404).json({ error: "Not found" });
 
-      activeChapterId = chapterId;
-      await storage.updateChapter(chapterId, { status: "generating" });
+    await storage.updateChapter(chapterId, { status: "generating" });
+    // Long AI generation runs in the background; client polls GET /api/projects/:id.
+    res.status(202).json({ status: "started", message: "Chapter generation started" });
 
+    (async () => {
+      const activeChapterId = chapterId;
+      try {
       const priorChapters = await storage.getChapters(projectId);
       const continuityExtras = await loadContinuityExtras(project);
       const consistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber, continuityExtras);
@@ -2253,14 +2260,15 @@ Write the full chapter content only, no meta-commentary.`;
 
       await captureChapterVersion(chapterId, "Generated");
 
-      res.json({ chapterId, wordCount, qualityScore, status: "complete" });
+      // Result available via polling GET /api/projects/:id.
       saveDbSeed().catch(() => {});
-    } catch (err: any) {
-      if (activeChapterId) {
-        await storage.updateChapter(activeChapterId, { status: "pending" }).catch(() => {});
+      } catch (err: any) {
+        if (activeChapterId) {
+          await storage.updateChapter(activeChapterId, { status: "pending" }).catch(() => {});
+        }
+        console.error("Chapter generation failed:", err?.message || err);
       }
-      res.status(500).json({ error: err.message });
-    }
+    })();
   });
 
   app.patch("/api/projects/:id/chapters/:chapterId/cancel", async (req, res) => {

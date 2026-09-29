@@ -1,0 +1,39 @@
+{
+  "summary": "End-to-end testing of Lexora (Node/Express + React/Vite + PostgreSQL, proxied via FastAPI). All 16 backend pytest tests pass (auth, dashboard, projects list/detail, analytics, autopilot, trends list, library, trend analyze via gpt-5-mini, create project, generate outline, generate one chapter, generate marketing, chat SSE). All frontend pages load without errors: Login, Dashboard (real seeded stats: 4 complete, 180.5K words, 4 active), Projects (in-progress cards with covers/status/progress), Project Detail (Chapters/DNA/Marketing/Continuity/Market/Pacing/Business/Studio/Languages/Logs tabs render, cover shown), Library (5 completed books with covers incl. our TEST book from generation flow), Trend Intel (vertical demand board + Run Analysis form), Analytics, Autopilot, Settings, Marketing, Chat Studio (conversation list + composer). Unauthenticated access to protected routes displays the Login form (SPA-side gate) instead of the requested page.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/projects/:id/generate-outline", "issue": "Real generation takes 100-180s and hits the Kubernetes/Cloudflare edge 502 gateway timeout (~100s) even though the Node server completes and persists chapters. Frontend/user should treat this as fire-and-poll (poll GET /api/projects/:id for chapters) rather than expecting a synchronous 200. Test now polls; behavior confirmed correct on backend."},
+      {"endpoint": "/api/projects/:id/chapters/:chapterId/generate", "issue": "Same as above — real chapter generation may exceed the edge timeout; content is still saved. Consider streaming/SSE or an async job pattern to avoid 502s on slow generations."},
+      {"endpoint": "/api/projects (GET)", "issue": "Excludes status=='complete' projects by design (line 1266 routes.ts). Not a bug, but the frontend Projects page copy 'in-progress manuscripts' should stay in sync — currently correct."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ProtectedRoute (client-side auth gate)", "issue": "When hitting /projects, /library etc. unauthenticated, the URL does NOT change to /login — the login form is rendered in-place. Minor UX issue; functionally auth is enforced.", "selector": "n/a", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global (Vite HMR)", "issues": ["Cloudflare/ingress rate-limits the Vite HMR WebSocket (wss://.../?token=...) with HTTP 429, spamming the browser console. Non-blocking (dev-only) but noisy. Consider disabling HMR websocket in the preview build, or serving a production build."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_lexora_api.py", "/app/test_reports/pytest/pytest_readonly.xml", "/app/test_reports/pytest/pytest_gen.xml"],
+  "action_items": [
+    "Consider converting long-running generation endpoints (outline, chapter) to an async job pattern (POST returns 202 + job id, client polls) so the edge 502 disappears. Not strictly required — current polling works and data persists.",
+    "Optional: on the client, when an unauthenticated user hits a protected route, redirect the URL to /login (wouter setLocation) instead of only swapping components, so refreshes/back-nav behave predictably.",
+    "Optional: silence Vite HMR websocket in the preview environment to avoid console noise from 429 responses."
+  ],
+  "critical_code_review_comments": [
+    "/app/server/routes.ts is 4600+ lines — should be split into per-resource routers (projects, chapters, trends, chat, autopilot, library, marketing) for maintainability.",
+    "/app/backend/server.py proxy has no upstream read timeout (good for SSE), but the outer ingress caps at ~100s, which is invisible to the Node app; consider explicit async job flow for AI-heavy endpoints.",
+    "insertProjectSchema validation on POST /api/projects returns 400 with err.message from Zod — good; make sure Pydantic-style structured errors are returned for the frontend to display field-level messages."
+  ],
+  "updated_files": ["/app/backend/tests/test_lexora_api.py"],
+  "success_rate": {"backend": "100% (16/16 pytest, incl. real AI outline/chapter/marketing/trend/chat)", "frontend": "100% for pages tested (all 9 pages render, all key tabs present, seeded data visible)"},
+  "test_credentials": "admin / lexora2026 (as documented in /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created a new project via POST /api/projects titled 'TEST_Lexora Focus Rituals' (id ~9), then generated its outline (11 chapters), 1st chapter text, and marketing assets via real OpenAI calls. This project now appears in Library as 'Complete'. Safe to leave.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Public URL: https://eca3d45b-282d-4164-a0e2-536e87461cd8.preview.emergentagent.com. Auth is session-cookie (connect.sid, Secure, SameSite=None). Login via POST /api/auth/login {username, password}. /api/projects returns only in-progress; /api/library returns completed. Long AI calls (outline/chapter) exceed the ~100s edge timeout — POST them with a short timeout and poll GET /api/projects/:id (nested chapters[]) for results. FastAPI shim on :8001 spawns Node on :8500 and proxies all /api/*. Frontend Vite dev server on :3000 has HMR WS being rate-limited by the ingress (429) — harmless.",
+  "rca of the issue": "N/A — no functional issues found. Outline/chapter test flakiness at first was purely due to ingress 100s edge timeout returning 502 while the Node backend continued executing and correctly persisted results (verified by re-fetching /api/projects/:id after the 502). Tests were adjusted to fire-and-poll to reflect the actual working behavior."
+}
