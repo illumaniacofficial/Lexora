@@ -2521,12 +2521,12 @@ export default function ProjectDetail() {
   const markCompleteMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/mark-complete`),
     onSuccess: () => { invalidate(); toast({ title: "Book marked as complete!", description: "Your book is now in the Library" }); },
-    onError: (e: any) => toast({ title: "Price update failed", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Could not mark book complete", description: e.message, variant: "destructive" }),
   });
   const revertToEditingMutation = useMutation({
     mutationFn: () => apiRequest("PATCH", `/api/projects/${projectId}/revert-to-editing`),
     onSuccess: () => { invalidate(); toast({ title: "Reverted to editing" }); },
-    onError: (e: any) => toast({ title: "Storefront update failed", description: e.message, variant: "destructive" }),
+    onError: (e: any) => toast({ title: "Could not return book to editing", description: e.message, variant: "destructive" }),
   });
   const setPriceMutation = useMutation({
     mutationFn: (priceUsd: number) => apiRequest("PATCH", `/api/projects/${projectId}`, { priceUsd }),
