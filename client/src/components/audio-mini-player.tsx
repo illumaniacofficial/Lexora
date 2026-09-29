@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Play, Pause, SkipForward, SkipBack, RotateCcw, Volume2, VolumeX, Loader2, Gauge, ChevronDown, ChevronUp, Minimize2 } from "lucide-react";
+import { X, Play, Pause, SkipForward, SkipBack, RotateCcw, RefreshCw, Volume2, VolumeX, Loader2, Gauge, ChevronDown, ChevronUp, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -87,20 +87,23 @@ export function isFishAudioVoice(voiceId: string): boolean {
 }
 
 const audioCache = new Map<string, string>();
+const AUDIO_CACHE_VERSION = "fish-s2.1-pro-v1";
+
 function cacheKey(text: string, voice: string): string {
-  return `${voice}:${text.slice(0, 100)}:${text.length}`;
+  return `${AUDIO_CACHE_VERSION}:${voice}:${text.slice(0, 100)}:${text.length}`;
 }
 
-async function fetchAudioCached(text: string, voice: NarratorVoice, ctx?: AudioContext): Promise<string> {
+async function fetchAudioCached(text: string, voice: NarratorVoice, ctx?: AudioContext, regenerate = false): Promise<string> {
   const key = cacheKey(text, voice);
+  if (regenerate) audioCache.delete(key);
   const cached = audioCache.get(key);
-  if (cached) return cached;
+  if (!regenerate && cached) return cached;
   const cleanText = stripMarkdown(text).slice(0, 4000);
   const endpoint = isFishAudioVoice(voice) ? "/api/fish-tts" : "/api/tts";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: cleanText, voice, ...(ctx || {}) }),
+    body: JSON.stringify({ text: cleanText, voice, regenerate, ...(ctx || {}) }),
   });
   if (!response.ok) {
     const errBody = await response.text().catch(() => "Unknown error");
@@ -240,7 +243,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     browserTTSRef.current = controls;
   }, [speed, advanceToNextPage]);
 
-  const generateAndPlay = useCallback(async (text: string, voice: NarratorVoice) => {
+  const generateAndPlay = useCallback(async (text: string, voice: NarratorVoice, regenerate = false) => {
     try {
       setIsLoading(true);
       setIsPlaying(false);
@@ -276,7 +279,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
 
       let audioData: string;
       try {
-        audioData = await fetchAudioCached(text, voice, pageAudioContext(narrationRef.current, expectedIdx));
+        audioData = await fetchAudioCached(text, voice, pageAudioContext(narrationRef.current, expectedIdx), regenerate);
       } catch (fetchErr: any) {
         console.warn("AI TTS failed, falling back to browser voice:", fetchErr.message);
         const fallbackVoice = getDefaultBrowserVoice();
@@ -327,6 +330,12 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       await audio.play();
       setIsPlaying(true);
       setIsLoading(false);
+      if (regenerate) {
+        toast({
+          title: "Audio regenerated",
+          description: "A fresh S2.1 Pro take replaced the cached audio for this page.",
+        });
+      }
       animationRef.current = requestAnimationFrame(updateProgress);
     } catch (err: any) {
       console.error("TTS playback error:", err);
@@ -408,6 +417,17 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     } else {
       generateAndPlay(narration.text, narration.voice);
     }
+  }, [narration.text, narration.voice, generateAndPlay, stopBrowserTTS]);
+
+  const regenerateAudio = useCallback(() => {
+    stickyFallbackRef.current = null;
+    setUsingFallback(false);
+    stopBrowserTTS();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    generateAndPlay(narration.text, narration.voice, true);
   }, [narration.text, narration.voice, generateAndPlay, stopBrowserTTS]);
 
   const nextPage = useCallback(() => {
@@ -613,6 +633,18 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
             data-testid="button-mini-player-replay" aria-label="Replay page"
           >
             <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+
+          <Button
+            size="icon" variant="ghost"
+            onClick={regenerateAudio}
+            disabled={isLoading || isBrowserVoice(narration.voice)}
+            className="h-8 w-8 text-muted-foreground hover:text-purple-300 disabled:opacity-20"
+            data-testid="button-mini-player-regenerate"
+            aria-label="Regenerate audio"
+            title="Regenerate audio — bypass cached take"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
           </Button>
 
           <Button
