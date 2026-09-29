@@ -582,6 +582,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const config = getConfig();
   await ensureAdminUser();
 
+  // Long-running chapter writes are detached from the browser request.
+  // The token is also a generation epoch: an old/cancelled job may finish at
+  // the provider, but it is never allowed to overwrite newer manuscript state.
+  type ChapterGenerationJob = { cancelled: boolean; startedAt: number };
+  const chapterGenerationJobs = new Map<number, ChapterGenerationJob>();
+
+  // In-memory work cannot survive a process restart. Recover only the transient
+  // "generating" marker; never touch completed manuscript content.
+  try {
+    let recovered = 0;
+    for (const project of await storage.getProjects()) {
+      for (const chapter of await storage.getChapters(project.id)) {
+        if (chapter.status === "generating") {
+          await storage.updateChapter(chapter.id, { status: "pending" });
+          recovered++;
+        }
+      }
+    }
+    if (recovered > 0) console.warn(`Recovered ${recovered} interrupted chapter generation job(s) after restart.`);
+  } catch (err: any) {
+    console.error("Chapter job recovery warning:", err?.message || err);
+  }
+
   // Private Studio mode keeps historical storefront data readable to admins but
   // removes the public storefront surface from normal runtime.
   if (config.studio.privateMode) {
@@ -2725,35 +2748,21 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
     }
   });
 
-  app.post("/api/projects/:id/chapters/:chapterId/generate", requireRole("editor"), async (req, res) => {
-    let activeChapterId: number | null = null;
+  async function runChapterGenerationJob(projectId: number, chapterId: number, job: ChapterGenerationJob): Promise<void> {
+    const isCurrent = () => !job.cancelled && chapterGenerationJobs.get(chapterId) === job;
     try {
-      const projectId = parseId(req.params.id);
-      const chapterId = parseId(req.params.chapterId);
-      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
-
       const project = await storage.getProject(projectId);
       const chapter = await storage.getChapter(chapterId);
-      const dna = await storage.getBookDna(projectId);
-
-      if (!project || !chapter) return res.status(404).json({ error: "Not found" });
-
-      activeChapterId = chapterId;
-      await storage.updateChapter(chapterId, { status: "generating" });
+      if (!project || !chapter || chapter.projectId !== projectId) throw new Error("Project or chapter not found");
+      if (!isCurrent()) return;
 
       const priorChapters = await storage.getChapters(projectId);
       const continuityExtras = await loadContinuityExtras(project);
       const legacyConsistencyContext = buildConsistencyContext(priorChapters, chapter.chapterNumber, continuityExtras);
       const scribeContext = await buildScribeContext(projectId);
       const studioProperty = await ensurePropertyForProject(projectId);
-      const chapterInstructions = buildChapterDraftInstructions({
-        project,
-        chapter,
-        property: studioProperty,
-      });
-      const usingLegacyFallback = scribeContext.contextManifest.notes.some((note) =>
-        note.startsWith("legacy-fallback:"),
-      );
+      const chapterInstructions = buildChapterDraftInstructions({ project, chapter, property: studioProperty });
+      const usingLegacyFallback = scribeContext.contextManifest.notes.some((note) => note.startsWith("legacy-fallback:"));
 
       const localAvailable = await isOllamaAvailable();
       const useLocalDraft =
@@ -2797,51 +2806,82 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         return { result: content, tokens };
       });
 
-      const wordCount = result.split(/\s+/).length;
-      const qualityScore = await evaluateChapterQuality(result, chapter.title, project.vertical);
-      const invalidatedApproval = chapter.approvalStatus === "approved";
+      // Cancellation/newer generation wins even if the provider call already completed.
+      if (!isCurrent()) return;
 
+      const wordCount = result.split(/\s+/).filter(Boolean).length;
+      const qualityScore = await evaluateChapterQuality(result, chapter.title, project.vertical);
+      if (!isCurrent()) return;
+
+      const invalidatedApproval = chapter.approvalStatus === "approved";
       await storage.updateChapter(chapterId, {
         content: result,
         wordCount,
         qualityScore,
         status: "complete",
-        // A regenerated chapter is new content and must re-enter the owner gate.
         ...(invalidatedApproval ? { approvalStatus: "none" as const } : {}),
       });
 
       if (invalidatedApproval) {
         await archiveContinuityForChapter(projectId, chapterId).catch((continuityError: any) => {
-          reportContinuityWarning(res, "Continuity archive after regeneration", continuityError);
+          console.warn("Continuity archive after regeneration:", continuityError?.message || continuityError);
         });
       }
+      if (!isCurrent()) return;
 
       const allChapters = await storage.getChapters(projectId);
-      const totalWords = allChapters.reduce((sum, c) => sum + c.wordCount, 0);
-      const completedChapters = allChapters.filter(c => c.status === "complete");
+      const totalWords = allChapters.reduce((sum, item) => sum + item.wordCount, 0);
+      const completedChapters = allChapters.filter((item) => item.status === "complete");
       const avgQuality = completedChapters.length > 0
-        ? completedChapters.reduce((sum, c) => sum + (c.qualityScore || 0), 0) / completedChapters.length
+        ? completedChapters.reduce((sum, item) => sum + (item.qualityScore || 0), 0) / completedChapters.length
         : 0;
 
       await storage.updateProject(projectId, {
         wordCount: totalWords,
         qualityScore: avgQuality,
-        status: allChapters.every(c => c.status === "complete") ? "editing" : "writing",
+        status: allChapters.every((item) => item.status === "complete") ? "editing" : "writing",
       });
-
       await captureChapterVersion(chapterId, "Generated");
-
-      res.json({ chapterId, wordCount, qualityScore, status: "complete" });
       saveDbSeed().catch(() => {});
     } catch (err: any) {
-      if (activeChapterId) {
-        await storage.updateChapter(activeChapterId, { status: "pending" }).catch(() => {});
+      console.error(`Chapter generation failed for project ${projectId}, chapter ${chapterId}:`, err?.message || err);
+      if (isCurrent()) {
+        await storage.updateChapter(chapterId, { status: "pending" }).catch(() => {});
       }
+    } finally {
+      if (chapterGenerationJobs.get(chapterId) === job) chapterGenerationJobs.delete(chapterId);
+    }
+  }
+
+  app.post("/api/projects/:id/chapters/:chapterId/generate", requireRole("editor"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      const chapterId = parseId(req.params.chapterId);
+      if (!projectId || !chapterId) return res.status(400).json({ error: "Invalid ID" });
+
+      const project = await storage.getProject(projectId);
+      const chapter = await storage.getChapter(chapterId);
+      if (!project || !chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Not found" });
+
+      const existing = chapterGenerationJobs.get(chapterId);
+      if (existing && !existing.cancelled) {
+        return res.status(202).json({ chapterId, status: "generating", alreadyRunning: true });
+      }
+
+      const job: ChapterGenerationJob = { cancelled: false, startedAt: Date.now() };
+      chapterGenerationJobs.set(chapterId, job);
+      await storage.updateChapter(chapterId, { status: "generating" });
+
+      // Return before expensive AI work. Navigation/client disconnects no longer
+      // determine whether the manuscript job survives.
+      res.status(202).json({ chapterId, status: "generating", started: true });
+      void runChapterGenerationJob(projectId, chapterId, job);
+    } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.patch("/api/projects/:id/chapters/:chapterId/cancel", async (req, res) => {
+  app.patch("/api/projects/:id/chapters/:chapterId/cancel", requireRole("editor"), async (req, res) => {
     try {
       const projectId = parseId(req.params.id);
       const chapterId = parseId(req.params.chapterId);
@@ -2849,8 +2889,13 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       const chapter = await storage.getChapter(chapterId);
       if (!chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Chapter not found" });
       if (chapter.status !== "generating") return res.status(400).json({ error: "Chapter is not generating" });
+
+      const job = chapterGenerationJobs.get(chapterId);
+      if (job) job.cancelled = true;
+      if (chapterGenerationJobs.get(chapterId) === job) chapterGenerationJobs.delete(chapterId);
+
       await storage.updateChapter(chapterId, { status: "pending" });
-      res.json({ success: true, chapterId });
+      res.json({ success: true, chapterId, status: "pending" });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
