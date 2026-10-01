@@ -334,7 +334,7 @@ Write the full chapter content only, no meta-commentary.`,
   return true;
 }
 
-async function runMarketing(projectId: number, bookTitle: string, vertical: string) {
+async function runMarketing(projectId: number, bookTitle: string, vertical: string, finalStatus: "complete" | "editing" = "complete") {
   await storage.updateProject(projectId, { status: "marketing" });
 
   const project = await storage.getProject(projectId);
@@ -393,20 +393,40 @@ Return JSON with:
     authorBio: marketingResult.authorBio,
   });
 
-  await storage.updateProject(projectId, { status: "complete" });
+  await storage.updateProject(projectId, { status: finalStatus });
 }
 
-export async function executeAutopilotRun(runId: number, vertical: string, language: string, minQuality: number, budgetCap: number, opts?: { minGreenlight?: number; pauseOnLowQuality?: boolean; allowDuplicateVertical?: boolean }): Promise<void> {
+export async function executeAutopilotRun(
+  runId: number,
+  vertical: string,
+  language: string,
+  minQuality: number,
+  budgetCap: number,
+  opts?: {
+    minGreenlight?: number;
+    pauseOnLowQuality?: boolean;
+    allowDuplicateVertical?: boolean;
+    targetProjectId?: number;
+    requireOwnerApproval?: boolean;
+  },
+): Promise<void> {
   if (isRunning) throw new Error("An autopilot run is already in progress");
   isRunning = true;
   shouldStop = false;
   const minGreenlight = opts?.minGreenlight || 0;
   const pauseOnLowQuality = !!opts?.pauseOnLowQuality;
   const allowDuplicateVertical = !!opts?.allowDuplicateVertical;
+  const targetProjectId = opts?.targetProjectId;
+  const requireOwnerApproval = !!opts?.requireOwnerApproval;
   let bookTitle = "Untitled";
 
   try {
-    const existingProject = await findIncompleteProject(vertical);
+    const existingProject = targetProjectId
+      ? await storage.getProject(targetProjectId)
+      : await findIncompleteProject(vertical);
+    if (targetProjectId && !existingProject) {
+      throw new Error(`Project ${targetProjectId} not found`);
+    }
 
     let projectId: number;
 
@@ -477,11 +497,11 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
     );
 
     if (resumeStep === "complete") {
-      await storage.updateProject(projectId, { status: "complete" });
+      await storage.updateProject(projectId, { status: requireOwnerApproval ? "editing" : "complete" });
       const finalProject = await storage.getProject(projectId);
       await storage.updateAutopilotRun(runId, {
-        status: "complete",
-        currentStep: "Already complete",
+        status: requireOwnerApproval ? "awaiting_approval" : "complete",
+        currentStep: requireOwnerApproval ? "Draft production complete — awaiting owner review" : "Already complete",
         completedAt: new Date(),
         totalTokens: finalProject?.totalTokens || 0,
         estimatedCost: finalProject?.estimatedCost || 0,
@@ -564,23 +584,25 @@ Return JSON with: { "title": "<full book title including subtitle>", "authorName
 
     if (!marketing) {
       await storage.updateAutopilotRun(runId, { currentStep: "Generating marketing" });
-      await runMarketing(projectId, bookTitle, vertical);
+      await runMarketing(projectId, bookTitle, vertical, requireOwnerApproval ? "editing" : "complete");
     }
 
     const finalProject = await storage.getProject(projectId);
     await storage.updateAutopilotRun(runId, {
-      status: "complete",
-      currentStep: "Done",
+      status: requireOwnerApproval ? "awaiting_approval" : "complete",
+      currentStep: requireOwnerApproval ? "Draft production complete — awaiting owner review" : "Done",
       completedAt: new Date(),
       totalTokens: finalProject?.totalTokens || 0,
       estimatedCost: finalProject?.estimatedCost || 0,
     });
     await notify({
       kind: "pipeline",
-      title: `Book published: ${bookTitle}`,
-      body: `Autopilot completed "${bookTitle}" (${finalProject?.wordCount || 0} words, $${(finalProject?.estimatedCost || 0).toFixed(2)}).`,
+      title: requireOwnerApproval ? `Autopilot draft ready: ${bookTitle}` : `Book published: ${bookTitle}`,
+      body: requireOwnerApproval
+        ? `Autopilot finished the production draft for "${bookTitle}". Review and approve the manuscript before Canon/Press.`
+        : `Autopilot completed "${bookTitle}" (${finalProject?.wordCount || 0} words, ${(finalProject?.estimatedCost || 0).toFixed(2)}).`,
       link: finalProject ? `/projects/${finalProject.id}` : "/autopilot",
-      metadata: { runId, projectId, vertical },
+      metadata: { runId, projectId, vertical, requireOwnerApproval },
     });
   } catch (err: any) {
     await storage.updateAutopilotRun(runId, {
