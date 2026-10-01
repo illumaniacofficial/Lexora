@@ -60,8 +60,8 @@ export const getQueryFn: <T>(options: {
     // 304 and no body. React Query needs a value, so preserve the last known
     // good payload instead of turning an unchanged response into a false error.
     if (res.status === 304) {
-      const cached = queryClient.getQueryData<T>(queryKey);
-      if (cached !== undefined) return cached;
+      const cached = queryClient.getQueryData(queryKey);
+      if (cached !== undefined) return cached as any;
     }
 
     await throwIfResNotOk(res);
