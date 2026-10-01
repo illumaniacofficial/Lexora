@@ -689,7 +689,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                   </Badge>
                   {chapter.audioUrl && (
                     <a href={`/api/projects/${projectId}/chapters/${chapter.id}/audio`} download onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40 px-1.5" data-testid={`button-download-chapter-audio-${chapter.id}`} aria-label="Download chapter audio">
+                      <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28 px-1.5" data-testid={`button-download-chapter-audio-${chapter.id}`} aria-label="Download chapter audio">
                         <Music className="h-2.5 w-2.5 mr-0.5" /> MP3
                       </Button>
                     </a>
@@ -697,7 +697,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                   {!chapter.audioUrl && canEdit && (
                     <Button
                       size="sm" variant="outline"
-                      className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 px-1.5"
+                      className="h-6 text-[9px] font-mono border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28 px-1.5"
                       onClick={(e) => { e.stopPropagation(); onGenerateAudio(chapter.id); }}
                       disabled={isGeneratingAudio}
                       data-testid={`button-gen-audio-${chapter.id}`}
@@ -731,7 +731,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                       </Button>
                       <Button
                         size="sm" variant="outline"
-                        className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 hover:text-purple-300 px-1.5"
+                        className="h-6 text-[9px] font-mono border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28 hover:text-[#EFE5D9] px-1.5"
                         onClick={startRevising}
                         data-testid={`button-revise-chapter-${chapter.id}`}
                         aria-label="Revise chapter with AI"
@@ -744,7 +744,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                     size="sm" variant="outline"
                     className={cn(
                       "h-6 text-[9px] font-mono px-1.5",
-                      showEditorial ? "border-cyan-500/40 text-cyan-300 bg-cyan-500/10" : "border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40"
+                      showEditorial ? "border-[#C0A06B]/28 text-[#EFE5D9]/75 bg-[#7E3E51]/10" : "border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28"
                     )}
                     onClick={(e) => { e.stopPropagation(); setShowEditorial(v => !v); setExpanded(true); }}
                     data-testid={`button-editorial-chapter-${chapter.id}`}
@@ -767,8 +767,8 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                 </>
               ) : chapter.status === "generating" ? (
                 <>
-                  <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
-                    <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-purple-400" /> Writing...
+                  <Badge variant="outline" className="text-[10px] font-mono border-[#C0A06B]/14">
+                    <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-[#C0A06B]/70" /> Writing...
                   </Badge>
                   {canEdit && (
                     <Button
@@ -787,7 +787,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
               ) : canEdit ? (
                 <Button
                   size="sm" variant="outline"
-                  className="h-7 text-[10px] font-mono border-border/30 hover:border-purple-500/30 hover:text-purple-300"
+                  className="h-7 text-[10px] font-mono border-border/30 hover:border-[#C0A06B]/22 hover:text-[#EFE5D9]"
                   onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
                   disabled={isGenerating}
                   data-testid={`button-generate-chapter-${chapter.id}`}
@@ -929,9 +929,9 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
         </div>
       )}
       {expanded && !isEditing && isRevisingThis && (
-        <div className="px-4 pb-4 border-t border-purple-500/15">
+        <div className="px-4 pb-4 border-t border-[#C0A06B]/12">
           <div className="flex items-center justify-between mt-3 mb-2">
-            <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-wider flex items-center gap-1">
+            <span className="text-[9px] font-mono text-[#C0A06B]/70/60 uppercase tracking-wider flex items-center gap-1">
               <Wand2 className="h-2.5 w-2.5" /> Revise Chapter {chapter.chapterNumber} with AI
             </span>
             <div className="flex items-center gap-1.5">
@@ -946,7 +946,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
               </Button>
               <Button
                 size="sm"
-                className="h-6 text-[9px] font-mono bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 px-2"
+                className="h-6 text-[9px] font-mono bg-[#7E3E51]/18 text-[#EFE5D9]/75 hover:bg-[#7E3E51]/28 border border-[#C0A06B]/22 px-2"
                 onClick={submitRevise}
                 disabled={isRevising}
                 data-testid={`button-submit-revise-${chapter.id}`}
@@ -961,7 +961,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
             onChange={(e) => setReviseInstruction(e.target.value)}
             disabled={isRevising}
             placeholder="Optional instruction — e.g. 'make the opening more dramatic', 'rename the mentor to Elias', 'tighten the middle section'. Leave blank for a general polish."
-            className="min-h-[80px] text-[12px] bg-card/50 border-purple-500/15 font-mono resize-y focus:border-purple-500/30 leading-relaxed"
+            className="min-h-[80px] text-[12px] bg-card/50 border-[#C0A06B]/12 font-mono resize-y focus:border-[#C0A06B]/22 leading-relaxed"
             data-testid={`textarea-revise-chapter-${chapter.id}`}
           />
           <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">
@@ -2811,11 +2811,11 @@ export default function ProjectDetail() {
   const anyRunning = trendMutation.isPending || outlineMutation.isPending || outlineIsRunning || chapterMutation.isPending || marketingMutation.isPending || coverMutation.isPending;
 
   const pipelineActions = [
-    { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp, glow: "neon-glow-cool" },
-    { label: outlineIsRunning ? "Outlining…" : "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (outlineIsRunning) return; if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending || outlineIsRunning, icon: List, glow: "neon-glow" },
-    { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image, glow: "neon-glow-warm" },
-    { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool, glow: "neon-glow-fire" },
-    { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone, glow: "neon-glow-nature" },
+    { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp },
+    { label: outlineIsRunning ? "Outlining…" : "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (outlineIsRunning) return; if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending || outlineIsRunning, icon: List },
+    { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image },
+    { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool },
+    { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone },
   ];
 
   return (
@@ -2938,7 +2938,7 @@ export default function ProjectDetail() {
           </Card>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {pipelineActions.map(({ label, step, done, action, loading, icon: Icon, glow }) => (
+            {pipelineActions.map(({ label, step, done, action, loading, icon: Icon }) => (
               <button
                 key={label}
                 onClick={action}
