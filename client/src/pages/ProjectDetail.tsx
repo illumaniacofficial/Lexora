@@ -538,6 +538,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   onInlineAi: (id: number, payload: { action: "continue" | "rewrite"; before: string; after: string; selection: string; instruction: string }) => Promise<string>;
   role: WorkspaceRole;
   onChanged: () => void;
+  forceOutlineOpen?: boolean;
 }) {
   const canEdit = role !== "viewer";
   const [expanded, setExpanded] = useState(false);
