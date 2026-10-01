@@ -272,6 +272,33 @@ check(
     reader.includes("Your reading position is saved automatically."),
 );
 
+const wordTiming = read("client/src/lib/word-timing.ts");
+const miniPlayer = read("client/src/components/audio-mini-player.tsx");
+
+check(
+  "read-along sync uses speech-aware timing instead of raw linear word length",
+  wordTiming.includes("syllableEstimate") &&
+    wordTiming.includes("spokenWeight") &&
+    wordTiming.includes("wordIndexFromAudioTime") &&
+    wordTiming.includes("lead") &&
+    wordTiming.includes("tail"),
+);
+
+check(
+  "generated narration seek and playback keep the highlighted word synchronized",
+  miniPlayer.includes("wordIndexFromAudioTime") &&
+    miniPlayer.includes("handleSeek") &&
+    miniPlayer.includes("cumulWeightsRef.current"),
+);
+
+check(
+  "Book Reader narrates pages independently and highlights both sides of a spread",
+  !reader.includes('textToRead += "\\n\\n"') &&
+    reader.includes("highlightForPage(currentPage)") &&
+    reader.includes("highlightForPage(currentPage + 1)") &&
+    reader.includes("alreadyVisibleOnRight"),
+);
+
 const appShell = read("client/src/App.tsx");
 const copilot = read("client/src/components/lexora-copilot.tsx");
 
