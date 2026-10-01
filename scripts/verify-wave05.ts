@@ -145,6 +145,7 @@ const autopilotEngine = read("server/autopilot-engine.ts");
 const settingsPage = read("client/src/pages/Settings.tsx");
 const openaiGateway = read("server/openai.ts");
 const sidebar = read("client/src/components/app-sidebar.tsx");
+const appShellForDormant = read("client/src/App.tsx");
 
 check(
   "Concept Lab keeps dossier lifecycle visible after promotion",
@@ -212,8 +213,8 @@ check(
   "Referrals and Requests remain dormant rather than deleted",
   !sidebar.includes('title: "Referrals"') &&
     !sidebar.includes('title: "Requests"') &&
-    appShell.includes('path="/requests"') &&
-    appShell.includes('path="/referrals"'),
+    appShellForDormant.includes('path="/requests"') &&
+    appShellForDormant.includes('path="/referrals"'),
 );
 
 const appShell = read("client/src/App.tsx");
