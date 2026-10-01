@@ -2957,38 +2957,43 @@ export default function ProjectDetail() {
           )}
 
           <Tabs defaultValue="chapters">
-            <TabsList className="h-10 bg-card/30 border border-border/20">
-              <TabsTrigger value="chapters" data-testid="tab-chapters" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
-                <BookOpen className="h-3 w-3" /> Outline & Chapters ({chapters.length})
-              </TabsTrigger>
-              <TabsTrigger value="dna" data-testid="tab-dna" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
-                <Zap className="h-3 w-3" /> DNA
-              </TabsTrigger>
-              <TabsTrigger value="marketing" data-testid="tab-marketing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
-                <Megaphone className="h-3 w-3" /> Marketing
-              </TabsTrigger>
-              <TabsTrigger value="continuity" data-testid="tab-continuity" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
-                <Network className="h-3 w-3" /> Continuity
-              </TabsTrigger>
-              <TabsTrigger value="market" data-testid="tab-market" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
-                <Crosshair className="h-3 w-3" /> Market
-              </TabsTrigger>
-              <TabsTrigger value="pacing" data-testid="tab-pacing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
-                <Activity className="h-3 w-3" /> Pacing
-              </TabsTrigger>
-              <TabsTrigger value="business" data-testid="tab-business" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
-                <DollarSign className="h-3 w-3" /> Business
-              </TabsTrigger>
-              <TabsTrigger value="studio" data-testid="tab-studio" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
-                <Headphones className="h-3 w-3" /> Studio
-              </TabsTrigger>
-              <TabsTrigger value="languages" data-testid="tab-languages" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
-                <Globe className="h-3 w-3" /> Languages
-              </TabsTrigger>
-              <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
-                <FileText className="h-3 w-3" /> Logs
-              </TabsTrigger>
-            </TabsList>
+            <div
+              className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]"
+              data-testid="project-workspace-tab-scroll"
+            >
+              <TabsList className="h-10 min-w-max w-max bg-card/30 border border-border/20 flex-nowrap">
+                <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
+                  <BookOpen className="h-3 w-3" /> Outline & Chapters ({chapters.length})
+                </TabsTrigger>
+                <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
+                  <Zap className="h-3 w-3" /> DNA
+                </TabsTrigger>
+                <TabsTrigger value="marketing" data-testid="tab-marketing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
+                  <Megaphone className="h-3 w-3" /> Marketing
+                </TabsTrigger>
+                <TabsTrigger value="continuity" data-testid="tab-continuity" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                  <Network className="h-3 w-3" /> Continuity
+                </TabsTrigger>
+                <TabsTrigger value="market" data-testid="tab-market" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
+                  <Crosshair className="h-3 w-3" /> Market
+                </TabsTrigger>
+                <TabsTrigger value="pacing" data-testid="tab-pacing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
+                  <Activity className="h-3 w-3" /> Pacing
+                </TabsTrigger>
+                <TabsTrigger value="business" data-testid="tab-business" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                  <DollarSign className="h-3 w-3" /> Business
+                </TabsTrigger>
+                <TabsTrigger value="studio" data-testid="tab-studio" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
+                  <Headphones className="h-3 w-3" /> Studio
+                </TabsTrigger>
+                <TabsTrigger value="languages" data-testid="tab-languages" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
+                  <Globe className="h-3 w-3" /> Languages
+                </TabsTrigger>
+                <TabsTrigger value="logs" data-testid="tab-logs" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
+                  <FileText className="h-3 w-3" /> Logs
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="chapters" className="mt-4 space-y-2">
               {chapters.length === 0 ? (
