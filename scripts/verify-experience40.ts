@@ -122,6 +122,13 @@ for (const tab of ["chapters","canon","dna","marketing","continuity","market","p
 check("project workspace preserves reader action", projectDetail.includes("button-read-book"));
 check("project workspace preserves export actions", projectDetail.includes("button-export-pdf") && projectDetail.includes("button-export-epub"));
 check("project workspace preserves autopilot controls", projectDetail.includes("button-start-project-autopilot") && projectDetail.includes("button-stop-project-autopilot"));
+check("chapters workspace is named Manuscript", projectDetail.includes("> Manuscript (") || projectDetail.includes("Manuscript Workspace"));
+check("manuscript canvas utility exists", css.includes(".lexora-manuscript-canvas"));
+check("manuscript exposes Story Intelligence", projectDetail.includes("Story Intelligence"));
+check("manuscript preserves edit textarea ref", projectDetail.includes("ref={editTextareaRef}"));
+check("manuscript preserves save action", projectDetail.includes("button-save-edit-"));
+check("manuscript preserves inline Continue and Rewrite", projectDetail.includes("button-cowrite-continue-") && projectDetail.includes("button-cowrite-rewrite-"));
+check("manuscript preserves viewer edit guard", projectDetail.includes('const canEdit = role !== "viewer"'));
 
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
