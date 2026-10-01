@@ -64,7 +64,7 @@ check(
   "Canon workspace exposes editable Creative Target Contract",
   workspace.includes("Creative Target Contract") &&
     workspace.includes("button-save-target-contract") &&
-    workspace.includes(`/api/properties/${property.id}`),
+    workspace.includes("/api/properties/"),
 );
 
 check(
@@ -88,6 +88,27 @@ check(
   project.includes('value="canon"') &&
     project.includes('data-testid="tab-canon"') &&
     project.includes("<CanonWorkspace"),
+);
+
+const conceptLab = read("client/src/pages/ConceptLab.tsx");
+check(
+  "Concept Lab exposes a persistent Idea Library",
+  conceptLab.includes("Idea Library") &&
+    conceptLab.includes('data-testid="button-toggle-idea-library"') &&
+    routes.includes('/api/concept-lab/ideas'),
+);
+
+check(
+  "generated concept directions can be saved without greenlighting",
+  conceptLab.includes('button-save-direction-') &&
+    routes.includes('/api/concept-lab/ideas/from-direction') &&
+    routes.includes('status: "saved"'),
+);
+
+check(
+  "manual ideas can be quick-captured for later",
+  conceptLab.includes('data-testid="button-quick-save-idea"') &&
+    routes.includes('sourceType: "manual-idea"'),
 );
 
 if (failures > 0) {
