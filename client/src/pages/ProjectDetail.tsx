@@ -27,6 +27,8 @@ import { LANGUAGE_LABELS } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import CanonWorkspace from "@/components/canon-workspace";
+import { ProjectHero } from "@/components/experience/project-hero";
+import { WorkspaceTabs } from "@/components/experience/workspace-tabs";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
 import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion, StudioProperty, ContinuitySnapshot, AutopilotRun } from "@shared/schema";
@@ -2814,89 +2816,77 @@ export default function ProjectDetail() {
   ];
 
   return (
-    <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto p-4 sm:p-5 md:p-6 xl:p-8 space-y-5 md:space-y-6">
+    <div className="lexora-page h-full min-w-0 overflow-x-hidden overflow-y-auto space-y-6 p-4 sm:p-5 md:p-7 xl:p-9">
       <Helmet>
         <title>{project.title} — Lexora</title>
         <meta name="description" content={`${project.title} by ${project.authorName || "Unknown Author"} — ${statusLabel(project.status)} in ${VERTICAL_LABELS[project.vertical] || project.vertical}.`} />
       </Helmet>
-      <div className="flex items-center gap-2 flex-wrap text-sm">
+      <div className="mx-auto flex w-full max-w-[1540px] items-center gap-2 text-sm">
         <Link href="/projects">
-          <Button variant="ghost" size="sm" className="text-muted-foreground/50 hover:text-purple-400 font-mono text-[11px]" data-testid="button-back-projects">
-            <ArrowLeft className="h-4 w-4 mr-1" /> PROJECTS
+          <Button variant="ghost" size="sm" className="h-8 px-2 font-mono text-[9px] uppercase tracking-[.14em] text-[#BCAF9F]/40 hover:bg-white/[.025] hover:text-[#EFE5D9]" data-testid="button-back-projects">
+            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Projects
           </Button>
         </Link>
-        <span className="text-muted-foreground/20">/</span>
-        <span className="font-mono text-[11px] truncate max-w-xs text-muted-foreground/50">{project.title}</span>
+        <span className="text-[#BCAF9F]/15">/</span>
+        <span className="lexora-kicker truncate">Project Workspace</span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-border/20 bg-card/30 overflow-hidden relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] neon-glow opacity-40" />
-            <CardContent className="pt-6 pb-5">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl glow-border bg-card/50 text-xl">
-                  {VERTICAL_ICONS[project.vertical] || "\u{1F4D6}"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-bold tracking-tighter leading-tight">{project.title}</h1>
-                  {project.authorName && (
-                    <p className="text-[11px] text-muted-foreground/50 mt-1 flex items-center gap-1.5 font-mono">
-                      <User className="h-3 w-3 text-purple-400/50" /> {project.authorName}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono text-purple-400/60 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</span>
-                    <span className="text-muted-foreground/15">\u2022</span>
-                    <span className="text-[10px] font-mono text-muted-foreground/40 capitalize">{project.targetLanguage}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {anyRunning && <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />}
-                  <Button size="icon" variant="ghost" onClick={() => { invalidate(); refetch(); }} data-testid="button-refresh" className="h-8 w-8 text-muted-foreground/40 hover:text-purple-400" aria-label="Refresh project data">
-                    <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                  </Button>
-                </div>
+          <ProjectHero
+            title={project.title}
+            author={project.authorName}
+            coverUrl={project.coverImageUrl ? `/api/projects/${projectId}/cover-image` : null}
+            genre={VERTICAL_LABELS[project.vertical] || project.vertical}
+            language={LANGUAGE_LABELS[project.targetLanguage] || project.targetLanguage}
+            progress={pct}
+            status={
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#C0A06B]/12 bg-white/[.02] px-3 py-1.5 font-mono text-[9px] uppercase tracking-[.12em] text-[#BCAF9F]/60">
+                  <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
+                  {statusLabel(project.status)}
+                </span>
+                {project.greenlightScore ? <span className="font-mono text-[9px] uppercase tracking-[.12em] text-[#C0A06B]/60">Greenlight {formatScore(project.greenlightScore)}</span> : null}
+                {anyRunning ? <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[.12em] text-[#C0A06B]/55"><Loader2 className="h-3 w-3 animate-spin" /> Working</span> : null}
               </div>
-
-              <div className="mt-5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/60">
-                    <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
-                    {statusLabel(project.status)}
-                    {project.greenlightScore && (
-                      <Badge variant="outline" className="text-[10px] font-mono ml-2 border-border/30">GL {formatScore(project.greenlightScore)}</Badge>
-                    )}
-                  </span>
-                  <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
-                </div>
-                <Progress value={pct} className="h-[3px]" />
-              </div>
-
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-5">
+            }
+            meta={
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
                 {[
-                  { label: "WORDS", value: project.wordCount.toLocaleString() },
-                  { label: "CH", value: `${completedChapters.length}/${project.chapterCount || chapters.length}` },
-                  { label: "QUAL", value: project.qualityScore ? formatScore(project.qualityScore) : "\u2014", color: scoreColor(project.qualityScore) },
-                  { label: "GL", value: project.greenlightScore ? formatScore(project.greenlightScore) : "\u2014" },
-                  { label: "COST", value: project.estimatedCost > 0 ? `$${project.estimatedCost.toFixed(3)}` : "$0" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-white/[0.02] border border-border/15 rounded-lg py-2.5 text-center">
-                    <div className={`text-[12px] font-bold font-mono ${color || ""}`}>{value}</div>
-                    <div className="text-[8px] font-mono text-muted-foreground/30 mt-0.5 tracking-widest">{label}</div>
+                  { label: "Words", value: project.wordCount.toLocaleString() },
+                  { label: "Chapters", value: `${completedChapters.length}/${project.chapterCount || chapters.length}` },
+                  { label: "Quality", value: project.qualityScore ? formatScore(project.qualityScore) : "—" },
+                  { label: "Greenlight", value: project.greenlightScore ? formatScore(project.greenlightScore) : "—" },
+                  { label: "Spend", value: project.estimatedCost > 0 ? `$${project.estimatedCost.toFixed(3)}` : "$0" },
+                ].map((item) => (
+                  <div key={item.label} className="min-w-0">
+                    <p className="font-mono text-[8px] uppercase tracking-[.16em] text-[#BCAF9F]/28">{item.label}</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-[#EFE5D9]/85">{item.value}</p>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            }
+            actions={
+              <>
+                {completedChapters.length > 0 ? (
+                  <Button type="button" className="h-9 rounded-full bg-[#EFE5D9] px-4 text-[#0B090C] hover:bg-white" onClick={() => setShowReader(true)} data-testid="button-open-reader-hero">
+                    <Eye className="mr-1.5 h-3.5 w-3.5" /> Read
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" className="h-9 rounded-full border-[#C0A06B]/15 bg-transparent px-4 text-[#BCAF9F]/65 hover:bg-white/[.03] hover:text-[#EFE5D9]" onClick={() => { invalidate(); refetch(); }} data-testid="button-refresh">
+                  <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+              </>
+            }
+          />
 
-          <Card className="border-purple-500/20 bg-gradient-to-r from-purple-500/[0.06] via-card/35 to-cyan-500/[0.04]" data-testid="project-autopilot-control">
+          <Card className="lexora-editorial-surface rounded-[24px] border-[#C0A06B]/10 bg-transparent" data-testid="project-autopilot-control">
             <CardContent className="py-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-purple-400" />
-                    <span className="text-[11px] font-mono font-bold uppercase tracking-[0.15em] text-purple-200">Project Autopilot</span>
+                    <Zap className="h-4 w-4 text-[#C0A06B]/70" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-[#EFE5D9]/78">Project Autopilot</span>
                     {projectAutopilot?.active && (
                       <Badge variant="outline" className="text-[8px] font-mono border-emerald-500/25 text-emerald-300">RUNNING</Badge>
                     )}
@@ -2930,7 +2920,7 @@ export default function ProjectDetail() {
                   ) : (
                     <Button
                       type="button"
-                      className="h-9 text-[10px] font-mono neon-glow text-white"
+                      className="h-9 rounded-full bg-[#7E3E51] px-4 text-[10px] font-mono text-[#FFF9F2] hover:bg-[#915065]"
                       onClick={() => startProjectAutopilot.mutate()}
                       disabled={startProjectAutopilot.isPending || project.status === "complete" || role === "viewer"}
                       data-testid="button-start-project-autopilot"
@@ -2951,20 +2941,20 @@ export default function ProjectDetail() {
                 onClick={action}
                 disabled={loading || anyRunning}
                 data-testid={`pipeline-step-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                className={`flex flex-col items-center gap-2 p-3.5 rounded-xl border text-center text-[10px] font-mono font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${done
-                  ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:border-amber-500/20 hover:bg-amber-500/[0.03] hover:text-amber-300"
-                  : "border-border/20 bg-card/20 hover:border-purple-500/20 hover:bg-purple-500/[0.03] text-muted-foreground/60"}`}
+                className={`flex flex-col items-center gap-2 rounded-[18px] border p-3.5 text-center text-[9px] font-mono font-bold uppercase tracking-[.08em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${done
+                  ? "border-emerald-500/14 bg-emerald-500/[.035] text-emerald-300/75 hover:border-[#C0A06B]/16"
+                  : "border-[#C0A06B]/9 bg-white/[.018] text-[#BCAF9F]/52 hover:border-[#C0A06B]/18 hover:bg-white/[.028]"}`}
               >
                 {loading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                  <Loader2 className="h-5 w-5 animate-spin text-[#C0A06B]/70" />
                 ) : done ? (
                   <div className="relative">
                     <CheckCircle className="h-5 w-5 text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
                     <RefreshCw className="absolute -bottom-1 -right-1.5 h-2.5 w-2.5 text-muted-foreground/40" />
                   </div>
                 ) : (
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${glow} shadow-lg`}>
-                    <Icon className="h-3.5 w-3.5 text-white" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#C0A06B]/10 bg-[#7E3E51]/10">
+                    <Icon className="h-3.5 w-3.5 text-[#C0A06B]/70" />
                   </div>
                 )}
                 <span className="leading-tight tracking-wider uppercase">{done ? `↻ ${label}` : `${step}. ${label}`}</span>
@@ -3095,46 +3085,41 @@ export default function ProjectDetail() {
           )}
 
           <Tabs defaultValue="chapters">
-            <div
-              className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]"
-              data-testid="project-workspace-tab-scroll"
-            >
-              <TabsList className="h-10 min-w-max w-max bg-card/30 border border-border/20 flex-nowrap">
-                <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
+            <WorkspaceTabs>
+                <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <BookOpen className="h-3 w-3" /> Outline & Chapters ({chapters.length})
                 </TabsTrigger>
-                <TabsTrigger value="canon" data-testid="tab-canon" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <TabsTrigger value="canon" data-testid="tab-canon" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <ShieldCheck className="h-3 w-3" /> Canon
                 </TabsTrigger>
-                <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
+                <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Zap className="h-3 w-3" /> DNA
                 </TabsTrigger>
-                <TabsTrigger value="marketing" data-testid="tab-marketing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
+                <TabsTrigger value="marketing" data-testid="tab-marketing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Megaphone className="h-3 w-3" /> Marketing
                 </TabsTrigger>
-                <TabsTrigger value="continuity" data-testid="tab-continuity" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <TabsTrigger value="continuity" data-testid="tab-continuity" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Network className="h-3 w-3" /> Continuity
                 </TabsTrigger>
-                <TabsTrigger value="market" data-testid="tab-market" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
+                <TabsTrigger value="market" data-testid="tab-market" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Crosshair className="h-3 w-3" /> Market
                 </TabsTrigger>
-                <TabsTrigger value="pacing" data-testid="tab-pacing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
+                <TabsTrigger value="pacing" data-testid="tab-pacing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Activity className="h-3 w-3" /> Pacing
                 </TabsTrigger>
-                <TabsTrigger value="business" data-testid="tab-business" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <TabsTrigger value="business" data-testid="tab-business" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <DollarSign className="h-3 w-3" /> Business
                 </TabsTrigger>
-                <TabsTrigger value="studio" data-testid="tab-studio" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
+                <TabsTrigger value="studio" data-testid="tab-studio" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Headphones className="h-3 w-3" /> Studio
                 </TabsTrigger>
-                <TabsTrigger value="languages" data-testid="tab-languages" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
+                <TabsTrigger value="languages" data-testid="tab-languages" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Globe className="h-3 w-3" /> Languages
                 </TabsTrigger>
-                <TabsTrigger value="logs" data-testid="tab-logs" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
+                <TabsTrigger value="logs" data-testid="tab-logs" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <FileText className="h-3 w-3" /> Logs
                 </TabsTrigger>
-              </TabsList>
-            </div>
+            </WorkspaceTabs>
 
             <TabsContent value="canon" className="mt-4">
               <CanonWorkspace
