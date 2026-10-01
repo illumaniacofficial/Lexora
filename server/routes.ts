@@ -2083,6 +2083,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         runtime: run.runtime as any,
       };
       const dossier = dossierFromDirection(synthesis, input.directionId);
+      const existingSaved = (await storage.getConceptDossiers()).find((row) => {
+        const source = (row.source || {}) as Record<string, unknown>;
+        return row.status === "saved" &&
+          source.synthesisRunId === run.id &&
+          source.directionId === input.directionId;
+      });
+
+      if (existingSaved) {
+        const savedDossier = (existingSaved.dossier || {}) as Record<string, any>;
+        const promoted = await storage.updateConceptDossier(existingSaved.id, {
+          propertyId: input.propertyId ?? existingSaved.propertyId ?? null,
+          status: "developing",
+          dossier: {
+            ...dossier,
+            ideaLibrary: savedDossier.ideaLibrary || null,
+            status: "developing",
+          },
+        });
+        return res.json(promoted);
+      }
 
       const created = await storage.createConceptDossier({
         id: dossier.id,
@@ -2104,6 +2124,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const input = conceptDossierGreenlightSchema.parse(req.body);
       const dossier = await storage.getConceptDossier(input.dossierId);
       if (!dossier) return res.status(404).json({ error: "Dossier not found" });
+      if (dossier.sourceType === "manual-idea") {
+        return res.status(409).json({ error: "Quick-captured ideas must be developed into a full Concept Dossier before greenlighting." });
+      }
 
       const { createPropertyFromDossier } = await import("./core/conceptPropertyService");
       const property = await createPropertyFromDossier(dossier.dossier as any);
