@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users, LockKeyhole, KeyRound, PlugZap } from "lucide-react";
+import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users, LockKeyhole, KeyRound, PlugZap, BookOpen, ShieldCheck, PanelsTopLeft, Sparkles, ChevronRight } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -222,7 +222,7 @@ function MembershipTierManager() {
     <Card className="border-border/20 bg-card/30">
       <CardHeader className="pb-4">
         <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-          <Store className="h-3.5 w-3.5 text-purple-400/70" /> Membership Tiers
+          <Store className="h-3.5 w-3.5 text-[#b46f7d]/80" /> Membership Tiers
         </CardTitle>
         <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Recurring subscriptions that unlock all premium books on your storefront</CardDescription>
       </CardHeader>
@@ -321,7 +321,7 @@ function WorkspaceMemberManager() {
     <Card className="border-border/20 bg-card/30">
       <CardHeader className="pb-4">
         <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-          <Users className="h-3.5 w-3.5 text-purple-400/70" /> Team Workspace
+          <Users className="h-3.5 w-3.5 text-[#b46f7d]/80" /> Team Workspace
         </CardTitle>
         <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Invite teammates and control who can edit, approve, or just review your books</CardDescription>
       </CardHeader>
@@ -564,12 +564,12 @@ function CustomAiProviderSettings() {
   if (isLoading) return <Skeleton className="h-72 rounded-xl bg-muted/20" />;
 
   return (
-    <Card className="border-cyan-500/20 bg-gradient-to-br from-cyan-500/[0.04] via-card/30 to-purple-500/[0.04]" data-testid="custom-ai-provider-settings">
+    <Card className="lexora-surface rounded-[24px] border-[#c19d66]/15 bg-gradient-to-br from-[#8f4a5e]/[.08] via-[#171319] to-[#c19d66]/[.035]" data-testid="custom-ai-provider-settings">
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-              <PlugZap className="h-3.5 w-3.5 text-cyan-400/70" /> Custom AI Provider
+              <PlugZap className="h-3.5 w-3.5 text-[#c19d66]/80" /> Custom AI Provider
             </CardTitle>
             <CardDescription className="text-[10px] font-mono text-muted-foreground/40 mt-1">
               Bring your own OpenAI-compatible API endpoint, key, and model IDs. Text generation only; image and voice providers stay separate.
@@ -642,10 +642,27 @@ function CustomAiProviderSettings() {
   );
 }
 
+type SettingsSection = "general" | "ai" | "writing" | "narration" | "publishing" | "security";
+
+const SETTINGS_NAV: Array<{
+  id: SettingsSection;
+  label: string;
+  description: string;
+  icon: typeof SettingsIcon;
+}> = [
+  { id: "general", label: "General", description: "Author and project defaults", icon: User },
+  { id: "ai", label: "AI Providers", description: "Models, APIs and routing", icon: Brain },
+  { id: "writing", label: "Writing", description: "Generation and automation", icon: BookOpen },
+  { id: "narration", label: "Narration", description: "Voice and playback defaults", icon: Volume2 },
+  { id: "publishing", label: "Publishing", description: "Storefront, brand and export", icon: Store },
+  { id: "security", label: "Team & Security", description: "Access, password and members", icon: ShieldCheck },
+];
+
 export default function Settings() {
   const { toast } = useToast();
   const { data: settings, isLoading, error } = useQuery<AppSettings | null>({ queryKey: ["/api/settings"] });
   const [previewState, setPreviewState] = useState<"idle" | "loading" | "playing">("idle");
+  const [activeSection, setActiveSection] = useState<SettingsSection>("ai");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const previewTokenRef = useRef(0);
 
@@ -761,30 +778,80 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full max-w-3xl">
+    <div className="h-full overflow-y-auto bg-[radial-gradient(circle_at_top_right,rgba(193,157,102,.07),transparent_28rem)]">
       <Helmet>
         <title>Settings — Lexora</title>
-        <meta name="description" content="Configure your Lexora publishing platform — defaults, AI models, storefront, and export preferences." />
+        <meta name="description" content="Configure Lexora account, AI providers, writing, narration, publishing, and security preferences." />
       </Helmet>
 
-      <div>
-        <div className="flex items-center gap-2 mb-2">
-          <Hexagon className="h-3 w-3 text-purple-500/50" />
-          <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.2em] uppercase">CONFIGURATION</span>
+      <div className="mx-auto w-full max-w-[1500px] px-4 py-5 md:px-7 md:py-7">
+        <div className="mb-6 overflow-hidden rounded-[28px] border border-[#c19d66]/15 bg-[#151117]/90 shadow-[0_28px_80px_-48px_rgba(0,0,0,.95)]">
+          <div className="flex flex-col gap-5 px-5 py-6 sm:px-7 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="inline-flex h-7 items-center rounded-full border border-[#c19d66]/20 bg-[#c19d66]/[.06] px-3 font-mono text-[9px] tracking-[0.18em] text-[#c19d66]/80 uppercase">Lexora Control Center</span>
+                <span className="hidden sm:inline font-mono text-[9px] text-muted-foreground/35">Settings 4.0</span>
+              </div>
+              <h1 className="lexora-display text-3xl font-semibold text-[#f1e7dc] md:text-[2.65rem]">Shape how Lexora works.</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground/60">Providers, writing behavior, narration, publishing defaults, and access controls now live in one organized workspace.</p>
+            </div>
+            <Button type="button" onClick={form.handleSubmit(d => mutation.mutate(d))} disabled={mutation.isPending} className="h-10 shrink-0 border border-[#c19d66]/25 bg-[#8f4a5e] px-5 text-[#fff8f1] hover:bg-[#a75a70]" data-testid="button-save-settings-top">
+              {mutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              {mutation.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+          <div className="h-px bg-gradient-to-r from-transparent via-[#c19d66]/25 to-transparent" />
         </div>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">App <span className="shimmer-text">Settings</span></h1>
-        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Configure defaults and preferences for your publishing pipeline</p>
-      </div>
 
-      <div className="line-glow" />
+        <div className="grid gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
+          <aside className="lg:sticky lg:top-4 lg:self-start">
+            <div className="overflow-hidden rounded-[24px] border border-[#c19d66]/10 bg-[#141116]/92 p-2 shadow-[0_20px_60px_-45px_rgba(0,0,0,.95)]">
+              <div className="px-3 pb-2 pt-3">
+                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c19d66]/55">Configuration</p>
+              </div>
+              <nav className="grid gap-1 sm:grid-cols-2 lg:grid-cols-1" aria-label="Settings sections">
+                {SETTINGS_NAV.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeSection === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveSection(item.id)}
+                      className={`group flex w-full items-center gap-3 rounded-[18px] border px-3 py-3 text-left transition-all ${active ? "border-[#c19d66]/20 bg-gradient-to-r from-[#8f4a5e]/20 to-[#c19d66]/[.06] shadow-[inset_3px_0_0_#c19d66]" : "border-transparent hover:border-white/[.05] hover:bg-white/[.025]"}`}
+                      data-testid={`settings-nav-${item.id}`}
+                    >
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${active ? "border-[#c19d66]/25 bg-[#c19d66]/10 text-[#d8b77d]" : "border-white/[.05] bg-white/[.02] text-muted-foreground/45"}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={`block text-[12px] font-semibold ${active ? "text-[#f1e7dc]" : "text-muted-foreground/75"}`}>{item.label}</span>
+                        <span className="mt-0.5 block truncate text-[9px] font-mono text-muted-foreground/35">{item.description}</span>
+                      </span>
+                      <ChevronRight className={`h-3.5 w-3.5 ${active ? "text-[#c19d66]/75" : "text-muted-foreground/20"}`} />
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          </aside>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(d => mutation.mutate(d))} className="space-y-5">
+          <section className="min-w-0">
+            <div className="mb-4 flex items-center gap-2 px-1">
+              <PanelsTopLeft className="h-4 w-4 text-[#c19d66]/65" />
+              <div>
+                <p className="text-sm font-semibold text-[#f1e7dc]">{SETTINGS_NAV.find(item => item.id === activeSection)?.label}</p>
+                <p className="text-[10px] font-mono text-muted-foreground/40">{SETTINGS_NAV.find(item => item.id === activeSection)?.description}</p>
+              </div>
+            </div>
 
-          <Card className="border-border/20 bg-card/30">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(d => mutation.mutate(d))} className="space-y-5">
+
+          {activeSection === "general" && <Card className="lexora-surface rounded-[24px]">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                <User className="h-3.5 w-3.5 text-purple-400/70" /> Author Defaults
+                <User className="h-3.5 w-3.5 text-[#c19d66]/80" /> Author Defaults
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Pre-filled when creating new projects</CardDescription>
             </CardHeader>
@@ -829,12 +896,12 @@ export default function Settings() {
                 )} />
               </div>
             </CardContent>
-          </Card>
+          </Card>}
 
-          <Card className="border-border/20 bg-card/30">
+          {activeSection === "ai" && <Card className="lexora-surface rounded-[24px]">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                <Brain className="h-3.5 w-3.5 text-cyan-400/70" /> AI Configuration
+                <Brain className="h-3.5 w-3.5 text-[#c19d66]/80" /> AI Configuration
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Control AI model and generation behavior</CardDescription>
             </CardHeader>
@@ -871,14 +938,14 @@ export default function Settings() {
                 </FormItem>
               )} />
             </CardContent>
-          </Card>
+          </Card>}
 
-          <CustomAiProviderSettings />
+          {activeSection === "ai" && <CustomAiProviderSettings />}
 
-          <Card className="border-border/20 bg-card/30">
+          {activeSection === "writing" && <Card className="lexora-surface rounded-[24px]">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                <Zap className="h-3.5 w-3.5 text-amber-400/70" /> Pipeline Automation
+                <Zap className="h-3.5 w-3.5 text-[#c19d66]/80" /> Pipeline Automation
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Auto-trigger steps after chapter generation completes</CardDescription>
             </CardHeader>
@@ -917,12 +984,12 @@ export default function Settings() {
                 </FormItem>
               )} />
             </CardContent>
-          </Card>
+          </Card>}
 
-          <Card className="border-border/20 bg-card/30">
+          {activeSection === "narration" && <Card className="lexora-surface rounded-[24px]">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                <Volume2 className="h-3.5 w-3.5 text-emerald-400/70" /> Narration
+                <Volume2 className="h-3.5 w-3.5 text-[#c19d66]/80" /> Narration
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Default voice for AI narrator across all books</CardDescription>
             </CardHeader>
@@ -949,12 +1016,12 @@ export default function Settings() {
                 </FormItem>
               )} />
             </CardContent>
-          </Card>
+          </Card>}
 
-          <Card className="border-border/20 bg-card/30">
+          {activeSection === "publishing" && <Card className="lexora-surface rounded-[24px]">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                <Store className="h-3.5 w-3.5 text-purple-400/70" /> Storefront
+                <Store className="h-3.5 w-3.5 text-[#c19d66]/80" /> Storefront
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Customize your public reader storefront</CardDescription>
             </CardHeader>
@@ -969,12 +1036,12 @@ export default function Settings() {
                 </FormItem>
               )} />
             </CardContent>
-          </Card>
+          </Card>}
 
-          <Card className="border-border/20 bg-card/30">
+          {activeSection === "publishing" && <Card className="lexora-surface rounded-[24px]">
             <CardHeader className="pb-4">
               <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
-                <Download className="h-3.5 w-3.5 text-cyan-400/70" /> Export
+                <Download className="h-3.5 w-3.5 text-[#c19d66]/80" /> Export
               </CardTitle>
               <CardDescription className="text-[10px] font-mono text-muted-foreground/40">Default format when exporting books</CardDescription>
             </CardHeader>
@@ -993,21 +1060,33 @@ export default function Settings() {
                 </FormItem>
               )} />
             </CardContent>
-          </Card>
+          </Card>}
 
           <div className="flex justify-end pt-2">
-            <Button type="submit" disabled={mutation.isPending} data-testid="button-save-settings" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] font-mono text-[12px]">
+            <Button type="submit" disabled={mutation.isPending} data-testid="button-save-settings" className="border border-[#c19d66]/25 bg-[#8f4a5e] text-[#fff8f1] hover:bg-[#a75a70] font-mono text-[12px]">
               <Save className="h-4 w-4 mr-2" />
               {mutation.isPending ? "SAVING..." : "SAVE SETTINGS"}
             </Button>
           </div>
-        </form>
-      </Form>
+                </form>
+              </Form>
 
-      <SecurityManager />
-      <WorkspaceMemberManager />
-      <BrandKitManager />
-      <MembershipTierManager />
+              {activeSection === "security" && (
+                <div className="space-y-5">
+                  <SecurityManager />
+                  <WorkspaceMemberManager />
+                </div>
+              )}
+              {activeSection === "publishing" && (
+                <div className="mt-5 space-y-5">
+                  <BrandKitManager />
+                  <MembershipTierManager />
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
