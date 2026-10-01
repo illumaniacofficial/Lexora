@@ -37,6 +37,7 @@ const studioReview = read("server/core/studioReview.ts");
 const triad = read("server/core/triadEngine.ts");
 const conceptLab = read("client/src/pages/ConceptLab.tsx");
 const projectDetail = read("client/src/pages/ProjectDetail.tsx");
+const workspaceTabs = read("client/src/components/experience/workspace-tabs.tsx");
 const newProject = read("client/src/pages/NewProject.tsx");
 const app = read("client/src/App.tsx");
 const copilot = read("client/src/components/lexora-copilot.tsx");
@@ -256,7 +257,9 @@ check(
 
 check(
   "project workspace tabs remain horizontally scrollable and outline blueprints reviewable",
-  projectDetail.includes('data-testid="project-workspace-tab-scroll"') &&
+  projectDetail.includes("<WorkspaceTabs") &&
+    workspaceTabs.includes('data-testid="project-workspace-tab-scroll"') &&
+    workspaceTabs.includes("overflow-x-auto") &&
     projectDetail.includes('data-testid="outline-generation-status"') &&
     projectDetail.includes('data-testid="button-toggle-all-outline-blueprints"') &&
     projectDetail.includes("Outline Blueprint"),
