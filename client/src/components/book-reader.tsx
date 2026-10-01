@@ -8,7 +8,7 @@ import { useNarration } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getBrowserVoices, getDefaultBrowserVoice, type BrowserVoiceOption } from "@/lib/browser-tts";
-import { buildCumulativeWeights, wordIndexFromProgress } from "@/lib/word-timing";
+import { buildCumulativeWeights, wordIndexFromAudioTime } from "@/lib/word-timing";
 
 interface BookReaderProps {
   title: string;
@@ -266,7 +266,7 @@ function OutroPage({ page, theme }: { page: Extract<PageContent, { type: "outro"
       <div className={cn("w-8 h-[1px] my-4 rounded-full", t.divider)} />
       <p className={cn("font-mono text-[10px] uppercase tracking-[0.25em] mb-1", t.accent)}>Produced &amp; narrated on</p>
       <p className={cn("font-serif text-lg font-bold tracking-wide", t.heading)}>Lexora</p>
-      <p className={cn("font-mono text-[9px] uppercase tracking-[0.3em] mt-4", t.accent)}>AI Publishing Platform</p>
+      <p className={cn("font-mono text-[9px] uppercase tracking-[0.3em] mt-4", t.accent)}>Publishing Platform</p>
     </div>
   );
 }
@@ -517,7 +517,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       if (p.type === "intro") {
         result.push({ chapterNumber: 0, chapterTitle: "Introduction", pageInChapter: 1, totalPagesInChapter: 1, text: `${p.title}. Written by ${p.author}. ${p.chapterCount} ${p.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`, globalPageIndex: idx });
       } else if (p.type === "outro") {
-        result.push({ chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`, globalPageIndex: idx });
+        result.push({ chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, the Lexora Publishing Platform. We hope you enjoyed the journey.`, globalPageIndex: idx });
       } else if (p.type === "text") {
         const tp = p as Extract<PageContent, { type: "text" }>;
         result.push({ chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text, globalPageIndex: idx, chapterId: tp.chapterId });
@@ -770,7 +770,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       return `${pg.title}. Written by ${pg.author}. ${pg.chapterCount} ${pg.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`;
     }
     if (pg.type === "outro") {
-      return `Thank you for listening to ${pg.title}, by ${pg.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`;
+      return `Thank you for listening to ${pg.title}, by ${pg.author}. This audiobook was produced and narrated on Lexora, the Lexora Publishing Platform. We hope you enjoyed the journey.`;
     }
     if (pg.type === "text") return stripMarkdown(pg.text).slice(0, 4000);
     return null;
@@ -793,14 +793,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         return narration ? { text: narration, lastIdx: pageIdx } : null;
       }
     }
-    let textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
-    let lastIdx = pageIdx;
-    if (showDual && pageIdx + 1 < pages.length && pages[pageIdx + 1].type === "text") {
-      textToRead += "\n\n" + (pages[pageIdx + 1] as Extract<PageContent, { type: "text" }>).text;
-      lastIdx = pageIdx + 1;
-    }
-    return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx };
-  }, [pages, showDual, getPageNarrationText]);
+    const textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
+    return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx: pageIdx };
+  }, [pages, getPageNarrationText]);
 
   const pageAudioContext = useCallback((pageIdx: number) => {
     const pg = pages[pageIdx];
@@ -877,10 +872,11 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           let nextTextIdx = lastPageIdx + 1;
           while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
-            goToImmediate(nextTextIdx);
+            const alreadyVisibleOnRight = showDual && nextTextIdx === pageIdx + 1;
+            if (!alreadyVisibleOnRight) goToImmediate(nextTextIdx);
             setTimeout(() => {
               if (playPageRef.current) playPageRef.current(nextTextIdx);
-            }, 400);
+            }, 220);
           }
         }
       },
@@ -981,10 +977,11 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           let nextTextIdx = lastPageIdx + 1;
           while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
-            goToImmediate(nextTextIdx);
+            const alreadyVisibleOnRight = showDual && nextTextIdx === pageIdx + 1;
+            if (!alreadyVisibleOnRight) goToImmediate(nextTextIdx);
             setTimeout(() => {
               if (playPageRef.current) playPageRef.current(nextTextIdx);
-            }, 400);
+            }, 220);
           }
         }
       };
@@ -994,7 +991,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         if (audio && audio.duration > 0) {
           const pct = audio.currentTime / audio.duration;
           setNarrationProgress(pct * 100);
-          setReaderWordIndex(wordIndexFromProgress(pct, cumul));
+          setReaderWordIndex(wordIndexFromAudioTime(audio.currentTime, audio.duration, cumul));
         }
         if (!audio.paused) narrationAnimRef.current = requestAnimationFrame(updateProgress);
       };
@@ -1117,14 +1114,14 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const sizeLabel = FONT_SIZES[currentSizeIdx]?.label || "M";
   const isNarratableCurrentPage = page.type === "text" || page.type === "intro" || page.type === "outro";
 
-  const activeHighlightIdx = useMemo(() => {
-    if (readerWordIndex >= 0 && narratedPageIdx === currentPage) return readerWordIndex;
+  const highlightForPage = useCallback((pageIndex: number) => {
+    if (readerWordIndex >= 0 && narratedPageIdx === pageIndex) return readerWordIndex;
     if (miniNarration && miniPlayerWordIndex >= 0) {
       const miniPage = miniNarration.allPages[miniNarration.currentPageIndex];
-      if (miniPage?.globalPageIndex === currentPage) return miniPlayerWordIndex;
+      if (miniPage?.globalPageIndex === pageIndex) return miniPlayerWordIndex;
     }
     return undefined;
-  }, [readerWordIndex, narratedPageIdx, miniNarration, miniPlayerWordIndex, currentPage]);
+  }, [readerWordIndex, narratedPageIdx, miniNarration, miniPlayerWordIndex]);
 
   const closeAllPanels = () => { setShowToc(false); setShowBookmarks(false); setShowSettings(false); setShowNarrator(false); };
 
@@ -1471,7 +1468,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                   <BookPage page={page} theme={theme} fontSize={fontSize} side="left"
                     pageNum={currentPage + 1} totalPages={pages.length}
                     isFlipping={isFlipping} flipDir={flipDirection}
-                    highlightWordIndex={activeHighlightIdx} />
+                    highlightWordIndex={highlightForPage(currentPage)} />
                 </div>
                 <div className="w-[3px] relative z-10" style={{
                   background: isDark
@@ -1483,7 +1480,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                   {rightPage ? (
                     <BookPage page={rightPage} theme={theme} fontSize={fontSize} side="right"
                       pageNum={currentPage + 2} totalPages={pages.length}
-                      isFlipping={false} flipDir="right" />
+                      isFlipping={false} flipDir="right"
+                      highlightWordIndex={highlightForPage(currentPage + 1)} />
                   ) : (
                     <div className={cn("h-full rounded-r-lg", t.bg, isDark ? "opacity-30" : "opacity-50")} style={{ backgroundImage: t.gradient }} />
                   )}
@@ -1494,7 +1492,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 <BookPage page={page} theme={theme} fontSize={fontSize} side="center"
                   pageNum={currentPage + 1} totalPages={pages.length}
                   isFlipping={isFlipping} flipDir={flipDirection}
-                  highlightWordIndex={activeHighlightIdx} />
+                  highlightWordIndex={highlightForPage(currentPage)} />
               </div>
             )}
           </div>
