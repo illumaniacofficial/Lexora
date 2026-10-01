@@ -1,10 +1,19 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+  if (res.ok) return;
+
+  const raw = (await res.text()) || res.statusText;
+  let message = raw;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.error === "string") message = parsed.error;
+    else if (typeof parsed?.message === "string") message = parsed.message;
+  } catch {
+    // Keep the plain-text response when the server did not return JSON.
   }
+
+  throw new Error(message ? `${res.status}: ${message}` : `${res.status}: ${res.statusText}`);
 }
 
 export async function apiRequest(
@@ -14,9 +23,13 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: {
+      Accept: "application/json",
+      ...(data ? { "Content-Type": "application/json" } : {}),
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
+    cache: "no-store",
   });
 
   await throwIfResNotOk(res);
@@ -29,12 +42,26 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const url = queryKey.join("/") as string;
+    const res = await fetch(url, {
       credentials: "include",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Cache-Control": "no-cache",
+      },
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
+    }
+
+    // Some browsers/proxies can still answer a conditional API request with
+    // 304 and no body. React Query needs a value, so preserve the last known
+    // good payload instead of turning an unchanged response into a false error.
+    if (res.status === 304) {
+      const cached = queryClient.getQueryData<T>(queryKey);
+      if (cached !== undefined) return cached;
     }
 
     await throwIfResNotOk(res);
