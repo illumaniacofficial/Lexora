@@ -1150,7 +1150,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ${input.pageInChapter ?? null},
           ${input.label || null}
         )
-        RETURNING id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+        RETURNING id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
       `);
       const row = result?.rows?.[0] || result?.[0] || null;
       res.status(201).json(row);
