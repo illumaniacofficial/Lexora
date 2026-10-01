@@ -35,6 +35,7 @@ import { hashArtifactContent } from "./core/artifacts";
 import { isOllamaAvailable, ollamaChat } from "./core/ollama";
 import { captureContinuityForApprovedChapter, archiveContinuityForChapter } from "./core/continuityService";
 import { buildChapterDraftInstructions } from "./core/chapterCraft";
+import { captureBookArchitectureArtifact, captureRedactorReviewArtifact, captureCanonicalChapterArtifact } from "./core/canonService";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -2245,6 +2246,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       let continuity: any = null;
       let continuityWarning: string | null = null;
+      if (status === "approved") {
+        await captureCanonicalChapterArtifact(projectId, chapterId).catch((artifactError: any) => {
+          console.error("Canonical manuscript capture failed:", artifactError?.message || artifactError);
+        });
+      }
       try {
         if (status === "approved") {
           continuity = await captureContinuityForApprovedChapter(projectId, chapterId);
@@ -2834,7 +2840,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       // Keep the old outline intact until every part of the new result has
       // validated, then atomically commit DNA + chapters + project state.
-      await storage.commitOutline(projectId, {
+      const committedOutline = await storage.commitOutline(projectId, {
         projectId,
         corePromise: result.corePromise,
         readerAvatar: result.readerAvatar,
@@ -2842,6 +2848,14 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         transformationArc: result.transformationArc,
         frameworkSummary: result.frameworkSummary,
       }, newChapters);
+      await captureBookArchitectureArtifact(
+        projectId,
+        committedOutline.dna,
+        committedOutline.chapters,
+        { runtimeId: `openai:${HIGH_MODEL}`, model: HIGH_MODEL },
+      ).catch((artifactError: any) => {
+        console.warn("Book architecture artifact capture failed:", artifactError?.message || artifactError);
+      });
       await storage.createNotification({
         kind: "pipeline",
         title: `Outline ready: ${project.title}`,
@@ -3319,6 +3333,14 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         kind: "editorial_board",
         score: board.overallScore,
         data: board,
+      });
+      await captureRedactorReviewArtifact(
+        projectId,
+        chapterId,
+        board,
+        { runtimeId: `openai:${HIGH_MODEL}`, model: HIGH_MODEL },
+      ).catch((artifactError: any) => {
+        console.warn("Redactor artifact capture failed:", artifactError?.message || artifactError);
       });
       res.json(saved);
       saveDbSeed().catch(() => {});
