@@ -107,13 +107,35 @@ const QUICK_START_TEMPLATES: { id: string; label: string; vertical: FormData["ve
 
 
 export default function NewProject() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [genreSuggestions, setGenreSuggestions] = useState<Array<{ genre: FormData["vertical"]; confidence: number; reason: string }>>([]);
   const [genreSuggestionsLoading, setGenreSuggestionsLoading] = useState(false);
+  const [handoffApplied, setHandoffApplied] = useState(false);
+  const dossierId = new URLSearchParams(location.split("?")[1] || "").get("dossier");
+
+  const { data: dossierHandoff, isLoading: dossierHandoffLoading, error: dossierHandoffError } = useQuery<{
+    dossierId: string;
+    propertyId: string;
+    status: string;
+    title: string;
+    description: string;
+    targetAudience: string;
+    toneStyle: string;
+    keyThemes: string;
+    comparableTitles: string;
+    avoid: string;
+    genres: FormData["vertical"][];
+    vertical: FormData["vertical"];
+    targetLanguage: FormData["targetLanguage"];
+    summary?: { oneLine?: string; corePromise?: string; uniqueAngle?: string; oracleSummary?: string; format?: string };
+  }>({
+    queryKey: [dossierId ? `/api/concept-lab/dossiers/${dossierId}/handoff` : ""],
+    enabled: Boolean(dossierId),
+  });
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -122,6 +144,28 @@ export default function NewProject() {
 
   const { data: seriesList = [] } = useQuery<{ id: number; title: string; bookCount: number }[]>({ queryKey: ["/api/series"] });
   const { data: styleList = [] } = useQuery<{ id: number; name: string }[]>({ queryKey: ["/api/style-fingerprints"] });
+
+  useEffect(() => {
+    if (!dossierHandoff || handoffApplied) return;
+    const genres = dossierHandoff.genres?.length ? dossierHandoff.genres.slice(0, 6) : [dossierHandoff.vertical];
+    form.reset({
+      title: dossierHandoff.title || "",
+      authorName: form.getValues("authorName") || "Sergio A. Delgado",
+      description: dossierHandoff.description || "",
+      targetAudience: dossierHandoff.targetAudience || "",
+      toneStyle: dossierHandoff.toneStyle || "",
+      keyThemes: dossierHandoff.keyThemes || "",
+      comparableTitles: dossierHandoff.comparableTitles || "",
+      avoid: dossierHandoff.avoid || "",
+      lengthDepth: "auto",
+      vertical: dossierHandoff.vertical || genres[0] || "novel",
+      genres,
+      targetLanguage: dossierHandoff.targetLanguage || "english",
+      seriesId: "none",
+      styleFingerprintId: "none",
+    });
+    setHandoffApplied(true);
+  }, [dossierHandoff, handoffApplied, form]);
 
   const currentTitle = form.watch("title");
   const currentDescription = form.watch("description");
@@ -222,6 +266,7 @@ export default function NewProject() {
       status: "draft",
       seriesId: data.seriesId && data.seriesId !== "none" ? parseInt(data.seriesId) : null,
       styleFingerprintId: data.styleFingerprintId && data.styleFingerprintId !== "none" ? parseInt(data.styleFingerprintId) : null,
+      sourceDossierId: dossierHandoff?.dossierId || null,
     }),
     onSuccess: async (res) => {
       const project = await res.json();
@@ -257,6 +302,36 @@ export default function NewProject() {
       </div>
 
       <div className="line-glow mb-5 md:mb-8" />
+
+      {dossierId && (
+        <Card className="mb-5 border-cyan-500/25 bg-cyan-500/[0.05]" data-testid="dossier-project-handoff">
+          <CardContent className="pt-4 pb-4">
+            {dossierHandoffLoading ? (
+              <div className="flex items-center gap-2 text-[11px] font-mono text-cyan-200/70">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading approved Concept Dossier…
+              </div>
+            ) : dossierHandoffError ? (
+              <div className="text-[11px] text-red-300">
+                This dossier could not be loaded for project creation. Return to Concept Lab and make sure it is greenlit.
+              </div>
+            ) : dossierHandoff ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Check className="h-4 w-4 text-cyan-300" />
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-cyan-200">Approved Concept Dossier Loaded</span>
+                  <span className="text-[9px] font-mono text-muted-foreground/45">Property {dossierHandoff.propertyId}</span>
+                </div>
+                <p className="text-[12px] text-muted-foreground/70">
+                  Lexora prefilled this form from the greenlit dossier. Review or adjust anything before initializing; the new project will stay linked to the same Property and concept lineage.
+                </p>
+                {dossierHandoff.summary?.oneLine && (
+                  <p className="text-[11px] text-cyan-100/65">{dossierHandoff.summary.oneLine}</p>
+                )}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-6">
