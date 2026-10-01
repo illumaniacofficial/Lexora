@@ -10,7 +10,7 @@ import { extractStoryEntities } from "./graph";
 import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
-import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema, LANGUAGES } from "@shared/schema";
+import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema, LANGUAGES, VERTICALS } from "@shared/schema";
 import { buildEpub } from "./epub";
 import { buildDocx } from "./docx";
 import { buildMobi } from "./mobi";
@@ -1623,6 +1623,75 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.post("/api/projects/suggest-genres", async (req, res) => {
+    try {
+      const input = z.object({
+        title: z.string().max(200).optional().default(""),
+        description: z.string().max(2000).optional().default(""),
+        targetAudience: z.string().max(500).optional().default(""),
+        toneStyle: z.string().max(500).optional().default(""),
+        keyThemes: z.string().max(800).optional().default(""),
+        comparableTitles: z.string().max(500).optional().default(""),
+        selectedGenres: z.array(z.enum(VERTICALS)).max(6).optional().default([]),
+      }).parse(req.body);
+
+      const context = [
+        input.title && `TITLE: ${input.title}`,
+        input.description && `BOOK IDEA: ${input.description}`,
+        input.targetAudience && `TARGET AUDIENCE: ${input.targetAudience}`,
+        input.toneStyle && `TONE / STYLE: ${input.toneStyle}`,
+        input.keyThemes && `THEMES / TOPICS: ${input.keyThemes}`,
+        input.comparableTitles && `COMPARABLES: ${input.comparableTitles}`,
+      ].filter(Boolean).join("\n");
+
+      if (context.trim().length < 24) {
+        return res.json({ suggestions: [] });
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: FAST_MODEL,
+        messages: [{
+          role: "system",
+          content: [
+            "You classify books into Lexora genre IDs.",
+            "Return ONLY JSON with a genres array of 1 to 5 objects.",
+            "Each object must contain genre, confidence (0 to 1), and a short reason.",
+            "Use only these exact genre IDs:",
+            VERTICALS.join(", "),
+            "Choose genres supported by the user's actual concept. Hybrid books may have multiple genres.",
+            "Do not automatically honor the currently selected genres; treat them only as context and independently infer the best fit.",
+          ].join("\n"),
+        }, {
+          role: "user",
+          content: `${context}\n\nCURRENT USER SELECTIONS: ${input.selectedGenres.join(", ") || "none"}`,
+        }],
+        max_completion_tokens: 700,
+        response_format: { type: "json_object" },
+      });
+
+      const parsed = JSON.parse(completion.choices[0].message.content || "{}");
+      const allowed = new Set<string>(VERTICALS as readonly string[]);
+      const seen = new Set<string>();
+      const suggestions = (Array.isArray(parsed.genres) ? parsed.genres : [])
+        .map((item: any) => ({
+          genre: typeof item?.genre === "string" ? item.genre : "",
+          confidence: Math.max(0, Math.min(1, Number(item?.confidence) || 0)),
+          reason: typeof item?.reason === "string" ? item.reason.trim().slice(0, 180) : "",
+        }))
+        .filter((item: any) => {
+          if (!allowed.has(item.genre) || seen.has(item.genre)) return false;
+          seen.add(item.genre);
+          return true;
+        })
+        .slice(0, 5);
+
+      res.json({ suggestions });
+    } catch (err: any) {
+      console.error("Genre detection error:", err.message);
+      res.status(500).json({ error: "Failed to detect genres" });
+    }
+  });
+
   // ---- Revival Studio: Properties, Artifacts, Continuity, Concept Lab ----
 
   app.get("/api/runtime/status", async (_req, res) => {
@@ -2144,12 +2213,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/projects", async (req, res) => {
     try {
-      const data = insertProjectSchema.parse(req.body);
+      const allowedGenres = new Set<string>(VERTICALS as readonly string[]);
+      const requestedGenres = Array.from(new Set(
+        (Array.isArray(req.body?.genres) ? req.body.genres : [])
+          .filter((genre: unknown): genre is string => typeof genre === "string" && allowedGenres.has(genre)),
+      )).slice(0, 6);
+
+      const requestedPrimary = typeof req.body?.vertical === "string" && allowedGenres.has(req.body.vertical)
+        ? req.body.vertical
+        : requestedGenres[0];
+
+      if (requestedPrimary && !requestedGenres.includes(requestedPrimary)) {
+        requestedGenres.unshift(requestedPrimary);
+      }
+
+      const data = insertProjectSchema.parse({
+        ...req.body,
+        vertical: requestedPrimary || req.body?.vertical,
+      });
       const project = await storage.createProject(data);
-      // Every new legacy Project is immediately wrapped in a first-class Property.
-      // This is additive and keeps the original Project contract intact.
-      await ensurePropertyForProject(project.id);
-      res.status(201).json(project);
+
+      // Every Project is wrapped in a first-class Property. Keep the legacy
+      // primary vertical intact while storing the full reviewed genre blend in Canon.
+      const property = await ensurePropertyForProject(project.id);
+      const genres = requestedGenres.length > 0 ? requestedGenres : [project.vertical];
+      const primaryGenre = genres.includes(project.vertical) ? project.vertical : genres[0];
+      const existingClassification = (property.classification || {}) as Record<string, any>;
+      await storage.updateStudioProperty(property.id, {
+        classification: {
+          ...existingClassification,
+          primaryGenre: {
+            id: primaryGenre,
+            label: primaryGenre,
+            weight: 1,
+          },
+          additionalGenres: genres
+            .filter((genre) => genre !== primaryGenre)
+            .map((genre, index) => ({
+              id: genre,
+              label: genre,
+              weight: Math.max(0.55, 0.9 - index * 0.08),
+            })),
+          craftProfiles: genres.map((genre, index) => ({
+            id: genre,
+            label: genre,
+            weight: index === 0 ? 1 : Math.max(0.55, 0.9 - index * 0.08),
+          })),
+        },
+      });
+
+      res.status(201).json({ ...project, genres });
       saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(400).json({ error: err.message });
