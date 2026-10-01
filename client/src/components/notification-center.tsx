@@ -77,7 +77,7 @@ export function NotificationCenter() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0 border-border/30 bg-card/95 backdrop-blur-xl" data-testid="popover-notifications">
+      <PopoverContent align="end" className="w-[min(20rem,calc(100vw-1rem))] p-0 border-border/30 bg-card/95 backdrop-blur-xl" data-testid="popover-notifications">
         <div className="flex items-center justify-between px-3.5 py-3 border-b border-border/20">
           <div className="flex items-center gap-2">
             <Bell className="h-3.5 w-3.5 text-purple-400/70" />
