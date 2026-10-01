@@ -45,5 +45,15 @@ for (const utility of [".lexora-page",".lexora-editorial-surface",".lexora-kicke
 
 check("reduced motion remains supported", css.includes("prefers-reduced-motion"));
 
+const app = read("client/src/App.tsx");
+const sidebar = read("client/src/components/app-sidebar.tsx");
+check("shell keeps Stories become worlds orientation", app.includes("Stories become worlds."));
+check("sidebar uses Lexora mark", sidebar.includes("/icons/lexora-mark.svg"));
+check("sidebar defines primary creative navigation", sidebar.includes("primaryNavItems"));
+check("sidebar defines secondary intelligence navigation", sidebar.includes("secondaryNavItems"));
+check("sidebar retains narration integration", sidebar.includes("narrationState") && sidebar.includes("playbackControls"));
+check("app retains Lexora Copilot", app.includes("LexoraCopilot"));
+check("sidebar primary active style avoids purple neon", !sidebar.includes('bg-purple-500/10 text-purple-300'));
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
