@@ -98,13 +98,13 @@ export function AppSidebar() {
       <SidebarHeader className="border-b border-border/30 px-5 py-5">
         <div className="flex items-center gap-3">
           <div className="relative flex h-10 w-10 items-center justify-center group">
-            <div className="absolute inset-0 rounded-xl neon-glow opacity-80 blur-[2px] group-hover:opacity-100 group-hover:blur-[4px] transition-all duration-500" />
-            <img src={logoPath} alt="Lexora" className="relative h-10 w-10 rounded-xl object-cover drop-shadow-lg" />
+            <div className="absolute inset-0 rounded-[14px] bg-[radial-gradient(circle_at_50%_35%,rgba(193,157,102,.16),rgba(143,74,94,.11)_48%,transparent_72%)] opacity-90 group-hover:opacity-100 transition-opacity duration-200" />
+            <img src={logoPath} alt="Lexora" className="relative h-10 w-10 rounded-[14px] object-cover shadow-[0_12px_30px_-18px_rgba(193,157,102,.55)]" />
           </div>
           <div>
-            <div className="text-sm font-bold tracking-tight shimmer-text leading-none">Lexora</div>
-            <div className="text-[10px] font-mono font-medium text-purple-400/80 mt-1 leading-none tracking-widest uppercase">
-              PUBLISHING PLATFORM
+            <div className="text-[15px] font-semibold tracking-[-0.025em] text-[#f1e7dc] leading-none">Lexora</div>
+            <div className="text-[10px] font-mono font-medium text-[#c19d66]/70 mt-1 leading-none tracking-widest uppercase">
+              STORY STUDIO
             </div>
           </div>
         </div>
