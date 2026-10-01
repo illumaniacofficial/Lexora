@@ -10,6 +10,8 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import AudioMiniPlayer, { type NarrationState, type PlaybackState } from "@/components/audio-mini-player";
 import { NotificationCenter } from "@/components/notification-center";
+import LexoraCopilot from "@/components/lexora-copilot";
+import { Bot } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import Login from "@/pages/Login";
 
@@ -111,6 +113,12 @@ const sidebarStyle = {
 };
 
 function AdminLayout() {
+  const [copilotOpen, setCopilotOpen] = useState(() => localStorage.getItem("lexora.copilot.open") === "true");
+
+  useEffect(() => {
+    localStorage.setItem("lexora.copilot.open", String(copilotOpen));
+  }, [copilotOpen]);
+
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full overflow-hidden">
@@ -118,15 +126,29 @@ function AdminLayout() {
         <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
           <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-12 border-b border-border/30 glass-panel shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-purple-400 transition-colors" aria-label="Toggle sidebar" />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                size="sm"
+                variant={copilotOpen ? "secondary" : "ghost"}
+                onClick={() => setCopilotOpen((value) => !value)}
+                className="h-8 gap-1.5 text-[9px] font-mono text-purple-300"
+                data-testid="button-toggle-copilot"
+                aria-label="Toggle Lexora Copilot"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Copilot</span>
+              </Button>
               <NotificationCenter />
               <div className="h-1 w-8 rounded-full neon-glow opacity-60" />
               <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
             </div>
           </header>
-          <main className="min-w-0 flex-1 overflow-hidden aurora-bg">
-            <AdminRouter />
-          </main>
+          <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <main className="min-w-0 flex-1 overflow-hidden aurora-bg">
+              <AdminRouter />
+            </main>
+            <LexoraCopilot open={copilotOpen} onClose={() => setCopilotOpen(false)} />
+          </div>
         </div>
       </div>
     </SidebarProvider>
