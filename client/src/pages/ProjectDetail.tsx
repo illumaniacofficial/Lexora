@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, CheckCircle, Clock, X,
+  ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, Square, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
   Save, Edit3, Check, Music, ArrowRight, Globe, Wand2,
   ClipboardCheck, Users, Sparkles, Gauge, MessageSquareQuote, Activity, TextCursorInput,
