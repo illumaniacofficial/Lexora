@@ -40,7 +40,7 @@ import {
   type ArtifactStreamRow, type InsertArtifactStream,
   type ConceptSynthesisRunRow, type InsertConceptSynthesisRun,
 } from "@shared/schema";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -1083,12 +1083,36 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateCreativeArtifactState(id: string, state: string): Promise<CreativeArtifactRow | undefined> {
-    const [updated] = await db
-      .update(creativeArtifacts)
-      .set({ state })
-      .where(eq(creativeArtifacts.id, id))
-      .returning();
-    return updated;
+    if (state !== "canonical") {
+      const [updated] = await db
+        .update(creativeArtifacts)
+        .set({ state })
+        .where(eq(creativeArtifacts.id, id))
+        .returning();
+      return updated;
+    }
+
+    return db.transaction(async (tx) => {
+      const [target] = await tx.select().from(creativeArtifacts).where(eq(creativeArtifacts.id, id));
+      if (!target) return undefined;
+
+      const scope = [
+        eq(creativeArtifacts.type, target.type),
+        eq(creativeArtifacts.state, "canonical"),
+        target.projectId == null ? isNull(creativeArtifacts.projectId) : eq(creativeArtifacts.projectId, target.projectId),
+        target.chapterId == null ? isNull(creativeArtifacts.chapterId) : eq(creativeArtifacts.chapterId, target.chapterId),
+      ];
+
+      await tx.update(creativeArtifacts)
+        .set({ state: "superseded" })
+        .where(and(...scope));
+
+      const [updated] = await tx.update(creativeArtifacts)
+        .set({ state: "canonical" })
+        .where(eq(creativeArtifacts.id, id))
+        .returning();
+      return updated;
+    });
   }
 
   async getContinuitySnapshot(projectId: number): Promise<ContinuitySnapshot | undefined> {
