@@ -1,18 +1,21 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import {
-  BookOpen, TrendingUp, DollarSign, Star, Plus, ArrowRight, Zap, BarChart3, FileText, Megaphone, Hexagon, Activity, AlertCircle, Lightbulb, Eye, Trash2,
+  Activity, AlertCircle, ArrowRight, BarChart3, BookOpen, Eye, FileText,
+  Lightbulb, Plus, Sparkles, Trash2, TrendingUp, Zap,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { formatNumber, formatCost, formatScore, statusLabel, VERTICAL_LABELS, VERTICAL_ICONS, scoreColor, STATUS_GLOW } from "@/lib/utils";
+import { formatNumber, formatCost, formatScore, VERTICAL_LABELS, VERTICAL_ICONS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Project, TrendReport, BookRequest } from "@shared/schema";
+import { LexoraPageHeader } from "@/components/experience/lexora-page-header";
+import { EditorialSection } from "@/components/experience/editorial-section";
+import { CreativeMetric } from "@/components/experience/creative-metric";
+import { EmptyCreativeState } from "@/components/experience/empty-creative-state";
+import { ProjectCoverCard } from "@/components/experience/project-cover-card";
 
 interface DashboardProject extends Project {
   totalChapters: number;
@@ -23,99 +26,38 @@ interface DashboardProject extends Project {
 }
 
 interface DashboardData {
-  stats: { totalProjects: number; completedProjects: number; activeProjects: number; totalWords: number; totalCost: number; costThisMonth: number; avgQuality: number };
+  stats: {
+    totalProjects: number;
+    completedProjects: number;
+    activeProjects: number;
+    totalWords: number;
+    totalCost: number;
+    costThisMonth: number;
+    avgQuality: number;
+  };
   recentProjects: DashboardProject[];
   recentTrends: TrendReport[];
 }
 
-function getLivePct(p: DashboardProject): number {
+function getLivePct(project: DashboardProject): number {
   let done = 0;
   let total = 0;
-  total += 1; if (p.hasTrend) done += 1;
-  total += 1; if (p.totalChapters > 0) done += 1;
-  total += 1; if (p.hasCover) done += 1;
-  if (p.totalChapters > 0) {
-    total += p.totalChapters;
-    done += p.completedChapters;
+  total += 1; if (project.hasTrend) done += 1;
+  total += 1; if (project.totalChapters > 0) done += 1;
+  total += 1; if (project.hasCover) done += 1;
+  if (project.totalChapters > 0) {
+    total += project.totalChapters;
+    done += project.completedChapters;
   } else {
     total += 1;
   }
-  total += 1; if (p.hasMarketing) done += 1;
+  total += 1; if (project.hasMarketing) done += 1;
   return Math.round((done / total) * 100);
-}
-
-function useAnimatedCounter(end: number, duration = 800) {
-  const [value, setValue] = useState(0);
-  const prevEnd = useRef(0);
-
-  useEffect(() => {
-    if (end === prevEnd.current) return;
-    prevEnd.current = end;
-    const start = 0;
-    const startTime = performance.now();
-
-    function tick(now: number) {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(start + (end - start) * eased));
-      if (progress < 1) requestAnimationFrame(tick);
-    }
-
-    requestAnimationFrame(tick);
-  }, [end, duration]);
-
-  return value;
-}
-
-const statConfig = [
-  { icon: BookOpen, label: "BOOKS COMPLETE", glowClass: "neon-glow", textGlow: "glow-text", accent: "purple" },
-  { icon: FileText, label: "WORDS WRITTEN", glowClass: "neon-glow-cool", textGlow: "glow-text-cyan", accent: "cyan" },
-  { icon: DollarSign, label: "COST THIS MONTH", glowClass: "neon-glow-nature", textGlow: "", accent: "emerald" },
-  { icon: Activity, label: "ACTIVE PROJECTS", glowClass: "neon-glow-warm", textGlow: "glow-text-pink", accent: "pink" },
-];
-
-function StatCard({ label, value, sub, index }: { label: string; value: string; sub?: string; index: number }) {
-  const cfg = statConfig[index];
-  const Icon = cfg.icon;
-  return (
-    <Card className={`relative overflow-hidden border-border/20 bg-card/40 stat-orb group card-hover-lift animate-fade-in-up stagger-${index + 1}`}>
-      <CardContent className="pt-5 pb-5 relative z-10">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${cfg.glowClass} shadow-lg`} />
-              <p className="text-[9px] font-mono font-bold text-muted-foreground/50 tracking-[0.2em] uppercase">{label}</p>
-            </div>
-            <p className={`text-xl md:text-3xl font-bold tracking-tighter ${cfg.textGlow} animate-count-up`} data-testid={`stat-${label.toLowerCase()}`}>{value}</p>
-            {sub && <p className="text-[11px] text-muted-foreground/60 font-mono">{sub}</p>}
-          </div>
-          <div className="relative">
-            <div className={`absolute inset-0 ${cfg.glowClass} opacity-20 blur-xl rounded-full scale-150 group-hover:opacity-40 transition-opacity duration-700`} />
-            <Icon className="h-6 w-6 text-muted-foreground/30 relative group-hover:text-muted-foreground/50 transition-colors duration-500" />
-          </div>
-        </div>
-      </CardContent>
-      <div className={`absolute bottom-0 left-0 right-0 h-[2px] ${cfg.glowClass} opacity-30 group-hover:opacity-60 transition-opacity duration-500`} />
-    </Card>
-  );
-}
-
-function StatusDot({ status }: { status: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/70">
-      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[status] || "bg-zinc-500"}`} />
-      {statusLabel(status)}
-    </span>
-  );
 }
 
 export default function Dashboard() {
   const { data, isLoading, error } = useQuery<DashboardData>({ queryKey: ["/api/dashboard"] });
-
-  const { data: bookRequests = [] } = useQuery<BookRequest[]>({
-    queryKey: ["/api/book-requests"],
-  });
+  const { data: bookRequests = [] } = useQuery<BookRequest[]>({ queryKey: ["/api/book-requests"] });
 
   const markRead = useMutation({
     mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/book-requests/${id}/read`); },
@@ -127,19 +69,15 @@ export default function Dashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/book-requests"] }),
   });
 
-  const unreadCount = bookRequests.filter(r => !r.isRead).length;
-
-  const stats = data?.stats || { totalProjects: 0, completedProjects: 0, activeProjects: 0, totalWords: 0, totalCost: 0, costThisMonth: 0, avgQuality: 0 };
-  const animatedWords = useAnimatedCounter(stats.totalWords);
-  const animatedComplete = useAnimatedCounter(stats.completedProjects);
-  const animatedActive = useAnimatedCounter(stats.activeProjects);
-
   if (isLoading) {
     return (
-      <div className="p-8 space-y-8">
-        <Skeleton className="h-12 w-80 bg-muted/30" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl bg-muted/20" />)}
+      <div className="lexora-page p-4 md:p-8">
+        <div className="mx-auto max-w-[1480px] space-y-8">
+          <Skeleton className="h-24 w-full max-w-2xl rounded-2xl bg-white/[.04]" />
+          <Skeleton className="h-[360px] rounded-[28px] bg-white/[.035]" />
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((item) => <Skeleton key={item} className="h-24 rounded-2xl bg-white/[.03]" />)}
+          </div>
         </div>
       </div>
     );
@@ -147,237 +85,247 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center py-24 text-center" data-testid="error-state">
-        <AlertCircle className="h-10 w-10 text-red-400/60 mb-4" />
-        <p className="font-bold text-lg tracking-tight">Failed to load dashboard</p>
-        <p className="text-[11px] text-muted-foreground/50 font-mono mt-1">Please try refreshing the page</p>
+      <div className="lexora-page flex h-full items-center justify-center p-8 text-center" data-testid="error-state">
+        <div>
+          <AlertCircle className="mx-auto mb-4 h-9 w-9 text-[#A55B70]/70" />
+          <p className="lexora-display text-xl font-semibold text-[#EFE5D9]">The studio could not load.</p>
+          <p className="mt-2 text-sm text-[#BCAF9F]/50">Refresh the page to reconnect to your workspace.</p>
+        </div>
       </div>
     );
   }
 
-  const { recentProjects, recentTrends } = data || { recentProjects: [], recentTrends: [] };
+  const stats = data?.stats ?? {
+    totalProjects: 0,
+    completedProjects: 0,
+    activeProjects: 0,
+    totalWords: 0,
+    totalCost: 0,
+    costThisMonth: 0,
+    avgQuality: 0,
+  };
+  const recentProjects = data?.recentProjects ?? [];
+  const recentTrends = data?.recentTrends ?? [];
+  const featuredProject = recentProjects[0] ?? null;
+  const unreadCount = bookRequests.filter((request) => !request.isRead).length;
 
   return (
-    <div className="p-4 md:p-8 space-y-6 md:space-y-8 overflow-y-auto h-full aurora-bg-animated">
+    <div className="lexora-page">
       <Helmet>
-        <title>Dashboard — Lexora</title>
-        <meta name="description" content="Lexora command center — view project stats, recent manuscripts, trend intel, and quick actions." />
+        <title>Home — Lexora</title>
+        <meta name="description" content="Your Lexora creative command center for stories, manuscripts, narration, and publishing." />
       </Helmet>
-      <div className="flex items-end justify-between gap-3 md:gap-4 flex-wrap animate-fade-in-up">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5 md:mb-2">
-            <Activity className="h-3 w-3 md:h-3.5 md:w-3.5 text-purple-400 animate-pulse-glow" />
-            <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.25em] uppercase">COMMAND CENTER</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Publishing<span className="shimmer-text"> Dashboard</span></h1>
-        </div>
-        <Link href="/projects/new">
-          <Button data-testid="button-new-project" size="sm" className="neon-glow text-white border-0 shadow-[0_0_20px_-5px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.6)] hover:scale-105 transition-all duration-300 text-[12px] md:text-sm h-9 md:h-10">
-            <Plus className="h-3.5 w-3.5 md:h-4 md:w-4 mr-1.5 md:mr-2" />
-            New Project
-          </Button>
-        </Link>
-      </div>
 
-      <div className="line-glow" />
+      <div className="mx-auto max-w-[1480px] space-y-10 px-4 py-6 md:px-8 md:py-9">
+        <LexoraPageHeader
+          kicker="Creative Command Center"
+          title={<>Good evening. <span className="text-[#BCAF9F]/55">What world are we building tonight?</span></>}
+          description="Return to the work that matters, explore recent worlds, and keep the machinery of publishing in the background."
+          actions={
+            <Link href="/projects/new">
+              <Button data-testid="button-new-project" className="h-10 rounded-full border border-[#C0A06B]/20 bg-[#7E3E51] px-5 text-[#FFF9F2] hover:bg-[#915065]">
+                <Plus className="mr-2 h-4 w-4" /> New project
+              </Button>
+            </Link>
+          }
+        />
 
-      <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-        <StatCard label="BOOKS COMPLETE" value={animatedComplete.toString()} sub={`of ${stats.totalProjects} total`} index={0} />
-        <StatCard label="WORDS WRITTEN" value={formatNumber(animatedWords)} sub="all-time" index={1} />
-        <StatCard label="COST THIS MONTH" value={formatCost(stats.costThisMonth)} sub={`${formatCost(stats.totalCost)} all-time`} index={2} />
-        <StatCard label="ACTIVE PROJECTS" value={animatedActive.toString()} sub="in progress" index={3} />
-      </div>
+        <div className="lexora-divider" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        <div className="lg:col-span-2 animate-fade-in-up stagger-5">
-          <Card className="border-border/20 bg-card/40 glass-card-premium">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
-              <div className="flex items-center gap-3">
-                <Hexagon className="h-4 w-4 text-purple-500/60" />
-                <CardTitle className="text-sm font-bold tracking-tight">In-Progress Projects</CardTitle>
-              </div>
-              <Link href="/projects">
-                <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-purple-400 text-[11px] font-mono" data-testid="button-view-all-projects">
-                  VIEW ALL <ArrowRight className="h-3 w-3 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {recentProjects.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="relative animate-float">
-                    <div className="absolute inset-0 neon-glow opacity-20 blur-2xl rounded-full scale-150" />
-                    <BookOpen className="h-10 w-10 text-purple-500/40 relative" />
-                  </div>
-                  <p className="text-sm font-semibold mt-4">No projects yet</p>
-                  <p className="text-[11px] text-muted-foreground/50 mt-1 font-mono">Initialize your first manuscript</p>
-                  <Link href="/projects/new">
-                    <Button size="sm" data-testid="button-create-first-project" className="mt-5 neon-glow text-white border-0">
-                      <Plus className="h-3 w-3 mr-1.5" /> Create
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                recentProjects.map((project, idx) => {
-                  const pct = getLivePct(project);
-                  return (
-                    <Link key={project.id} href={`/projects/${project.id}`}>
-                      <div className={`group flex items-center gap-3 md:gap-4 p-3 md:p-4 rounded-xl border border-border/15 bg-white/[0.02] hover:border-purple-500/25 hover:bg-purple-500/[0.04] transition-all duration-300 cursor-pointer animate-fade-in-up stagger-${Math.min(idx + 1, 6)}`} data-testid={`project-card-${project.id}`}>
-                        {project.hasCover && (
-                          <div className="h-12 w-9 rounded-md overflow-hidden shrink-0 border border-border/20">
-                            <img src={`/api/projects/${project.id}/cover-image`} alt="" loading="lazy" className="h-full w-full object-cover" />
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-3 flex-wrap mb-1.5">
-                            <p className="text-sm font-bold tracking-tight truncate group-hover:text-purple-300 transition-colors">{project.title}</p>
-                            <StatusDot status={project.status} />
-                          </div>
-                          <div className="flex items-center gap-3 mb-2.5">
-                            <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Progress value={pct} className="h-[3px] flex-1 progress-gradient" />
-                            <span className="text-[10px] font-mono text-muted-foreground/40 w-8 text-right">{pct}%</span>
-                          </div>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground/15 group-hover:text-purple-400/60 group-hover:translate-x-1 transition-all duration-300 shrink-0" />
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-5 animate-fade-in-up stagger-6">
-          <Card className="border-border/20 bg-card/40 glass-card-premium">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-              <div className="flex items-center gap-2.5">
-                <TrendingUp className="h-3.5 w-3.5 text-cyan-400/70" />
-                <CardTitle className="text-sm font-bold tracking-tight">Trend Intel</CardTitle>
-              </div>
-              <Link href="/trends">
-                <Button variant="ghost" size="sm" className="text-muted-foreground/60 hover:text-cyan-400 text-[11px] font-mono" data-testid="button-analyze-trends">
-                  ANALYZE <ArrowRight className="h-3 w-3 ml-1" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {recentTrends.length === 0 ? (
-                <div className="py-8 text-center">
-                  <TrendingUp className="h-8 w-8 text-muted-foreground/20 mx-auto mb-3 animate-float" />
-                  <p className="text-[11px] text-muted-foreground/50 font-mono">No reports</p>
-                </div>
-              ) : (
-                recentTrends.map((report) => (
-                  <div key={report.id} className="p-3 rounded-lg border border-border/15 bg-white/[0.02] hover:border-cyan-500/15 hover:bg-cyan-500/[0.02] transition-all duration-300 text-xs">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="font-bold text-[11px] tracking-tight">{VERTICAL_LABELS[report.vertical] || report.vertical}</span>
-                      {report.greenlightScore && (
-                        <span className={`text-[11px] font-mono font-bold ${report.greenlightScore >= 7 ? "text-emerald-400 glow-text" : report.greenlightScore >= 5 ? "text-amber-400" : "text-red-400"}`}>
-                          GL:{formatScore(report.greenlightScore)}
-                        </span>
-                      )}
+        <EditorialSection
+          eyebrow="Continue Creating"
+          title={featuredProject ? "Return to your current world" : "Begin your first world"}
+        >
+          {featuredProject ? (
+            <div className="lexora-editorial-surface relative overflow-hidden rounded-[30px]">
+              <div className="grid min-h-[340px] md:grid-cols-[minmax(0,1.4fr)_minmax(260px,.6fr)]">
+                <div className="relative z-10 flex flex-col justify-end p-6 md:p-9 lg:p-11">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(192,160,107,.08),transparent_28rem)]" />
+                  <div className="relative">
+                    <div className="mb-6 flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="border-[#C0A06B]/15 bg-[#C0A06B]/[.04] font-mono text-[9px] uppercase tracking-[.15em] text-[#C0A06B]/70">
+                        {VERTICAL_LABELS[featuredProject.vertical] || featuredProject.vertical}
+                      </Badge>
+                      <span className="font-mono text-[9px] uppercase tracking-[.14em] text-[#BCAF9F]/35">{featuredProject.status}</span>
                     </div>
-                    {report.summary && <p className="text-muted-foreground/50 leading-relaxed line-clamp-2 text-[10px]">{report.summary}</p>}
+                    <h2 className="lexora-display max-w-3xl text-4xl font-semibold leading-[.98] text-[#EFE5D9] md:text-5xl lg:text-6xl">
+                      {featuredProject.title}
+                    </h2>
+                    <p className="mt-4 max-w-xl text-sm leading-6 text-[#BCAF9F]/55">
+                      {featuredProject.completedChapters} of {featuredProject.totalChapters || "—"} chapters complete · {getLivePct(featuredProject)}% through the current creative pipeline.
+                    </p>
+                    <div className="mt-7 flex flex-wrap gap-2">
+                      <Link href={`/projects/${featuredProject.id}`}>
+                        <Button className="h-10 rounded-full bg-[#EFE5D9] px-5 text-[#0B090C] hover:bg-white">
+                          Continue Writing <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                      </Link>
+                      <Link href={`/projects/${featuredProject.id}`}>
+                        <Button variant="outline" className="h-10 rounded-full border-[#C0A06B]/15 bg-transparent px-5 text-[#BCAF9F]/75 hover:bg-white/[.03] hover:text-[#EFE5D9]">
+                          Open project
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                </div>
 
-          {bookRequests.length > 0 && (
-            <Card className="border-border/20 bg-card/40 glass-card-premium">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <Lightbulb className="h-3.5 w-3.5 text-amber-400/70" />
-                  <CardTitle className="text-sm font-bold tracking-tight">Reader Requests</CardTitle>
-                  {unreadCount > 0 && (
-                    <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[9px] font-mono px-1.5 py-0">
-                      {unreadCount} new
-                    </Badge>
+                <div className="relative min-h-[260px] overflow-hidden border-t border-[#C0A06B]/10 md:border-l md:border-t-0">
+                  {featuredProject.hasCover ? (
+                    <>
+                      <img
+                        src={`/api/projects/${featuredProject.id}/cover-image`}
+                        alt={`Cover for ${featuredProject.title}`}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-l from-transparent via-[#0B090C]/15 to-[#0B090C]/65 md:bg-gradient-to-r" />
+                    </>
+                  ) : (
+                    <div className="lexora-cover-placeholder absolute inset-0 flex items-center justify-center">
+                      <BookOpen className="relative z-10 h-12 w-12 text-[#C0A06B]/45" />
+                    </div>
                   )}
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {bookRequests.slice(0, 5).map((req) => (
-                  <div
-                    key={req.id}
-                    className={`p-3 rounded-lg border text-xs transition-all duration-300 ${
-                      req.isRead ? "border-border/15 bg-white/[0.02]" : "border-amber-500/20 bg-amber-500/5"
-                    }`}
-                    data-testid={`book-request-${req.id}`}
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-sm">{VERTICAL_ICONS[req.genre] || "📖"}</span>
-                        <span className="font-bold text-[11px] tracking-tight truncate">{VERTICAL_LABELS[req.genre] || req.genre}</span>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {!req.isRead && (
-                          <Button
-                            size="icon" variant="ghost"
-                            onClick={() => markRead.mutate(req.id)}
-                            className="h-5 w-5 text-amber-400/50 hover:text-amber-300"
-                            data-testid={`button-mark-read-${req.id}`}
-                            aria-label="Mark as read"
-                          >
-                            <Eye className="h-3 w-3" />
-                          </Button>
-                        )}
-                        <Button
-                          size="icon" variant="ghost"
-                          onClick={() => deleteRequest.mutate(req.id)}
-                          className="h-5 w-5 text-muted-foreground/30 hover:text-red-400"
-                          data-testid={`button-delete-request-${req.id}`}
-                          aria-label="Delete request"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="text-muted-foreground/60 leading-relaxed line-clamp-2 text-[10px]">{req.description}</p>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[9px] font-mono text-muted-foreground/30">by {req.readerName}</span>
-                      <span className="text-[9px] font-mono text-muted-foreground/30">
-                        {new Date(req.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {bookRequests.length > 5 && (
-                  <p className="text-[10px] font-mono text-muted-foreground/40 text-center pt-1">
-                    +{bookRequests.length - 5} more requests
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+          ) : (
+            <EmptyCreativeState
+              title="Your first world is waiting."
+              description="Start a project and Lexora will turn this space into your creative launch point."
+              action={
+                <Link href="/projects/new">
+                  <Button className="rounded-full bg-[#7E3E51] text-[#FFF9F2] hover:bg-[#915065]">
+                    <Plus className="mr-2 h-4 w-4" /> Create project
+                  </Button>
+                </Link>
+              }
+            />
           )}
+        </EditorialSection>
 
-          <Card className="border-purple-500/15 glow-border bg-card/30 overflow-hidden relative">
-            <div className="absolute inset-0 mesh-bg opacity-50 pointer-events-none" />
-            <CardContent className="pt-5 pb-5 relative">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap className="h-3.5 w-3.5 text-purple-400 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]" />
-                <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.2em] uppercase">QUICK ACTIONS</span>
-              </div>
-              <div className="space-y-2">
-                <Link href="/trends">
-                  <Button variant="outline" size="sm" data-testid="button-run-trend-analysis" className="w-full justify-start border-border/20 bg-white/[0.02] hover:border-cyan-500/30 hover:text-cyan-300 hover:bg-cyan-500/[0.05] text-[12px] font-mono tracking-tight transition-all duration-300">
-                    <BarChart3 className="h-3.5 w-3.5 mr-2 text-cyan-500/60" /> Run Trend Analysis
-                  </Button>
-                </Link>
-                <Link href="/autopilot">
-                  <Button variant="outline" size="sm" data-testid="button-configure-autopilot" className="w-full justify-start border-border/20 bg-white/[0.02] hover:border-purple-500/30 hover:text-purple-300 hover:bg-purple-500/[0.05] text-[12px] font-mono tracking-tight transition-all duration-300">
-                    <Zap className="h-3.5 w-3.5 mr-2 text-purple-500/60" /> Configure Autopilot
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+        <EditorialSection
+          eyebrow="Recent Worlds"
+          title="The stories closest to your hands"
+          action={
+            <Link href="/projects">
+              <Button variant="ghost" size="sm" className="text-[#BCAF9F]/55 hover:text-[#EFE5D9]" data-testid="button-view-all-projects">
+                View all <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Button>
+            </Link>
+          }
+        >
+          {recentProjects.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
+              {recentProjects.slice(0, 6).map((project) => (
+                <ProjectCoverCard
+                  key={project.id}
+                  id={project.id}
+                  title={project.title}
+                  href={`/projects/${project.id}`}
+                  coverUrl={project.hasCover ? `/api/projects/${project.id}/cover-image` : null}
+                  status={project.status}
+                  genre={VERTICAL_LABELS[project.vertical] || project.vertical}
+                  progress={getLivePct(project)}
+                  meta={project.totalChapters > 0 ? `${project.completedChapters}/${project.totalChapters} chapters` : "Developing"}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyCreativeState
+              title="No recent worlds yet."
+              description="Projects you begin will collect here as a visual shelf of the stories you are building."
+              action={<Link href="/projects/new"><Button variant="outline">Start a project</Button></Link>}
+            />
+          )}
+        </EditorialSection>
+
+        <EditorialSection eyebrow="Creative Pulse" title="A quiet read on your studio">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-7 border-y border-[#C0A06B]/10 py-6 md:grid-cols-4">
+            <CreativeMetric icon={Activity} label="Active worlds" value={stats.activeProjects} detail={`${stats.totalProjects} total projects`} />
+            <CreativeMetric icon={FileText} label="Words written" value={formatNumber(stats.totalWords)} detail="Across the full library" />
+            <CreativeMetric icon={BookOpen} label="Completed" value={stats.completedProjects} detail="Ready or published" />
+            <CreativeMetric icon={Sparkles} label="Studio spend" value={formatCost(stats.costThisMonth)} detail={`${formatCost(stats.totalCost)} all time`} />
+          </div>
+        </EditorialSection>
+
+        <div className="grid gap-8 xl:grid-cols-[1.25fr_.75fr]">
+          <EditorialSection
+            eyebrow="Signals"
+            title="Trend intelligence"
+            action={<Link href="/trends"><Button variant="ghost" size="sm" className="text-[#BCAF9F]/50 hover:text-[#EFE5D9]">Explore trends</Button></Link>}
+          >
+            <div className="divide-y divide-[#C0A06B]/10 border-y border-[#C0A06B]/10">
+              {recentTrends.length === 0 ? (
+                <div className="py-10 text-sm text-[#BCAF9F]/45">No trend reports yet. Run an analysis when you want market context.</div>
+              ) : recentTrends.slice(0, 4).map((report) => (
+                <div key={report.id} className="grid gap-2 py-4 sm:grid-cols-[170px_minmax(0,1fr)_auto] sm:items-start">
+                  <div className="font-mono text-[10px] uppercase tracking-[.12em] text-[#C0A06B]/55">
+                    {VERTICAL_LABELS[report.vertical] || report.vertical}
+                  </div>
+                  <p className="line-clamp-2 text-sm leading-6 text-[#BCAF9F]/60">{report.summary || "Trend analysis available."}</p>
+                  {report.greenlightScore ? <span className="font-mono text-[10px] text-[#EFE5D9]/60">GL {formatScore(report.greenlightScore)}</span> : null}
+                </div>
+              ))}
+            </div>
+          </EditorialSection>
+
+          <EditorialSection eyebrow="Studio Actions" title="Move the work forward">
+            <div className="lexora-editorial-surface rounded-[24px] p-3">
+              <Link href="/concept-lab">
+                <Button variant="ghost" className="h-12 w-full justify-between rounded-xl px-4 text-[#EFE5D9] hover:bg-white/[.03]">
+                  <span className="flex items-center gap-3"><Lightbulb className="h-4 w-4 text-[#C0A06B]/70" /> Develop a concept</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-[#BCAF9F]/30" />
+                </Button>
+              </Link>
+              <Link href="/trends">
+                <Button variant="ghost" data-testid="button-run-trend-analysis" className="h-12 w-full justify-between rounded-xl px-4 text-[#EFE5D9] hover:bg-white/[.03]">
+                  <span className="flex items-center gap-3"><BarChart3 className="h-4 w-4 text-[#C0A06B]/70" /> Run trend analysis</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-[#BCAF9F]/30" />
+                </Button>
+              </Link>
+              <Link href="/autopilot">
+                <Button variant="ghost" data-testid="button-configure-autopilot" className="h-12 w-full justify-between rounded-xl px-4 text-[#EFE5D9] hover:bg-white/[.03]">
+                  <span className="flex items-center gap-3"><Zap className="h-4 w-4 text-[#C0A06B]/70" /> Configure Autopilot</span>
+                  <ArrowRight className="h-3.5 w-3.5 text-[#BCAF9F]/30" />
+                </Button>
+              </Link>
+            </div>
+          </EditorialSection>
         </div>
+
+        {bookRequests.length > 0 ? (
+          <EditorialSection
+            eyebrow="Reader Requests"
+            title="What readers are asking for"
+            action={unreadCount > 0 ? <Badge variant="outline" className="border-[#C0A06B]/15 text-[#C0A06B]/70">{unreadCount} new</Badge> : undefined}
+          >
+            <div className="divide-y divide-[#C0A06B]/10 border-y border-[#C0A06B]/10">
+              {bookRequests.slice(0, 5).map((request) => (
+                <div key={request.id} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto]" data-testid={`book-request-${request.id}`}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#EFE5D9]">
+                      <span className="mr-2">{VERTICAL_ICONS[request.genre] || "📖"}</span>
+                      {VERTICAL_LABELS[request.genre] || request.genre}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#BCAF9F]/55">{request.description}</p>
+                    <p className="mt-1 font-mono text-[9px] text-[#BCAF9F]/30">by {request.readerName} · {new Date(request.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {!request.isRead ? (
+                      <Button size="icon" variant="ghost" onClick={() => markRead.mutate(request.id)} className="h-8 w-8 text-[#C0A06B]/60" data-testid={`button-mark-read-${request.id}`} aria-label="Mark as read">
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : null}
+                    <Button size="icon" variant="ghost" onClick={() => deleteRequest.mutate(request.id)} className="h-8 w-8 text-[#BCAF9F]/30 hover:text-red-400" data-testid={`button-delete-request-${request.id}`} aria-label="Delete request">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </EditorialSection>
+        ) : null}
+
+        <div className="pb-8" />
       </div>
     </div>
   );
