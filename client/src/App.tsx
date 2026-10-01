@@ -125,8 +125,8 @@ function AdminLayout() {
       <div className="flex h-screen w-full overflow-hidden">
         <AppSidebar />
         <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
-          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-12 border-b border-border/30 glass-panel shrink-0">
-            <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-purple-400 transition-colors" aria-label="Toggle sidebar" />
+          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-14 border-b border-[#c19d66]/10 bg-[#100d12]/95 backdrop-blur-xl shrink-0 shadow-[0_14px_40px_-34px_rgba(0,0,0,.9)]">
+            <div className="flex items-center gap-3"><SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-[#c19d66] transition-colors" aria-label="Toggle sidebar" /><div className="hidden sm:block"><p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#c19d66]/55">Lexora</p><p className="text-[11px] text-muted-foreground/55">Stories become worlds.</p></div></div>
             <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 size="sm"
@@ -140,7 +140,7 @@ function AdminLayout() {
                 <span className="hidden sm:inline">Copilot</span>
               </Button>
               <NotificationCenter />
-              <div className="h-1 w-8 rounded-full neon-glow opacity-60" />
+              <div className="h-px w-10 bg-gradient-to-r from-[#8f4a5e] to-[#c19d66] opacity-70" />
               <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
             </div>
           </header>
