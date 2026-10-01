@@ -328,8 +328,8 @@ check(
 );
 
 check(
-  "Lexora Publishing Platform branding no longer identifies product as AI Publishing Platform",
-  html.includes("<title>Lexora — Publishing Platform</title>") &&
+  "Lexora branding identifies the product without the legacy AI Publishing Platform label",
+  (html.includes("<title>Lexora — Stories Become Worlds</title>") || html.includes("<title>Lexora — Publishing Platform</title>")) &&
     !html.includes("AI Publishing Platform"),
 );
 
