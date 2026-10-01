@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
-import { Sparkles, Shuffle, Lock, Unlock, Wand2, Triangle, Loader2, ChevronDown, ChevronUp, CheckCircle2, Archive, Boxes, FileText, Layers } from "lucide-react";
+import { Sparkles, Shuffle, Lock, Unlock, Wand2, Triangle, Loader2, ChevronDown, ChevronUp, CheckCircle2, Archive, Boxes, FileText, Layers, Bookmark, BookMarked, Heart, Plus, Search, Library } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,7 +122,28 @@ interface ConceptSynthesis {
 interface ConceptDossierRow {
   id: string;
   status: string;
-  dossier: { workingTitle?: string | null };
+  sourceType?: string;
+  source?: {
+    drawId?: string;
+    directionId?: string;
+    synthesisRunId?: string;
+    kind?: string;
+  };
+  dossier: {
+    workingTitle?: string | null;
+    premise?: string | null;
+    corePromise?: string | null;
+    genreTags?: string[];
+    topicTags?: string[];
+    themes?: string[];
+    confidence?: string;
+    ideaLibrary?: {
+      savedAt?: string;
+      notes?: string;
+      tags?: string[];
+      favorite?: boolean;
+    };
+  };
 }
 
 interface CreatedProperty {
@@ -155,11 +176,17 @@ function DirectionCard({
   isSelected,
   isSelecting,
   onSelect,
+  isSaved,
+  isSaving,
+  onSave,
 }: {
   direction: ConceptDirection;
   isSelected: boolean;
   isSelecting: boolean;
   onSelect: () => void;
+  isSaved: boolean;
+  isSaving: boolean;
+  onSave: () => void;
 }) {
   const rows: Array<[string, string]> = [
     ["Reader", direction.targetReader],
@@ -210,17 +237,33 @@ function DirectionCard({
           <Badge variant="outline" className="text-[8px] font-mono border-border/30 text-muted-foreground/50">
             {direction.confidence} confidence · {direction.evidenceLevel} evidence
           </Badge>
-          <Button
-            size="sm"
-            variant={isSelected ? "default" : "outline"}
-            className="h-7 text-[10px] font-mono shrink-0"
-            onClick={onSelect}
-            disabled={isSelecting}
-            data-testid={`button-select-direction-${direction.id}`}
-          >
-            {isSelected ? <CheckCircle2 className="h-3 w-3 mr-1" /> : null}
-            {isSelected ? "Selected" : "Select"}
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className={cn(
+                "h-7 text-[10px] font-mono",
+                isSaved && "border-emerald-500/30 text-emerald-300 bg-emerald-500/5",
+              )}
+              onClick={onSave}
+              disabled={isSaving || isSaved}
+              data-testid={`button-save-direction-${direction.id}`}
+            >
+              {isSaving ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : isSaved ? <BookMarked className="h-3 w-3 mr-1" /> : <Bookmark className="h-3 w-3 mr-1" />}
+              {isSaved ? "Saved" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant={isSelected ? "default" : "outline"}
+              className="h-7 text-[10px] font-mono"
+              onClick={onSelect}
+              disabled={isSelecting}
+              data-testid={`button-select-direction-${direction.id}`}
+            >
+              {isSelected ? <CheckCircle2 className="h-3 w-3 mr-1" /> : null}
+              {isSelected ? "Selected" : "Select"}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -291,6 +334,141 @@ function ConceptFlow({
   );
 }
 
+function IdeaLibraryPanel({
+  ideas,
+  isLoading,
+  isSavingManual,
+  onSaveManual,
+  onToggleFavorite,
+  onArchive,
+}: {
+  ideas: ConceptDossierRow[];
+  isLoading: boolean;
+  isSavingManual: boolean;
+  onSaveManual: (input: { title: string; premise: string; tags: string[]; notes: string }) => void;
+  onToggleFavorite: (idea: ConceptDossierRow) => void;
+  onArchive: (idea: ConceptDossierRow) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [title, setTitle] = useState("");
+  const [premise, setPremise] = useState("");
+  const [tags, setTags] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const filtered = ideas.filter((idea) => {
+    const haystack = [
+      idea.dossier?.workingTitle,
+      idea.dossier?.premise,
+      idea.dossier?.corePromise,
+      ...(idea.dossier?.genreTags || []),
+      ...(idea.dossier?.topicTags || []),
+      ...(idea.dossier?.ideaLibrary?.tags || []),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  }).sort((a, b) => Number(Boolean(b.dossier?.ideaLibrary?.favorite)) - Number(Boolean(a.dossier?.ideaLibrary?.favorite)));
+
+  const submit = () => {
+    if (!title.trim()) return;
+    onSaveManual({
+      title: title.trim(),
+      premise: premise.trim(),
+      tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      notes: notes.trim(),
+    });
+    setTitle("");
+    setPremise("");
+    setTags("");
+    setNotes("");
+  };
+
+  return (
+    <div className="mb-6 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.05] via-card/35 to-purple-500/[0.03] p-4" data-testid="section-idea-library">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-4">
+        <div>
+          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-[0.2em] text-emerald-300/80">
+            <Library className="h-3.5 w-3.5" />
+            Idea Library
+          </div>
+          <p className="text-[11px] text-muted-foreground/55 mt-1">
+            Save generated directions or capture an idea manually without turning it into an active Property yet.
+          </p>
+        </div>
+        <Badge variant="outline" className="self-start text-[8px] font-mono border-emerald-500/20 text-emerald-300">
+          {ideas.length} saved
+        </Badge>
+      </div>
+
+      <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-4">
+        <Card className="border-border/20 bg-black/10">
+          <CardContent className="pt-4 pb-4 space-y-2.5">
+            <div className="flex items-center gap-2">
+              <Plus className="h-3.5 w-3.5 text-purple-400" />
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-purple-300/70">Quick Capture</p>
+            </div>
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Idea title" className="h-8 text-[11px]" data-testid="input-idea-title" />
+            <Textarea value={premise} onChange={(event) => setPremise(event.target.value)} placeholder="What is the idea?" className="min-h-[72px] text-[11px]" data-testid="input-idea-premise" />
+            <Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Tags: sci-fi, grief, mystery" className="h-8 text-[11px]" />
+            <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Notes for later…" className="min-h-[58px] text-[11px]" />
+            <Button size="sm" className="h-8 text-[10px] font-mono" onClick={submit} disabled={!title.trim() || isSavingManual} data-testid="button-quick-save-idea">
+              {isSavingManual ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Bookmark className="h-3.5 w-3.5 mr-1.5" />}
+              Save Idea
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="min-w-0">
+          <div className="relative mb-2.5">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/35" />
+            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search saved ideas, tags, genres…" className="h-8 pl-8 text-[11px]" data-testid="input-search-idea-library" />
+          </div>
+          <div className="max-h-[360px] overflow-y-auto space-y-2 pr-1">
+            {isLoading ? (
+              <div className="py-8 text-center text-[10px] font-mono text-muted-foreground/40">Loading ideas…</div>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border/25 py-8 text-center">
+                <Bookmark className="h-6 w-6 mx-auto text-muted-foreground/20" />
+                <p className="text-[10px] font-mono text-muted-foreground/40 mt-2">{ideas.length === 0 ? "No saved ideas yet." : "No ideas match this search."}</p>
+              </div>
+            ) : filtered.map((idea) => {
+              const meta = idea.dossier?.ideaLibrary || {};
+              return (
+                <div key={idea.id} className="rounded-lg border border-border/20 bg-card/30 p-3" data-testid={`saved-idea-${idea.id}`}>
+                  <div className="flex items-start gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onToggleFavorite(idea)}
+                      className={cn("mt-0.5", meta.favorite ? "text-rose-400" : "text-muted-foreground/30 hover:text-rose-300")}
+                      aria-label={meta.favorite ? "Remove favorite" : "Favorite idea"}
+                    >
+                      <Heart className={cn("h-3.5 w-3.5", meta.favorite && "fill-current")} />
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <p className="text-[11px] font-semibold">{idea.dossier?.workingTitle || "Untitled idea"}</p>
+                        <Badge variant="outline" className="h-4 text-[7px] font-mono">{idea.sourceType === "manual-idea" ? "manual" : "Concept Lab"}</Badge>
+                      </div>
+                      {idea.dossier?.premise && <p className="text-[10px] text-muted-foreground/55 mt-1 line-clamp-3">{idea.dossier.premise}</p>}
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {(meta.tags || idea.dossier?.genreTags || []).slice(0, 6).map((tag) => (
+                          <Badge key={tag} variant="outline" className="h-4 text-[7px] font-mono border-border/20 text-muted-foreground/45">{tag}</Badge>
+                        ))}
+                      </div>
+                      {meta.notes && <p className="text-[9px] font-mono text-amber-200/55 mt-2">Note: {meta.notes}</p>}
+                    </div>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground/35 hover:text-red-300" onClick={() => onArchive(idea)} aria-label="Archive idea">
+                      <Archive className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const modes: Array<{ id: Mode; title: string; description: string }> = [
   { id: "pure-chaos", title: "Pure Chaos", description: "All cards are equally possible." },
   { id: "intelligent-draw", title: "Intelligent Draw", description: "Oracle-weighted once market context is attached." },
@@ -308,9 +486,14 @@ export default function ConceptLab() {
   const [dossier, setDossier] = useState<ConceptDossierRow | null>(null);
   const [property, setProperty] = useState<CreatedProperty | null>(null);
   const [flowError, setFlowError] = useState<string | null>(null);
+  const [showIdeaLibrary, setShowIdeaLibrary] = useState(false);
 
   const { data } = useQuery<TriadState>({
     queryKey: ["/api/concept-lab/triad"],
+  });
+
+  const { data: savedIdeas = [], isLoading: ideasLoading } = useQuery<ConceptDossierRow[]>({
+    queryKey: ["/api/concept-lab/ideas"],
   });
 
   const draw = useMutation({
@@ -393,6 +576,43 @@ export default function ConceptLab() {
     onError: (error: any) => setFlowError(error?.message || "Could not create dossier"),
   });
 
+  const saveDirection = useMutation({
+    mutationFn: async (direction: ConceptDirection) => {
+      if (!synthesis) throw new Error("Synthesize concepts first");
+      const res = await apiRequest("POST", "/api/concept-lab/ideas/from-direction", {
+        synthesisRunId: synthesis.synthesisRunId,
+        directionId: direction.id,
+      });
+      return res.json() as Promise<ConceptDossierRow>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/concept-lab/ideas"] });
+      setFlowError(null);
+    },
+    onError: (error: any) => setFlowError(error?.message || "Could not save idea"),
+  });
+
+  const quickSaveIdea = useMutation({
+    mutationFn: async (input: { title: string; premise: string; tags: string[]; notes: string }) => {
+      const res = await apiRequest("POST", "/api/concept-lab/ideas", input);
+      return res.json() as Promise<ConceptDossierRow>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/concept-lab/ideas"] });
+      setFlowError(null);
+    },
+    onError: (error: any) => setFlowError(error?.message || "Could not save idea"),
+  });
+
+  const updateSavedIdea = useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/concept-lab/ideas/${id}`, patch);
+      return res.json() as Promise<ConceptDossierRow>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/concept-lab/ideas"] }),
+    onError: (error: any) => setFlowError(error?.message || "Could not update saved idea"),
+  });
+
   const greenlightDossier = useMutation({
     mutationFn: async () => {
       if (!dossier) throw new Error("Create a dossier first");
@@ -448,10 +668,36 @@ export default function ConceptLab() {
               Draw WHO, WHAT, and HOW. The studio must attempt a serious synthesis before a combination can be discarded.
             </p>
           </div>
-          <Badge variant="outline" className="font-mono text-[9px] border-purple-500/20 text-purple-300/70">
-            {data?.law || "NO DISCARD BEFORE SYNTHESIS"}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className={cn("h-8 text-[10px] font-mono gap-1.5", showIdeaLibrary && "border-emerald-500/30 text-emerald-300 bg-emerald-500/5")}
+              onClick={() => setShowIdeaLibrary((value) => !value)}
+              data-testid="button-toggle-idea-library"
+            >
+              <BookMarked className="h-3.5 w-3.5" />
+              Ideas ({savedIdeas.length})
+            </Button>
+            <Badge variant="outline" className="font-mono text-[9px] border-purple-500/20 text-purple-300/70">
+              {data?.law || "NO DISCARD BEFORE SYNTHESIS"}
+            </Badge>
+          </div>
         </div>
+
+        {showIdeaLibrary && (
+          <IdeaLibraryPanel
+            ideas={savedIdeas}
+            isLoading={ideasLoading}
+            isSavingManual={quickSaveIdea.isPending}
+            onSaveManual={(input) => quickSaveIdea.mutate(input)}
+            onToggleFavorite={(idea) => updateSavedIdea.mutate({
+              id: idea.id,
+              patch: { favorite: !Boolean(idea.dossier?.ideaLibrary?.favorite) },
+            })}
+            onArchive={(idea) => updateSavedIdea.mutate({ id: idea.id, patch: { status: "archived" } })}
+          />
+        )}
 
         <div className="grid md:grid-cols-3 gap-2.5 mb-5">
           {modes.map((item) => (
@@ -685,6 +931,9 @@ export default function ConceptLab() {
                   isSelected={selectedDirectionId === direction.id}
                   isSelecting={selectDirection.isPending}
                   onSelect={() => selectDirection.mutate(direction)}
+                  isSaved={savedIdeas.some((idea) => idea.source?.synthesisRunId === synthesis.synthesisRunId && idea.source?.directionId === direction.id)}
+                  isSaving={saveDirection.isPending && saveDirection.variables?.id === direction.id}
+                  onSave={() => saveDirection.mutate(direction)}
                 />
               ))}
             </div>

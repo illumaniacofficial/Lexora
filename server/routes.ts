@@ -35,6 +35,7 @@ import { hashArtifactContent } from "./core/artifacts";
 import { isOllamaAvailable, ollamaChat } from "./core/ollama";
 import { captureContinuityForApprovedChapter, archiveContinuityForChapter } from "./core/continuityService";
 import { buildChapterDraftInstructions } from "./core/chapterCraft";
+import { captureBookArchitectureArtifact, captureRedactorReviewArtifact, captureCanonicalChapterArtifact } from "./core/canonService";
 
 const FICTION_GENRES = new Set([
   "sci-fi", "fantasy", "horror", "romance", "thriller", "mystery",
@@ -446,6 +447,27 @@ const conceptDossierFromDirectionSchema = z.object({
 
 const conceptDossierGreenlightSchema = z.object({
   dossierId: z.string().min(1),
+}).strict();
+
+const savedIdeaFromDirectionSchema = z.object({
+  synthesisRunId: z.string().min(1),
+  directionId: z.string().min(1),
+  notes: z.string().max(4000).optional(),
+  tags: z.array(z.string().min(1).max(80)).max(20).optional(),
+}).strict();
+
+const manualSavedIdeaSchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  premise: z.string().trim().max(5000).optional(),
+  notes: z.string().max(4000).optional(),
+  tags: z.array(z.string().min(1).max(80)).max(20).optional(),
+}).strict();
+
+const savedIdeaPatchSchema = z.object({
+  status: z.enum(["saved", "archived"]).optional(),
+  notes: z.string().max(4000).optional(),
+  tags: z.array(z.string().min(1).max(80)).max(20).optional(),
+  favorite: z.boolean().optional(),
 }).strict();
 
 const conceptDirectionSelectSchema = z.object({
@@ -1854,6 +1876,134 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/concept-lab/ideas", async (req, res) => {
+    try {
+      const includeArchived = String(req.query.includeArchived || "").toLowerCase() === "true";
+      const dossiers = await storage.getConceptDossiers();
+      const ideas = dossiers.filter((row) =>
+        (row.status === "saved" || (includeArchived && row.status === "archived")) &&
+        (row.sourceType === "triad" || row.sourceType === "manual-idea"),
+      );
+      res.json(ideas);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/ideas/from-direction", async (req, res) => {
+    try {
+      const input = savedIdeaFromDirectionSchema.parse(req.body);
+      const run = await storage.getConceptSynthesisRun(input.synthesisRunId);
+      if (!run) return res.status(404).json({ error: "Synthesis run not found" });
+
+      const directions = (run.directions as any[]) || [];
+      if (!directions.some((item) => item?.id === input.directionId)) {
+        return res.status(404).json({ error: "Direction not found in this synthesis run" });
+      }
+
+      const existing = (await storage.getConceptDossiers()).find((row) => {
+        const source = (row.source || {}) as Record<string, unknown>;
+        return source.synthesisRunId === run.id && source.directionId === input.directionId && row.status !== "archived";
+      });
+      if (existing) return res.json(existing);
+
+      const { dossierFromDirection } = await import("./core/conceptDossierMapping");
+      const synthesis = {
+        drawId: run.triadDrawId,
+        synthesisRunId: run.id,
+        context: run.context as any,
+        oracle: run.oracleAnalysis as any,
+        directions: run.directions as any,
+        contributions: run.contributions as any,
+        runtime: run.runtime as any,
+      };
+      const dossier = dossierFromDirection(synthesis, input.directionId);
+      const savedAt = new Date().toISOString();
+      const created = await storage.createConceptDossier({
+        id: dossier.id,
+        propertyId: null,
+        sourceType: "triad",
+        source: { drawId: run.triadDrawId, directionId: input.directionId, synthesisRunId: run.id },
+        dossier: {
+          ...dossier,
+          status: "saved",
+          ideaLibrary: {
+            savedAt,
+            notes: input.notes || "",
+            tags: input.tags || [],
+            favorite: false,
+          },
+        },
+        status: "saved",
+      });
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/concept-lab/ideas", async (req, res) => {
+    try {
+      const input = manualSavedIdeaSchema.parse(req.body);
+      const id = crypto.randomUUID();
+      const savedAt = new Date().toISOString();
+      const created = await storage.createConceptDossier({
+        id,
+        propertyId: null,
+        sourceType: "manual-idea",
+        source: { kind: "manual", capturedAt: savedAt },
+        dossier: {
+          id,
+          workingTitle: input.title,
+          premise: input.premise || "",
+          status: "saved",
+          ideaLibrary: {
+            savedAt,
+            notes: input.notes || "",
+            tags: input.tags || [],
+            favorite: false,
+          },
+        },
+        status: "saved",
+      });
+      res.status(201).json(created);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/concept-lab/ideas/:id", async (req, res) => {
+    try {
+      const input = savedIdeaPatchSchema.parse(req.body || {});
+      const row = await storage.getConceptDossier(req.params.id);
+      if (!row) return res.status(404).json({ error: "Saved idea not found" });
+      if (row.status !== "saved" && row.status !== "archived") {
+        return res.status(409).json({ error: "Only saved or archived ideas can be edited in the Idea Library." });
+      }
+
+      const dossier = (row.dossier || {}) as Record<string, any>;
+      const currentLibrary = (dossier.ideaLibrary || {}) as Record<string, any>;
+      const nextStatus = input.status || row.status;
+      const updated = await storage.updateConceptDossier(row.id, {
+        status: nextStatus,
+        dossier: {
+          ...dossier,
+          status: nextStatus,
+          ideaLibrary: {
+            ...currentLibrary,
+            ...(input.notes !== undefined ? { notes: input.notes } : {}),
+            ...(input.tags !== undefined ? { tags: input.tags } : {}),
+            ...(input.favorite !== undefined ? { favorite: input.favorite } : {}),
+            ...(nextStatus === "archived" ? { archivedAt: new Date().toISOString() } : { archivedAt: null }),
+          },
+        },
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/concept-lab/triad/synthesize", async (req, res) => {
     try {
       const input = triadSynthesisRequestSchema.parse(req.body || {});
@@ -1933,6 +2083,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         runtime: run.runtime as any,
       };
       const dossier = dossierFromDirection(synthesis, input.directionId);
+      const existingSaved = (await storage.getConceptDossiers()).find((row) => {
+        const source = (row.source || {}) as Record<string, unknown>;
+        return row.status === "saved" &&
+          source.synthesisRunId === run.id &&
+          source.directionId === input.directionId;
+      });
+
+      if (existingSaved) {
+        const savedDossier = (existingSaved.dossier || {}) as Record<string, any>;
+        const promoted = await storage.updateConceptDossier(existingSaved.id, {
+          propertyId: input.propertyId ?? existingSaved.propertyId ?? null,
+          status: "developing",
+          dossier: {
+            ...dossier,
+            ideaLibrary: savedDossier.ideaLibrary || null,
+            status: "developing",
+          },
+        });
+        return res.json(promoted);
+      }
 
       const created = await storage.createConceptDossier({
         id: dossier.id,
@@ -1954,6 +2124,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const input = conceptDossierGreenlightSchema.parse(req.body);
       const dossier = await storage.getConceptDossier(input.dossierId);
       if (!dossier) return res.status(404).json({ error: "Dossier not found" });
+      if (dossier.sourceType === "manual-idea") {
+        return res.status(409).json({ error: "Quick-captured ideas must be developed into a full Concept Dossier before greenlighting." });
+      }
 
       const { createPropertyFromDossier } = await import("./core/conceptPropertyService");
       const property = await createPropertyFromDossier(dossier.dossier as any);
@@ -2245,6 +2418,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       let continuity: any = null;
       let continuityWarning: string | null = null;
+      if (status === "approved") {
+        await captureCanonicalChapterArtifact(projectId, chapterId).catch((artifactError: any) => {
+          console.error("Canonical manuscript capture failed:", artifactError?.message || artifactError);
+        });
+      }
       try {
         if (status === "approved") {
           continuity = await captureContinuityForApprovedChapter(projectId, chapterId);
@@ -2834,7 +3012,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       // Keep the old outline intact until every part of the new result has
       // validated, then atomically commit DNA + chapters + project state.
-      await storage.commitOutline(projectId, {
+      const committedOutline = await storage.commitOutline(projectId, {
         projectId,
         corePromise: result.corePromise,
         readerAvatar: result.readerAvatar,
@@ -2842,6 +3020,14 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         transformationArc: result.transformationArc,
         frameworkSummary: result.frameworkSummary,
       }, newChapters);
+      await captureBookArchitectureArtifact(
+        projectId,
+        committedOutline.dna,
+        committedOutline.chapters,
+        { runtimeId: `openai:${HIGH_MODEL}`, model: HIGH_MODEL },
+      ).catch((artifactError: any) => {
+        console.warn("Book architecture artifact capture failed:", artifactError?.message || artifactError);
+      });
       await storage.createNotification({
         kind: "pipeline",
         title: `Outline ready: ${project.title}`,
@@ -3319,6 +3505,14 @@ Stay 100% consistent with the rest of the book (names, facts, timeline, terminol
         kind: "editorial_board",
         score: board.overallScore,
         data: board,
+      });
+      await captureRedactorReviewArtifact(
+        projectId,
+        chapterId,
+        board,
+        { runtimeId: `openai:${HIGH_MODEL}`, model: HIGH_MODEL },
+      ).catch((artifactError: any) => {
+        console.warn("Redactor artifact capture failed:", artifactError?.message || artifactError);
       });
       res.json(saved);
       saveDbSeed().catch(() => {});

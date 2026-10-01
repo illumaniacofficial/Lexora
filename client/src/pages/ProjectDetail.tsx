@@ -26,9 +26,10 @@ import { exportBookPdf, TRIM_SIZES, downloadEditionFile } from "@/lib/export-boo
 import { LANGUAGE_LABELS } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
+import CanonWorkspace from "@/components/canon-workspace";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion, StudioProperty, ContinuitySnapshot } from "@shared/schema";
 
 type WorkspaceRole = "owner" | "editor" | "viewer";
 import { VOICE_OPTIONS, DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
@@ -59,6 +60,20 @@ interface ProjectDetailData {
   brandKit?: BrandKit;
   mediaAssets?: MediaAsset[];
   editions?: EditionWithChapters[];
+  studioProperty: StudioProperty;
+  continuitySnapshot?: ContinuitySnapshot;
+  artifactSummary?: Array<{
+    id: string;
+    type: string;
+    version: number;
+    chapterId: number | null;
+    createdBy: string;
+    runtimeId: string | null;
+    model: string | null;
+    state: string;
+    contentHash: string;
+    createdAt: Date;
+  }>;
 }
 
 type EditionWithChapters = BookEdition & { chapters: EditionChapter[] };
@@ -2977,6 +2992,9 @@ export default function ProjectDetail() {
                 <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
                   <BookOpen className="h-3 w-3" /> Outline & Chapters ({chapters.length})
                 </TabsTrigger>
+                <TabsTrigger value="canon" data-testid="tab-canon" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                  <ShieldCheck className="h-3 w-3" /> Canon
+                </TabsTrigger>
                 <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
                   <Zap className="h-3 w-3" /> DNA
                 </TabsTrigger>
@@ -3006,6 +3024,19 @@ export default function ProjectDetail() {
                 </TabsTrigger>
               </TabsList>
             </div>
+
+            <TabsContent value="canon" className="mt-4">
+              <CanonWorkspace
+                projectId={projectId}
+                project={project}
+                property={data.studioProperty}
+                dna={data.bookDna}
+                continuity={data.continuitySnapshot}
+                chapters={chapters}
+                role={role}
+                onChanged={invalidate}
+              />
+            </TabsContent>
 
             <TabsContent value="chapters" className="mt-4 space-y-2">
               {chapters.length === 0 ? (

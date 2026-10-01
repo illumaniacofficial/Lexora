@@ -42,5 +42,8 @@ jobs:
       - name: Wave 03 regression gate
         run: npm run verify:wave03
 
+      - name: Wave 05 Canon regression gate
+        run: npm run verify:wave05
+
       - name: Production build
         run: npm run build
