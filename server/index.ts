@@ -39,6 +39,14 @@ app.use(
 );
 
 app.use(
+  /^\/api\/projects\/\d+\/cover-upload$/,
+  express.raw({
+    type: ["image/png", "image/jpeg", "image/webp"],
+    limit: "12mb",
+  }),
+);
+
+app.use(
   express.json({
     verify: (req, _res, buf) => {
       req.rawBody = buf;
