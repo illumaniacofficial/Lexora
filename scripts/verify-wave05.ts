@@ -138,6 +138,84 @@ check(
     routes.includes("craftProfiles: genres"),
 );
 
+
+const triadEngine = read("server/core/triadEngine.ts");
+const ideaDetail = read("client/src/components/concept-idea-detail.tsx");
+const autopilotEngine = read("server/autopilot-engine.ts");
+const settingsPage = read("client/src/pages/Settings.tsx");
+const openaiGateway = read("server/openai.ts");
+const sidebar = read("client/src/components/app-sidebar.tsx");
+
+check(
+  "Concept Lab keeps dossier lifecycle visible after promotion",
+  routes.includes('row.status === "developing"') &&
+    routes.includes('row.status === "greenlit"') &&
+    ideaDetail.includes("Dossier ready for review") &&
+    ideaDetail.includes("Create Project from Dossier"),
+);
+
+check(
+  "dossier greenlight returns fresh persisted state and links its Property",
+  routes.includes("propertyId: property.id") &&
+    routes.includes("updatedDossier") &&
+    routes.includes("dossier: updatedDossier"),
+);
+
+check(
+  "greenlit dossiers hand off into New Project without duplicate Property creation",
+  routes.includes('/api/concept-lab/dossiers/:id/handoff') &&
+    routes.includes("sourceDossierId") &&
+    routes.includes("sourceProperty") &&
+    newProject.includes('dossier-project-handoff') &&
+    newProject.includes("sourceDossierId"),
+);
+
+check(
+  "saved Idea Library titles open a full detail surface",
+  conceptLab.includes('button-open-idea-') &&
+    conceptLab.includes("ConceptIdeaDetail") &&
+    ideaDetail.includes("Generated Idea Summary") &&
+    ideaDetail.includes("Studio Intelligence") &&
+    ideaDetail.includes("Source Lineage"),
+);
+
+check(
+  "Triad deck has been substantially expanded",
+  triadEngine.includes("WHO_EXPANDED") &&
+    triadEngine.includes("WHAT_EXPANDED") &&
+    triadEngine.includes("HOW_EXPANDED") &&
+    triadEngine.includes("WILDCARDS_EXPANDED") &&
+    conceptLab.includes("WILDCARDS"),
+);
+
+check(
+  "each project exposes a safe project-scoped Autopilot control",
+  routes.includes('/api/projects/:id/autopilot/start') &&
+    routes.includes("targetProjectId: projectId") &&
+    routes.includes("requireOwnerApproval: true") &&
+    autopilotEngine.includes("awaiting_approval") &&
+    project.includes('data-testid="project-autopilot-control"') &&
+    project.includes("Finish with Autopilot"),
+);
+
+check(
+  "custom OpenAI-compatible text provider is encrypted and runtime-switchable",
+  openaiGateway.includes("aes-256-gcm") &&
+    openaiGateway.includes("custom_ai_provider") &&
+    openaiGateway.includes("saveCustomProvider") &&
+    openaiGateway.includes("dynamicChat") &&
+    settingsPage.includes("Custom AI Provider") &&
+    settingsPage.includes("Test Saved Connection"),
+);
+
+check(
+  "Referrals and Requests remain dormant rather than deleted",
+  !sidebar.includes('title: "Referrals"') &&
+    !sidebar.includes('title: "Requests"') &&
+    appShell.includes('path="/requests"') &&
+    appShell.includes('path="/referrals"'),
+);
+
 const appShell = read("client/src/App.tsx");
 const copilot = read("client/src/components/lexora-copilot.tsx");
 
