@@ -1,0 +1,49 @@
+/**
+ * Lexora Experience 4.0 deterministic visual contract.
+ * Static checks only: no database, browser, AI, or network calls.
+ */
+import fs from "fs";
+
+let failures = 0;
+function check(name: string, condition: boolean, detail = "") {
+  if (condition) console.log(`  PASS  ${name}`);
+  else {
+    failures += 1;
+    console.log(`  FAIL  ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+const read = (path: string) => fs.readFileSync(path, "utf8");
+const exists = (path: string) => fs.existsSync(path);
+
+const css = read("client/src/index.css");
+
+console.log("Lexora Experience 4.0 visual contract\n");
+
+for (const value of ["#0B090C","#131015","#1A151C","#7E3E51","#A55B70","#C0A06B","#EFE5D9","#BCAF9F"]) {
+  check(`palette includes ${value}`, css.includes(value));
+}
+
+const components = [
+  ["LexoraPageHeader","client/src/components/experience/lexora-page-header.tsx"],
+  ["EditorialSection","client/src/components/experience/editorial-section.tsx"],
+  ["CreativeMetric","client/src/components/experience/creative-metric.tsx"],
+  ["EmptyCreativeState","client/src/components/experience/empty-creative-state.tsx"],
+] as const;
+
+for (const [name,path] of components) {
+  check(`${name} exists`, exists(path));
+  if (exists(path)) {
+    const source = read(path);
+    check(`${name} exports its interface`, source.includes(`export function ${name}`) || source.includes(`export const ${name}`));
+    check(`${name} avoids legacy primary neon`, !source.includes("purple-500") && !source.includes("cyan-400"));
+  }
+}
+
+for (const utility of [".lexora-page",".lexora-editorial-surface",".lexora-kicker",".lexora-divider",".lexora-cover-placeholder"]) {
+  check(`shared utility ${utility} exists`, css.includes(utility));
+}
+
+check("reduced motion remains supported", css.includes("prefers-reduced-motion"));
+
+console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
+if (failures > 0) process.exit(1);
