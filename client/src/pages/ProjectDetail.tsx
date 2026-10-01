@@ -110,7 +110,7 @@ interface BetaReadersData {
 
 function StepStatus({ status }: { status: string }) {
   if (status === "complete") return <CheckCircle className="h-4 w-4 text-emerald-400 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]" />;
-  if (status === "running") return <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />;
+  if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-[#C0A06B]/70" />;
   if (status === "failed") return <AlertCircle className="h-4 w-4 text-red-400" />;
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
@@ -2982,7 +2982,7 @@ export default function ProjectDetail() {
                     </div>
                   </div>
                   <Button
-                    className="neon-glow-nature text-white border-0 font-mono text-[11px] h-9 px-5"
+                    className="h-9 rounded-full border border-emerald-500/18 bg-emerald-500/10 px-5 font-mono text-[10px] text-emerald-200 hover:bg-emerald-500/16"
                     onClick={() => markCompleteMutation.mutate()}
                     disabled={markCompleteMutation.isPending || completedChapters.length < chapters.length}
                     data-testid="button-mark-complete"
@@ -3015,8 +3015,8 @@ export default function ProjectDetail() {
                     <Button
                       variant="outline"
                       className={project.publishedToStore
-                        ? "border-purple-500/30 text-purple-300 font-mono text-[11px] h-9 hover:border-purple-500/50 hover:bg-purple-500/10"
-                        : "border-purple-500/20 text-purple-400 font-mono text-[11px] h-9 hover:border-purple-500/40 hover:bg-purple-500/5"
+                        ? "h-9 rounded-full border-[#C0A06B]/24 bg-[#C0A06B]/[.05] font-mono text-[10px] text-[#EFE5D9] hover:border-[#C0A06B]/34 hover:bg-[#C0A06B]/[.08]"
+                        : "h-9 rounded-full border-[#C0A06B]/14 bg-transparent font-mono text-[10px] text-[#C0A06B]/70 hover:border-[#C0A06B]/26 hover:bg-white/[.025]"
                       }
                       onClick={() => toggleStorefrontMutation.mutate()}
                       disabled={toggleStorefrontMutation.isPending}
@@ -3069,18 +3069,18 @@ export default function ProjectDetail() {
           )}
 
           {outlineIsRunning && (
-            <Card className="border-purple-500/25 bg-purple-500/[0.05] glow-border" data-testid="outline-generation-status">
+            <Card className="lexora-editorial-surface rounded-[22px] border-[#C0A06B]/14 bg-[#C0A06B]/[.025]" data-testid="outline-generation-status">
               <CardContent className="py-4 flex items-start gap-3">
-                <div className="h-9 w-9 rounded-lg border border-purple-500/25 bg-purple-500/10 flex items-center justify-center shrink-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#C0A06B]/16 bg-[#7E3E51]/10">
                   <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold tracking-tight text-purple-200">Building your book architecture</p>
+                  <p className="lexora-display text-base font-semibold text-[#EFE5D9]">Building your book architecture</p>
                   <p className="text-[10px] font-mono text-muted-foreground/55 mt-1">
                     Lexora is generating Book DNA and the complete chapter-by-chapter blueprint in the background. You can safely leave this project and come back.
                   </p>
                   {latestOutlineRun?.status === "running" && (
-                    <p className="text-[9px] font-mono text-purple-400/55 mt-2">Book Outline + DNA · running</p>
+                    <p className="mt-2 font-mono text-[9px] uppercase tracking-[.12em] text-[#C0A06B]/50">Book Outline + DNA · running</p>
                   )}
                 </div>
               </CardContent>
