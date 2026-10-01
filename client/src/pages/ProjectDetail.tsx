@@ -136,8 +136,9 @@ function EditorialPanel({
 
   return (
     <div className="px-4 pb-4 border-t border-cyan-500/15">
-      <Tabs defaultValue="board" className="mt-3">
-        <TabsList className="bg-card/40 border border-border/20 h-8">
+      <Tabs defaultValue="board" className="mt-3 min-w-0">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]">
+          <TabsList className="bg-card/40 border border-border/20 h-8 min-w-max w-max flex-nowrap">
           <TabsTrigger value="board" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-board">
             <ClipboardCheck className="h-2.5 w-2.5 mr-1" /> BOARD
           </TabsTrigger>
@@ -147,7 +148,8 @@ function EditorialPanel({
           <TabsTrigger value="beta" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-beta">
             <Users className="h-2.5 w-2.5 mr-1" /> BETA READERS
           </TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         <TabsContent value="board" className="mt-3">
           <div className="flex items-center justify-between mb-2">
@@ -1987,15 +1989,17 @@ function BusinessPanel({ projectId, forecasts, tests, onChanged }: {
   onChanged: () => void;
 }) {
   return (
-    <Tabs defaultValue="forecaster" className="w-full">
-      <TabsList className="bg-card/40 border border-border/20 h-8">
+    <Tabs defaultValue="forecaster" className="w-full min-w-0">
+      <div className="max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]">
+        <TabsList className="bg-card/40 border border-border/20 h-8 min-w-max w-max flex-nowrap">
         <TabsTrigger value="forecaster" className="text-[9px] font-mono px-2 h-6" data-testid="tab-business-forecaster">
           <DollarSign className="h-3 w-3 mr-1" /> Forecaster
         </TabsTrigger>
         <TabsTrigger value="ablab" className="text-[9px] font-mono px-2 h-6" data-testid="tab-business-ablab">
           <FlaskConical className="h-3 w-3 mr-1" /> A/B Lab
         </TabsTrigger>
-      </TabsList>
+        </TabsList>
+      </div>
       <TabsContent value="forecaster" className="mt-3">
         <ForecasterPanel projectId={projectId} latest={forecasts[0]} onChanged={onChanged} />
       </TabsContent>
