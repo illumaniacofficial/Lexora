@@ -15,6 +15,7 @@ import {
   type ContinuityObject,
 } from "./continuity";
 import { ensurePropertyForProject } from "./propertyService";
+import { archiveCanonicalChapterArtifacts } from "./canonService";
 
 function parseJsonObject(text: string): any {
   const trimmed = text.trim();
@@ -315,6 +316,7 @@ export async function captureContinuityForApprovedChapter(projectId: number, cha
 }
 
 export async function archiveContinuityForChapter(projectId: number, chapterId: number) {
+  await archiveCanonicalChapterArtifacts(projectId, chapterId);
   const artifacts = await storage.getCreativeArtifacts({ projectId, chapterId });
   for (const artifact of artifacts) {
     if (
