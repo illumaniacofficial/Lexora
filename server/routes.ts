@@ -5217,6 +5217,108 @@ Return JSON with:
     }
   });
 
+  app.get("/api/projects/:id/autopilot", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const runs = await storage.getAutopilotRuns();
+      const latest = runs.find((run) => run.projectId === projectId) || null;
+      const active = latest && (latest.status === "pending" || latest.status === "running") ? latest : null;
+      const config = await storage.getAutopilotConfig();
+
+      res.json({
+        projectId,
+        active: Boolean(active),
+        run: latest,
+        guardrails: {
+          minQualityScore: config?.minQualityScore ?? 7,
+          budgetCapUsd: config?.budgetCapUsd ?? 50,
+          requireOwnerApproval: true,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/autopilot/start", requireRole("editor"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      if (project.status === "complete") {
+        return res.status(409).json({ error: "This project is already complete. Revert it to editing before using Project Autopilot." });
+      }
+      if (isAutopilotRunning()) {
+        return res.status(409).json({ error: "Another Autopilot run is already active. Stop or finish it first." });
+      }
+
+      const input = z.object({
+        minQualityScore: z.number().min(1).max(10).optional(),
+        budgetCapUsd: z.number().positive().max(1000).optional(),
+      }).parse(req.body || {});
+      const config = await storage.getAutopilotConfig();
+      const minQualityScore = input.minQualityScore ?? config?.minQualityScore ?? 7;
+      const budgetCapUsd = input.budgetCapUsd ?? config?.budgetCapUsd ?? 50;
+
+      const run = await storage.createAutopilotRun({
+        projectId,
+        vertical: project.vertical,
+        status: "pending",
+        currentStep: "Preparing project",
+        bookTitle: project.title,
+      });
+
+      executeAutopilotRun(
+        run.id,
+        project.vertical,
+        project.targetLanguage || "english",
+        minQualityScore,
+        budgetCapUsd,
+        {
+          targetProjectId: projectId,
+          requireOwnerApproval: true,
+          allowDuplicateVertical: true,
+        },
+      ).catch(async (err) => {
+        console.error("Project Autopilot run failed:", err.message);
+        await storage.updateAutopilotRun(run.id, {
+          status: "failed",
+          errorMessage: err.message,
+          completedAt: new Date(),
+        }).catch(() => {});
+      });
+
+      res.status(202).json({
+        ...run,
+        guardrails: { minQualityScore, budgetCapUsd, requireOwnerApproval: true },
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/autopilot/stop", requireRole("editor"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const runs = await storage.getAutopilotRuns();
+      const active = runs.find((run) => run.projectId === projectId && (run.status === "pending" || run.status === "running"));
+      if (!active) return res.status(409).json({ error: "This project does not have an active Autopilot run." });
+
+      const stopped = requestAutopilotStop();
+      if (!stopped) return res.status(409).json({ error: "Autopilot is not currently running." });
+
+      res.json({ success: true, runId: active.id, message: "Stop requested. Lexora will stop after the current safe step." });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/autopilot/run", async (_req, res) => {
     try {
       if (isAutopilotRunning()) {
