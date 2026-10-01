@@ -1099,6 +1099,7 @@ export class DatabaseStorage implements IStorage {
       const scope = [
         eq(creativeArtifacts.type, target.type),
         eq(creativeArtifacts.state, "canonical"),
+        target.propertyId == null ? isNull(creativeArtifacts.propertyId) : eq(creativeArtifacts.propertyId, target.propertyId),
         target.projectId == null ? isNull(creativeArtifacts.projectId) : eq(creativeArtifacts.projectId, target.projectId),
         target.chapterId == null ? isNull(creativeArtifacts.chapterId) : eq(creativeArtifacts.chapterId, target.chapterId),
       ];
