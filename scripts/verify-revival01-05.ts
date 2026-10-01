@@ -262,7 +262,8 @@ check(
     workspaceTabs.includes("overflow-x-auto") &&
     projectDetail.includes('data-testid="outline-generation-status"') &&
     projectDetail.includes('data-testid="button-toggle-all-outline-blueprints"') &&
-    projectDetail.includes("Outline Blueprint"),
+    projectDetail.includes('data-testid={`outline-blueprint-${chapter.id}`}' ) &&
+    projectDetail.includes("Chapter Blueprint"),
 );
 
 check(
