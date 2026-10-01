@@ -2824,7 +2824,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
 
       // Normalize numbering so malformed/duplicate model numbering can never
       // produce a broken chapter sequence in the workspace.
-      const newChapters = result.chapters.map((ch, index) => ({
+      const newChapters = result.chapters.map((ch: z.infer<typeof outlineChapterSchema>, index: number) => ({
         projectId,
         chapterNumber: index + 1,
         title: ch.title,
