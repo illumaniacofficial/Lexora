@@ -3029,7 +3029,7 @@ export default function ProjectDetail() {
                     key={ch.id}
                     chapter={ch}
                     onGenerate={(cid) => chapterMutation.mutate(cid)}
-                    isGenerating={chapterMutation.isPending}
+                    isGenerating={chapterMutation.isPending || outlineIsRunning}
                     onCancel={(cid) => cancelChapterMutation.mutate(cid)}
                     isCancelling={cancelChapterMutation.isPending}
                     projectId={projectId}
@@ -3098,7 +3098,7 @@ export default function ProjectDetail() {
                   <CardContent className="flex flex-col items-center justify-center py-14">
                     <Megaphone className="h-10 w-10 text-pink-500/30" />
                     <p className="font-bold mt-4 tracking-tight">Marketing not generated</p>
-                    <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[11px]" onClick={() => marketingMutation.mutate()} disabled={marketingMutation.isPending || chapters.length === 0}>
+                    <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[11px]" onClick={() => marketingMutation.mutate()} disabled={marketingMutation.isPending || outlineIsRunning || chapters.length === 0}>
                       {marketingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5 mr-1.5" />}
                       GENERATE MARKETING
                     </Button>
