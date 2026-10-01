@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getBrowserVoices, getDefaultBrowserVoice, type BrowserVoiceOption } from "@/lib/browser-tts";
 import { buildCumulativeWeights, wordIndexFromAudioTime } from "@/lib/word-timing";
+import { normalizeNarrationText } from "@shared/narration";
 
 interface BookReaderProps {
   title: string;
@@ -772,7 +773,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     if (pg.type === "outro") {
       return `Thank you for listening to ${pg.title}, by ${pg.author}. This audiobook was produced and narrated on Lexora, the Lexora Publishing Platform. We hope you enjoyed the journey.`;
     }
-    if (pg.type === "text") return stripMarkdown(pg.text).slice(0, 4000);
+    if (pg.type === "text") return normalizeNarrationText(stripMarkdown(normalizeNarrationText(pg.text))).slice(0, 4000);
     return null;
   }, []);
 
@@ -794,7 +795,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       }
     }
     const textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
-    return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx: pageIdx };
+    return { text: normalizeNarrationText(stripMarkdown(normalizeNarrationText(textToRead))).slice(0, 4000), lastIdx: pageIdx };
   }, [pages, getPageNarrationText]);
 
   const pageAudioContext = useCallback((pageIdx: number) => {
@@ -920,7 +921,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       setReaderWordIndex(-1);
       setNarratedPageIdx(pageIdx);
 
-      const strippedText = stripMarkdown(cleanText).slice(0, 4000);
+      const strippedText = normalizeNarrationText(stripMarkdown(normalizeNarrationText(cleanText))).slice(0, 4000);
       const strippedWords = strippedText.split(/\s+/).filter(Boolean);
       const wordCount = strippedWords.length;
       readerWordCountRef.current = wordCount;
