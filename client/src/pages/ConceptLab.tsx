@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { Sparkles, Shuffle, Lock, Unlock, Wand2, Triangle, Loader2, ChevronDown, ChevronUp, CheckCircle2, Archive, Boxes, FileText, Layers, Bookmark, BookMarked, Heart, Plus, Search, Library } from "lucide-react";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import ConceptIdeaDetail from "@/components/concept-idea-detail";
 
 type Axis = "who" | "what" | "how";
 type Mode = "pure-chaos" | "intelligent-draw" | "forbidden-combination";
@@ -278,6 +280,7 @@ function ConceptFlow({
   isGreenlighting,
   onCreateDossier,
   onGreenlight,
+  onCreateProject,
 }: {
   selectedDirectionId: string | null;
   dossier: ConceptDossierRow | null;
@@ -286,6 +289,7 @@ function ConceptFlow({
   isGreenlighting: boolean;
   onCreateDossier: () => void;
   onGreenlight: () => void;
+  onCreateProject: () => void;
 }) {
   if (!selectedDirectionId) return null;
   return (
@@ -303,7 +307,7 @@ function ConceptFlow({
           data-testid="button-create-dossier"
         >
           {isCreatingDossier ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-          {dossier ? "Dossier Created" : "Create Concept Dossier"}
+          {dossier ? "Dossier Ready" : "Create Concept Dossier"}
         </Button>
 
         {dossier && (
@@ -321,13 +325,26 @@ function ConceptFlow({
       </div>
 
       {dossier && (
-        <div className="mt-3 text-[10px] font-mono text-muted-foreground/55">
-          Dossier: {dossier.dossier?.workingTitle || dossier.id} · status {dossier.status}
+        <div className="mt-3 rounded-lg border border-border/20 bg-card/30 px-3 py-2 text-[10px] font-mono text-muted-foreground/60">
+          <span className="text-foreground/80">{dossier.dossier?.workingTitle || dossier.id}</span>
+          {" · "}
+          {dossier.status === "developing" ? "Dossier ready for review" : dossier.status === "greenlit" ? "Greenlit" : dossier.status}
         </div>
       )}
       {property && (
-        <div className="mt-2 text-[11px] text-cyan-200/80">
-          Property created: <span className="font-semibold">{property.workingTitle}</span> ({property.format}, {property.status})
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="text-[11px] text-cyan-200/80">
+            Property: <span className="font-semibold">{property.workingTitle}</span> ({property.format}, {property.status})
+          </div>
+          {dossier?.status === "greenlit" && (
+            <Button
+              onClick={onCreateProject}
+              className="h-8 text-[10px] font-mono neon-glow text-white"
+              data-testid="button-create-project-from-dossier"
+            >
+              Create Project from Dossier
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -354,6 +371,7 @@ function IdeaLibraryPanel({
   const [premise, setPremise] = useState("");
   const [tags, setTags] = useState("");
   const [notes, setNotes] = useState("");
+  const [selectedIdea, setSelectedIdea] = useState<ConceptDossierRow | null>(null);
 
   const filtered = ideas.filter((idea) => {
     const haystack = [
@@ -444,7 +462,14 @@ function IdeaLibraryPanel({
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <p className="text-[11px] font-semibold">{idea.dossier?.workingTitle || "Untitled idea"}</p>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIdea(idea)}
+                          className="text-left text-[11px] font-semibold hover:text-purple-300 transition-colors"
+                          data-testid={`button-open-idea-${idea.id}`}
+                        >
+                          {idea.dossier?.workingTitle || "Untitled idea"}
+                        </button>
                         <Badge variant="outline" className="h-4 text-[7px] font-mono">{idea.sourceType === "manual-idea" ? "manual" : "Concept Lab"}</Badge>
                       </div>
                       {idea.dossier?.premise && <p className="text-[10px] text-muted-foreground/55 mt-1 line-clamp-3">{idea.dossier.premise}</p>}
@@ -465,6 +490,12 @@ function IdeaLibraryPanel({
           </div>
         </div>
       </div>
+
+      <ConceptIdeaDetail
+        idea={selectedIdea}
+        open={Boolean(selectedIdea)}
+        onOpenChange={(open) => { if (!open) setSelectedIdea(null); }}
+      />
     </div>
   );
 }
@@ -476,6 +507,7 @@ const modes: Array<{ id: Mode; title: string; description: string }> = [
 ];
 
 export default function ConceptLab() {
+  const [, setLocation] = useLocation();
   const [mode, setMode] = useState<Mode>("pure-chaos");
   const [current, setCurrent] = useState<TriadDraw | null>(null);
   const [locked, setLocked] = useState<Set<Axis>>(new Set());
@@ -619,11 +651,12 @@ export default function ConceptLab() {
       const res = await apiRequest("POST", `/api/concept-lab/dossiers/${dossier.id}/greenlight`, {
         dossierId: dossier.id,
       });
-      const payload = await res.json() as { property: CreatedProperty };
-      return payload.property;
+      return res.json() as Promise<{ property: CreatedProperty; dossier: ConceptDossierRow }>;
     },
-    onSuccess: (created) => {
+    onSuccess: ({ property: created, dossier: updatedDossier }) => {
       setProperty(created);
+      setDossier(updatedDossier);
+      queryClient.invalidateQueries({ queryKey: ["/api/concept-lab/ideas"] });
       setFlowError(null);
     },
     onError: (error: any) => setFlowError(error?.message || "Could not create Property"),
@@ -682,6 +715,11 @@ export default function ConceptLab() {
             <Badge variant="outline" className="font-mono text-[9px] border-purple-500/20 text-purple-300/70">
               {data?.law || "NO DISCARD BEFORE SYNTHESIS"}
             </Badge>
+            {data?.deck && (
+              <Badge variant="outline" className="font-mono text-[9px] border-border/25 text-muted-foreground/50">
+                {data.deck.who} WHO · {data.deck.what} WHAT · {data.deck.how} HOW · {data.deck.wildcards} WILDCARDS
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -953,6 +991,7 @@ export default function ConceptLab() {
               isGreenlighting={greenlightDossier.isPending}
               onCreateDossier={() => createDossier.mutate()}
               onGreenlight={() => greenlightDossier.mutate()}
+              onCreateProject={() => dossier && setLocation(`/projects/new?dossier=${dossier.id}`)}
             />
           </div>
         )}
