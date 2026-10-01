@@ -299,6 +299,20 @@ check(
     reader.includes("alreadyVisibleOnRight"),
 );
 
+const narrationText = read("shared/narration.ts");
+const browserTts = read("client/src/lib/browser-tts.ts");
+const media = read("server/media.ts");
+
+check(
+  "narration speaks visual underscore blanks naturally",
+  narrationText.includes('replace(/[_＿]{3,}/g, " blank ")') &&
+    browserTts.includes("normalizeNarrationText") &&
+    reader.includes("normalizeNarrationText") &&
+    miniPlayer.includes("normalizeNarrationText") &&
+    routes.includes("normalizeNarrationText(text)") &&
+    media.includes("normalizeNarrationText"),
+);
+
 const appShell = read("client/src/App.tsx");
 const copilot = read("client/src/components/lexora-copilot.tsx");
 
