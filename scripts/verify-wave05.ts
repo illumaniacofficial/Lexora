@@ -151,8 +151,8 @@ check(
   "Concept Lab keeps dossier lifecycle visible after promotion",
   routes.includes('row.status === "developing"') &&
     routes.includes('row.status === "greenlit"') &&
-    ideaDetail.includes("Dossier ready for review") &&
-    ideaDetail.includes("Create Project from Dossier"),
+    ideaDetail.includes("Dossier ready") &&
+    ideaDetail.includes("Project Handoff"),
 );
 
 check(
@@ -176,7 +176,7 @@ check(
   conceptLab.includes('button-open-idea-') &&
     conceptLab.includes("ConceptIdeaDetail") &&
     ideaDetail.includes("Generated Idea Summary") &&
-    ideaDetail.includes("Studio Intelligence") &&
+    ideaDetail.includes("Intelligence") &&
     ideaDetail.includes("Source Lineage"),
 );
 
@@ -215,6 +215,102 @@ check(
     !sidebar.includes('title: "Requests"') &&
     appShellForDormant.includes('path="/requests"') &&
     appShellForDormant.includes('path="/referrals"'),
+);
+
+const analyticsPage = read("client/src/pages/Analytics.tsx");
+const reader = read("client/src/components/book-reader.tsx");
+const revivalSchema = read("server/revival-schema.ts");
+const serverIndex = read("server/index.ts");
+
+check(
+  "Idea Details is an upgraded multi-surface Concept Workspace",
+  ideaDetail.includes('value="overview"') &&
+    ideaDetail.includes('value="dossier"') &&
+    ideaDetail.includes('value="intelligence"') &&
+    ideaDetail.includes('value="handoff"') &&
+    ideaDetail.includes('data-testid="concept-lifecycle"'),
+);
+
+check(
+  "Project Handoff is editable, persistent, and review-first",
+  routes.includes('app.put("/api/concept-lab/dossiers/:id/handoff"') &&
+    routes.includes("projectHandoff") &&
+    ideaDetail.includes("Project Creator Payload") &&
+    ideaDetail.includes("Save Handoff") &&
+    ideaDetail.includes("Approve & Send to Project Creator") &&
+    newProject.includes('dossier-project-handoff'),
+);
+
+check(
+  "Portfolio Analytics owns a full-height scroll region and responsive chart overflow",
+  analyticsPage.includes('data-testid="analytics-scroll-region"') &&
+    analyticsPage.includes("h-full min-h-0 overflow-y-auto") &&
+    analyticsPage.includes('min-w-[560px]'),
+);
+
+check(
+  "owners can upload validated covers without losing variant history",
+  serverIndex.includes("cover-upload") &&
+    routes.includes('/api/projects/:id/cover-upload') &&
+    routes.includes("hasPngSignature") &&
+    routes.includes("hasJpegSignature") &&
+    routes.includes("hasWebpSignature") &&
+    project.includes('data-testid="button-upload-cover"') &&
+    project.includes('data-testid="input-upload-cover"') &&
+    routes.includes('prompt: "Uploaded by owner"'),
+);
+
+check(
+  "Book Reader persists resume position and multiple bookmarks",
+  revivalSchema.includes("CREATE TABLE IF NOT EXISTS reader_bookmarks") &&
+    routes.includes('/api/reader/books/:projectId/reading-state') &&
+    routes.includes('/api/reader/books/:projectId/progress') &&
+    routes.includes('/api/reader/books/:projectId/bookmarks') &&
+    reader.includes('data-testid="button-reader-bookmarks"') &&
+    reader.includes('data-testid="reader-bookmarks-panel"') &&
+    reader.includes("Bookmark this page") &&
+    reader.includes("Your reading position is saved automatically."),
+);
+
+const wordTiming = read("client/src/lib/word-timing.ts");
+const miniPlayer = read("client/src/components/audio-mini-player.tsx");
+
+check(
+  "read-along sync uses speech-aware timing instead of raw linear word length",
+  wordTiming.includes("syllableEstimate") &&
+    wordTiming.includes("spokenWeight") &&
+    wordTiming.includes("wordIndexFromAudioTime") &&
+    wordTiming.includes("lead") &&
+    wordTiming.includes("tail"),
+);
+
+check(
+  "generated narration seek and playback keep the highlighted word synchronized",
+  miniPlayer.includes("wordIndexFromAudioTime") &&
+    miniPlayer.includes("handleSeek") &&
+    miniPlayer.includes("cumulWeightsRef.current"),
+);
+
+check(
+  "Book Reader narrates pages independently and highlights both sides of a spread",
+  !reader.includes('textToRead += "\\n\\n"') &&
+    reader.includes("highlightForPage(currentPage)") &&
+    reader.includes("highlightForPage(currentPage + 1)") &&
+    reader.includes("alreadyVisibleOnRight"),
+);
+
+const narrationText = read("shared/narration.ts");
+const browserTts = read("client/src/lib/browser-tts.ts");
+const media = read("server/media.ts");
+
+check(
+  "narration speaks visual underscore blanks naturally",
+  narrationText.includes('replace(/[_＿]{3,}/g, " blank ")') &&
+    browserTts.includes("normalizeNarrationText") &&
+    reader.includes("normalizeNarrationText") &&
+    miniPlayer.includes("normalizeNarrationText") &&
+    routes.includes("normalizeNarrationText(text)") &&
+    media.includes("normalizeNarrationText"),
 );
 
 const appShell = read("client/src/App.tsx");

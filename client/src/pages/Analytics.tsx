@@ -57,34 +57,37 @@ export default function Analytics() {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="h-full min-h-0 overflow-y-auto overscroll-contain" data-testid="analytics-scroll-region">
+      <div className="w-full max-w-7xl mx-auto p-4 md:p-6 pb-24 md:pb-28 space-y-6">
       <Helmet>
         <title>Portfolio Analytics - Lexora</title>
         <meta name="description" content="Track books, words, AI cost, reads, and audio listens across your entire Lexora publishing portfolio." />
       </Helmet>
 
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2 text-foreground" data-testid="text-analytics-title">
-            <BarChart3 className="h-6 w-6 text-emerald-300" /> Portfolio Analytics
-          </h1>
-          <p className="text-[11px] font-mono text-muted-foreground/50 mt-1">
-            Cross-portfolio performance — production, engagement, and AI spend over time.
-          </p>
-        </div>
-        <div className="flex items-center gap-1 bg-card/40 border border-border/20 rounded-lg p-1">
-          {TIME_RANGES.map(r => (
-            <Button
-              key={r.key}
-              size="sm"
-              variant="ghost"
-              className={`h-7 text-[10px] font-mono px-3 ${range === r.key ? "bg-emerald-500/20 text-emerald-200" : "text-muted-foreground/50"}`}
-              onClick={() => setRange(r.key)}
-              data-testid={`button-range-${r.key}`}
-            >
-              {r.label}
-            </Button>
-          ))}
+      <div className="sticky top-0 z-20 -mx-4 md:-mx-6 px-4 md:px-6 py-3 border-b border-border/15 bg-background/90 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 text-foreground" data-testid="text-analytics-title">
+              <BarChart3 className="h-5 w-5 md:h-6 md:w-6 text-emerald-300" /> Portfolio Analytics
+            </h1>
+            <p className="text-[10px] md:text-[11px] font-mono text-muted-foreground/50 mt-1">
+              Cross-portfolio performance — production, engagement, and AI spend over time.
+            </p>
+          </div>
+          <div className="flex items-center gap-1 bg-card/60 border border-border/20 rounded-lg p-1 overflow-x-auto max-w-full">
+            {TIME_RANGES.map(r => (
+              <Button
+                key={r.key}
+                size="sm"
+                variant="ghost"
+                className={`h-7 shrink-0 text-[10px] font-mono px-3 ${range === r.key ? "bg-emerald-500/20 text-emerald-200" : "text-muted-foreground/50"}`}
+                onClick={() => setRange(r.key)}
+                data-testid={`button-range-${r.key}`}
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -122,7 +125,8 @@ export default function Analytics() {
                 {monthly.length === 0 ? (
                   <div className="h-64 flex items-center justify-center"><p className="text-[11px] font-mono text-muted-foreground/40">No data yet</p></div>
                 ) : (
-                  <div className="h-64 w-full" data-testid="chart-production">
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div className="h-64 min-w-[560px] sm:min-w-0 w-full" data-testid="chart-production">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={monthly} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -135,6 +139,7 @@ export default function Analytics() {
                         <Bar yAxisId="right" dataKey="words" name="Words" fill="#22d3ee" radius={[3, 3, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -150,7 +155,8 @@ export default function Analytics() {
                 {monthly.length === 0 ? (
                   <div className="h-64 flex items-center justify-center"><p className="text-[11px] font-mono text-muted-foreground/40">No data yet</p></div>
                 ) : (
-                  <div className="h-64 w-full" data-testid="chart-engagement">
+                  <div className="w-full overflow-x-auto pb-1">
+                    <div className="h-64 min-w-[560px] sm:min-w-0 w-full" data-testid="chart-engagement">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={monthly} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
@@ -164,6 +170,7 @@ export default function Analytics() {
                         <Line yAxisId="right" type="monotone" dataKey="cost" name="Cost ($)" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -182,12 +189,12 @@ export default function Analytics() {
               ) : (
                 <div className="space-y-1.5">
                   {data.topBooks.map((b, i) => (
-                    <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-border/20 bg-card/40" data-testid={`row-topbook-${b.id}`}>
+                    <div key={b.id} className="grid grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-center gap-x-3 gap-y-1.5 p-2.5 rounded-lg border border-border/20 bg-card/40" data-testid={`row-topbook-${b.id}`}>
                       <span className="text-[11px] font-mono text-muted-foreground/40 w-5">{i + 1}</span>
-                      <span className="text-[12px] text-foreground/85 flex-1 truncate">{b.title}</span>
-                      <span className="text-[10px] font-mono text-emerald-300 flex items-center gap-1"><Eye className="h-3 w-3" />{formatNumber(b.reads)}</span>
-                      <span className="text-[10px] font-mono text-pink-300 flex items-center gap-1"><Headphones className="h-3 w-3" />{formatNumber(b.listens)}</span>
-                      <span className="text-[10px] font-mono text-cyan-300/70 flex items-center gap-1 w-20 justify-end"><FileText className="h-3 w-3" />{formatNumber(b.words)}</span>
+                      <span className="text-[12px] text-foreground/85 min-w-0 truncate">{b.title}</span>
+                      <span className="col-start-2 sm:col-start-auto text-[10px] font-mono text-emerald-300 flex items-center gap-1"><Eye className="h-3 w-3" />{formatNumber(b.reads)}</span>
+                      <span className="col-start-2 sm:col-start-auto text-[10px] font-mono text-pink-300 flex items-center gap-1"><Headphones className="h-3 w-3" />{formatNumber(b.listens)}</span>
+                      <span className="col-start-2 sm:col-start-auto text-[10px] font-mono text-cyan-300/70 flex items-center gap-1 sm:w-20 sm:justify-end"><FileText className="h-3 w-3" />{formatNumber(b.words)}</span>
                     </div>
                   ))}
                 </div>
@@ -196,6 +203,7 @@ export default function Analytics() {
           </Card>
         </>
       )}
+      </div>
     </div>
   );
 }

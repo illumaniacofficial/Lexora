@@ -11,6 +11,7 @@ import { analyzePacing, generateInlineCompletion } from "./pacing";
 import { analyzeCompetitor, optimizeKdp, forecastTrends } from "./market";
 import { computeRevenueForecast, generateAbVariants, aggregatePortfolioAnalytics } from "./analytics";
 import { insertProjectSchema, insertAutopilotConfigSchema, insertInviteTokenSchema, insertMarketingAssetSchema, insertBrandKitSchema, LANGUAGES, VERTICALS } from "@shared/schema";
+import { normalizeNarrationText } from "@shared/narration";
 import { buildEpub } from "./epub";
 import { buildDocx } from "./docx";
 import { buildMobi } from "./mobi";
@@ -23,6 +24,8 @@ import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop, parseStr
 import { notify } from "./notify";
 import { saveDbSeed } from "./seed";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
 import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
@@ -515,6 +518,11 @@ function parseId(raw: string | string[] | undefined): number | null {
   return isNaN(id) || id < 1 ? null : id;
 }
 
+function parseStringParam(raw: string | string[] | undefined): string | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 function conceptGenreToVertical(label: unknown): typeof VERTICALS[number] | null {
   if (typeof label !== "string") return null;
   const normalized = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -597,7 +605,7 @@ function dossierProjectHandoff(row: any) {
     ...(Array.isArray(dossier.intelligence?.redactorConcerns) ? dossier.intelligence.redactorConcerns : []),
   ].filter(Boolean);
 
-  return {
+  const derived = {
     dossierId: row.id,
     propertyId: row.propertyId || null,
     status: row.status,
@@ -618,6 +626,33 @@ function dossierProjectHandoff(row: any) {
       oracleSummary: dossier.intelligence?.oracleFindings?.summary || "",
       format: dossier.format || dossier.structure?.intendedFormat || "",
     },
+  };
+
+  const saved = (dossier.projectHandoff || {}) as Record<string, any>;
+  const savedGenres = Array.isArray(saved.genres)
+    ? saved.genres.filter((genre: unknown) => typeof genre === "string" && (VERTICALS as readonly string[]).includes(genre)).slice(0, 6)
+    : [];
+  const mergedGenres = savedGenres.length > 0 ? savedGenres : derived.genres;
+  const savedVertical = typeof saved.vertical === "string" && (VERTICALS as readonly string[]).includes(saved.vertical)
+    ? saved.vertical
+    : null;
+  const vertical = savedVertical && mergedGenres.includes(savedVertical) ? savedVertical : mergedGenres[0];
+
+  return {
+    ...derived,
+    ...(typeof saved.title === "string" ? { title: saved.title } : {}),
+    ...(typeof saved.description === "string" ? { description: saved.description } : {}),
+    ...(typeof saved.targetAudience === "string" ? { targetAudience: saved.targetAudience } : {}),
+    ...(typeof saved.toneStyle === "string" ? { toneStyle: saved.toneStyle } : {}),
+    ...(typeof saved.keyThemes === "string" ? { keyThemes: saved.keyThemes } : {}),
+    ...(typeof saved.comparableTitles === "string" ? { comparableTitles: saved.comparableTitles } : {}),
+    ...(typeof saved.avoid === "string" ? { avoid: saved.avoid } : {}),
+    ...(typeof saved.targetLanguage === "string" && (LANGUAGES as readonly string[]).includes(saved.targetLanguage)
+      ? { targetLanguage: saved.targetLanguage }
+      : {}),
+    genres: mergedGenres,
+    vertical,
+    handoffEditedAt: typeof saved.updatedAt === "string" ? saved.updatedAt : null,
   };
 }
 
@@ -841,7 +876,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // The admin browser carries a session cookie, so inline <audio>/<video> and the
   // gated /api/media-assets/:id/download route still work for authenticated admins.
   app.get(/^\/uploads\/media\/.*/, (req, res, next) => {
-    if (req.session?.role === "admin" && req.session?.adminId) return next();
+    const isAdmin = req.session?.role === "admin" && !!req.session?.adminId;
+    const isReader = req.session?.role === "reader" && !!req.session?.readerId;
+    const isCover = req.path.startsWith("/uploads/media/covers/");
+    if (isAdmin || (isCover && isReader)) return next();
     return res.status(401).json({ error: "Authentication required" });
   });
 
@@ -908,6 +946,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true });
     });
   });
+
+  function readingOwner(req: Request): { ownerType: "admin" | "reader"; ownerKey: string } | null {
+    if (req.session?.role === "admin" && req.session.adminId) {
+      return { ownerType: "admin", ownerKey: String(req.session.adminId) };
+    }
+    if (req.session?.role === "reader" && req.session.readerId) {
+      return { ownerType: "reader", ownerKey: String(req.session.readerId) };
+    }
+    return null;
+  }
+
+  async function ensureReadingAccess(req: Request, projectId: number) {
+    const owner = readingOwner(req);
+    if (!owner) return { owner: null, project: null, allowed: false };
+
+    const project = await storage.getProject(projectId);
+    if (!project) return { owner, project: null, allowed: false };
+    if (owner.ownerType === "admin") return { owner, project, allowed: true };
+
+    const allowed = await readerHasBookAccess(Number(owner.ownerKey), project);
+    return { owner, project, allowed };
+  }
 
   app.get("/api/auth/me", (req, res) => {
     if (req.session?.role === "admin" && req.session?.adminId) {
@@ -976,6 +1036,160 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.json({ authenticated: true, role: "admin" });
     }
     return res.status(401).json({ authenticated: false });
+  });
+
+  app.get("/api/reader/books/:projectId/reading-state", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to save reading progress." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const result: any = await db.execute(sql`
+        SELECT id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
+        FROM reader_bookmarks
+        WHERE project_id = ${projectId}
+          AND owner_type = ${access.owner.ownerType}
+          AND owner_key = ${access.owner.ownerKey}
+        ORDER BY CASE WHEN kind = 'progress' THEN 0 ELSE 1 END, created_at DESC
+      `);
+      const rows = (result?.rows || result || []) as any[];
+      const progress = rows.find((row) => row.kind === "progress") || null;
+      const bookmarks = rows.filter((row) => row.kind === "bookmark");
+      res.json({ projectId, progress, bookmarks });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/reader/books/:projectId/progress", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to save reading progress." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const input = z.object({
+        pageIndex: z.number().int().min(0),
+        chapterNumber: z.number().int().nullable().optional(),
+        chapterTitle: z.string().max(300).nullable().optional(),
+        pageInChapter: z.number().int().min(1).nullable().optional(),
+      }).parse(req.body || {});
+
+      const result: any = await db.execute(sql`
+        INSERT INTO reader_bookmarks (
+          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, updated_at
+        ) VALUES (
+          ${projectId},
+          ${access.owner.ownerType},
+          ${access.owner.ownerKey},
+          'progress',
+          ${input.pageIndex},
+          ${input.chapterNumber ?? null},
+          ${input.chapterTitle ?? null},
+          ${input.pageInChapter ?? null},
+          'Resume reading',
+          now()
+        )
+        ON CONFLICT (project_id, owner_type, owner_key, kind)
+          WHERE kind = 'progress'
+        DO UPDATE SET
+          page_index = EXCLUDED.page_index,
+          chapter_number = EXCLUDED.chapter_number,
+          chapter_title = EXCLUDED.chapter_title,
+          page_in_chapter = EXCLUDED.page_in_chapter,
+          updated_at = now()
+        RETURNING id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
+      `);
+      const row = result?.rows?.[0] || result?.[0] || null;
+      res.json(row);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/reader/books/:projectId/bookmarks", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to save bookmarks." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const input = z.object({
+        pageIndex: z.number().int().min(0),
+        chapterNumber: z.number().int().nullable().optional(),
+        chapterTitle: z.string().max(300).nullable().optional(),
+        pageInChapter: z.number().int().min(1).nullable().optional(),
+        label: z.string().trim().max(300).optional(),
+      }).parse(req.body || {});
+
+      const existing: any = await db.execute(sql`
+        SELECT id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
+        FROM reader_bookmarks
+        WHERE project_id = ${projectId}
+          AND owner_type = ${access.owner.ownerType}
+          AND owner_key = ${access.owner.ownerKey}
+          AND kind = 'bookmark'
+          AND page_index = ${input.pageIndex}
+        LIMIT 1
+      `);
+      const existingRow = existing?.rows?.[0] || existing?.[0] || null;
+      if (existingRow) return res.json(existingRow);
+
+      const result: any = await db.execute(sql`
+        INSERT INTO reader_bookmarks (
+          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, page_in_chapter, label
+        ) VALUES (
+          ${projectId},
+          ${access.owner.ownerType},
+          ${access.owner.ownerKey},
+          'bookmark',
+          ${input.pageIndex},
+          ${input.chapterNumber ?? null},
+          ${input.chapterTitle ?? null},
+          ${input.pageInChapter ?? null},
+          ${input.label || null}
+        )
+        RETURNING id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
+      `);
+      const row = result?.rows?.[0] || result?.[0] || null;
+      res.status(201).json(row);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/reader/books/:projectId/bookmarks/:bookmarkId", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      const bookmarkId = parseId(req.params.bookmarkId);
+      if (!projectId || !bookmarkId) return res.status(400).json({ error: "Invalid ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to manage bookmarks." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const result: any = await db.execute(sql`
+        DELETE FROM reader_bookmarks
+        WHERE id = ${bookmarkId}
+          AND project_id = ${projectId}
+          AND owner_type = ${access.owner.ownerType}
+          AND owner_key = ${access.owner.ownerKey}
+          AND kind = 'bookmark'
+        RETURNING id
+      `);
+      const deleted = result?.rows?.[0] || result?.[0] || null;
+      if (!deleted) return res.status(404).json({ error: "Bookmark not found" });
+      res.json({ success: true, id: bookmarkId });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -2155,7 +2369,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/concept-lab/ideas/:id", async (req, res) => {
     try {
       const input = savedIdeaPatchSchema.parse(req.body || {});
-      const row = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const row = await storage.getConceptDossier(dossierId);
       if (!row) return res.status(404).json({ error: "Saved idea not found" });
       if (row.status !== "saved" && row.status !== "archived") {
         return res.status(409).json({ error: "Only saved or archived ideas can be edited in the Idea Library." });
@@ -2248,7 +2464,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/concept-lab/dossiers/:id", async (req, res) => {
     try {
-      const dossier = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const dossier = await storage.getConceptDossier(dossierId);
       if (!dossier) return res.status(404).json({ error: "Dossier not found" });
       const property = dossier.propertyId ? await storage.getStudioProperty(dossier.propertyId) : null;
       res.json({ dossier, property, handoff: dossierProjectHandoff(dossier) });
@@ -2257,9 +2475,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.put("/api/concept-lab/dossiers/:id/handoff", requireRole("editor"), async (req, res) => {
+    try {
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const row = await storage.getConceptDossier(dossierId);
+      if (!row) return res.status(404).json({ error: "Dossier not found" });
+      if (row.sourceType === "manual-idea") {
+        return res.status(409).json({ error: "Quick-captured ideas need a full Concept Dossier before project handoff." });
+      }
+      if (row.status === "archived") {
+        return res.status(409).json({ error: "Archived ideas cannot be sent to the project creator." });
+      }
+
+      const input = z.object({
+        title: z.string().trim().min(1).max(200),
+        description: z.string().max(4000),
+        targetAudience: z.string().max(1000),
+        toneStyle: z.string().max(1000),
+        keyThemes: z.string().max(1500),
+        comparableTitles: z.string().max(1000),
+        avoid: z.string().max(1500),
+        genres: z.array(z.enum(VERTICALS)).min(1).max(6),
+        vertical: z.enum(VERTICALS),
+        targetLanguage: z.enum(LANGUAGES),
+      }).parse(req.body || {});
+
+      const genres = Array.from(new Set(input.genres));
+      if (!genres.includes(input.vertical)) genres.unshift(input.vertical);
+      const dossier = (row.dossier || {}) as Record<string, any>;
+      const updatedAt = new Date().toISOString();
+
+      const updated = await storage.updateConceptDossier(row.id, {
+        dossier: {
+          ...dossier,
+          projectHandoff: {
+            ...input,
+            genres: genres.slice(0, 6),
+            updatedAt,
+          },
+        },
+      });
+
+      res.json({
+        dossier: updated,
+        handoff: dossierProjectHandoff(updated),
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.get("/api/concept-lab/dossiers/:id/handoff", async (req, res) => {
     try {
-      const dossier = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const dossier = await storage.getConceptDossier(dossierId);
       if (!dossier) return res.status(404).json({ error: "Dossier not found" });
       if (dossier.sourceType === "manual-idea") {
         return res.status(409).json({ error: "Quick-captured ideas need a full Concept Dossier before they can create a project." });
@@ -4899,6 +5170,66 @@ Return JSON with:
     }
   });
 
+  app.post("/api/projects/:id/cover-upload", requireRole("editor"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const mime = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+      const extByMime: Record<string, string> = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+      };
+      const ext = extByMime[mime];
+      if (!ext) return res.status(415).json({ error: "Upload a PNG, JPEG, or WebP cover image." });
+
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (body.length < 256) return res.status(400).json({ error: "Cover image is empty or invalid." });
+      if (body.length > 12 * 1024 * 1024) return res.status(413).json({ error: "Cover image must be 12 MB or smaller." });
+
+      const hasPngSignature =
+        mime === "image/png" &&
+        body.length >= 8 &&
+        body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47 &&
+        body[4] === 0x0d && body[5] === 0x0a && body[6] === 0x1a && body[7] === 0x0a;
+      const hasJpegSignature =
+        mime === "image/jpeg" &&
+        body.length >= 3 &&
+        body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff;
+      const hasWebpSignature =
+        mime === "image/webp" &&
+        body.length >= 12 &&
+        body.subarray(0, 4).toString("ascii") === "RIFF" &&
+        body.subarray(8, 12).toString("ascii") === "WEBP";
+      if (!hasPngSignature && !hasJpegSignature && !hasWebpSignature) {
+        return res.status(400).json({ error: "The uploaded file does not match its declared image format." });
+      }
+
+      const coversDir = path.resolve("uploads/media/covers", `project-${id}`);
+      fs.mkdirSync(coversDir, { recursive: true });
+      const filename = `cover-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+      const absolutePath = path.join(coversDir, filename);
+      fs.writeFileSync(absolutePath, body);
+
+      const coverImageUrl = `/uploads/media/covers/project-${id}/${filename}`;
+      const variant = await storage.createCoverVariant({
+        projectId: id,
+        imageUrl: coverImageUrl,
+        prompt: "Uploaded by owner",
+        isSelected: true,
+      });
+      await storage.selectCoverVariant(id, variant.id);
+      await storage.updateProject(id, { coverImageUrl });
+
+      res.status(201).json({ coverImageUrl, variant });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/projects/:id/generate-cover", requireRole("editor"), async (req, res) => {
     let prevStatus = "draft";
     try {
@@ -5626,7 +5957,7 @@ Return JSON with:
       if (text.length > 4000) {
         return res.status(400).json({ error: "Text too long (max 4000 characters)" });
       }
-      const trimmed = text.slice(0, 4000);
+      const trimmed = normalizeNarrationText(text).slice(0, 4000);
       const voiceId = voice || "fabb918a343d4591b428083a35980dc4";
       const cacheKey = ttsCacheKey(trimmed, voiceId);
       const ctx = parseAudioContext(req.body);
@@ -5734,7 +6065,7 @@ Return JSON with:
       const apiKey = process.env.FISH_AUDIO_API_KEY;
       if (!apiKey) return res.status(500).json({ error: "Fish Audio not configured" });
 
-      const trimmed = text.slice(0, 4000);
+      const trimmed = normalizeNarrationText(text).slice(0, 4000);
       const fishVoiceId = `fish_${voice || "default"}`;
       // Include the synthesis engine version so audio generated by older Fish
       // models can never be mistaken for current audiobook audio.

@@ -1,3 +1,5 @@
+import { normalizeNarrationText } from "@shared/narration";
+
 export interface BrowserVoiceOption {
   id: string;
   label: string;
@@ -86,7 +88,8 @@ export function browserTTSSpeak(
   browserTTSStop();
 
   const synth = window.speechSynthesis;
-  const utterance = new SpeechSynthesisUtterance(text);
+  const spokenText = normalizeNarrationText(text);
+  const utterance = new SpeechSynthesisUtterance(spokenText);
   currentUtterance = utterance;
 
   const voice = findBrowserVoice(voiceId);
@@ -94,12 +97,12 @@ export function browserTTSSpeak(
   utterance.rate = rate;
   utterance.pitch = 1;
 
-  const words = text.split(/\s+/).filter(Boolean);
+  const words = spokenText.split(/\s+/).filter(Boolean);
   const totalWords = words.length;
   let charToWordMap: number[] = [];
   let charPos = 0;
   for (let i = 0; i < words.length; i++) {
-    const idx = text.indexOf(words[i], charPos);
+    const idx = spokenText.indexOf(words[i], charPos);
     if (idx >= 0) {
       for (let c = charPos; c < idx + words[i].length; c++) {
         charToWordMap[c] = i;
@@ -107,14 +110,14 @@ export function browserTTSSpeak(
       charPos = idx + words[i].length;
     }
   }
-  for (let c = charPos; c < text.length; c++) {
+  for (let c = charPos; c < spokenText.length; c++) {
     charToWordMap[c] = totalWords - 1;
   }
 
   utterance.onboundary = (e: SpeechSynthesisEvent) => {
     if (e.name === "word") {
       const charIdx = e.charIndex;
-      const wordIdx = charToWordMap[charIdx] ?? Math.min(Math.floor((charIdx / text.length) * totalWords), totalWords - 1);
+      const wordIdx = charToWordMap[charIdx] ?? Math.min(Math.floor((charIdx / spokenText.length) * totalWords), totalWords - 1);
       callbacks.onWordIndex?.(wordIdx);
       callbacks.onProgress?.((wordIdx / totalWords) * 100);
     }

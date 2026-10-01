@@ -13,7 +13,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Play, Square, CheckCircle, Clock, X,
+  ArrowLeft, TrendingUp, List, PenTool, Megaphone, Image, Upload, Play, Square, CheckCircle, Clock, X,
   Loader2, AlertCircle, BookOpen, Zap, Star, FileText, RefreshCw, ChevronDown, ChevronUp, Download, User, Hexagon, Eye, FileDown, Volume2,
   Save, Edit3, Check, Music, ArrowRight, Globe, Wand2,
   ClipboardCheck, Users, Sparkles, Gauge, MessageSquareQuote, Activity, TextCursorInput,
@@ -2447,6 +2447,7 @@ export default function ProjectDetail() {
   const [audiobookLoading, setAudiobookLoading] = useState(false);
   const [coverText, setCoverText] = useState("");
   const [coverAvoid, setCoverAvoid] = useState("");
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
   const [showOutlineConfirm, setShowOutlineConfirm] = useState(false);
   const [outlineExpandAll, setOutlineExpandAll] = useState(false);
   const [priceInput, setPriceInput] = useState<string>("");
@@ -2551,6 +2552,32 @@ export default function ProjectDetail() {
     onSuccess: () => { invalidate(); toast({ title: "Marketing generated" }); },
     onError: (e: any) => toast({ title: "Marketing failed", description: e.message, variant: "destructive" }),
   });
+  const coverUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const allowed = new Set(["image/png", "image/jpeg", "image/webp"]);
+      if (!allowed.has(file.type)) throw new Error("Choose a PNG, JPEG, or WebP image.");
+      if (file.size > 12 * 1024 * 1024) throw new Error("Cover image must be 12 MB or smaller.");
+
+      const res = await fetch(`/api/projects/${projectId}/cover-upload`, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        credentials: "include",
+        body: file,
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Cover upload failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      if (coverFileInputRef.current) coverFileInputRef.current.value = "";
+      toast({ title: "Cover uploaded", description: "Your image is now the active book cover and was saved in Cover Variant history." });
+    },
+    onError: (e: any) => toast({ title: "Cover upload failed", description: e.message, variant: "destructive" }),
+  });
+
   const coverMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-cover`, {
       coverPrompt: coverText || undefined,
@@ -3398,6 +3425,37 @@ export default function ProjectDetail() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <input
+                ref={coverFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) coverUploadMutation.mutate(file);
+                }}
+                data-testid="input-upload-cover"
+              />
+              <div className="mb-3 rounded-lg border border-border/20 bg-card/25 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[9px] font-mono uppercase tracking-[0.16em] text-muted-foreground/45">Your Cover</p>
+                    <p className="text-[9px] text-muted-foreground/35 mt-0.5">PNG, JPEG, or WebP · up to 12 MB</p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-[9px] font-mono border-pink-500/25 hover:border-pink-500/45"
+                    onClick={() => coverFileInputRef.current?.click()}
+                    disabled={coverUploadMutation.isPending}
+                    data-testid="button-upload-cover"
+                  >
+                    {coverUploadMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Upload className="h-3.5 w-3.5 mr-1.5 text-pink-400" />}
+                    {project.coverImageUrl ? "REPLACE / UPLOAD" : "UPLOAD COVER"}
+                  </Button>
+                </div>
+              </div>
               {project.coverImageUrl ? (
                 <div className="space-y-3">
                   <div

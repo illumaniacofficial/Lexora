@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, RefreshCw, SkipForward, Columns2, Square, Repeat } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, RefreshCw, SkipForward, Columns2, Square, Repeat, Bookmark, BookMarked, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
@@ -8,7 +8,8 @@ import { useNarration } from "@/App";
 import { useToast } from "@/hooks/use-toast";
 import type { Chapter } from "@shared/schema";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getBrowserVoices, getDefaultBrowserVoice, type BrowserVoiceOption } from "@/lib/browser-tts";
-import { buildCumulativeWeights, wordIndexFromProgress } from "@/lib/word-timing";
+import { buildCumulativeWeights, wordIndexFromAudioTime } from "@/lib/word-timing";
+import { normalizeNarrationText } from "@shared/narration";
 
 interface BookReaderProps {
   title: string;
@@ -27,6 +28,24 @@ type PageContent =
   | { type: "chapter-title"; chapterNumber: number; chapterTitle: string }
   | { type: "text"; chapterNumber: number; chapterTitle: string; text: string; pageInChapter: number; totalPagesInChapter: number; chapterId: number }
   | { type: "outro"; title: string; author: string };
+
+interface ReaderBookmark {
+  id: number;
+  kind: "bookmark" | "progress";
+  page_index: number;
+  chapter_number: number | null;
+  chapter_title: string | null;
+  page_in_chapter: number | null;
+  label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ReadingState {
+  projectId: number;
+  progress: ReaderBookmark | null;
+  bookmarks: ReaderBookmark[];
+}
 
 type PageTheme = "parchment" | "cream" | "white" | "sepia" | "dark" | "midnight";
 
@@ -248,7 +267,7 @@ function OutroPage({ page, theme }: { page: Extract<PageContent, { type: "outro"
       <div className={cn("w-8 h-[1px] my-4 rounded-full", t.divider)} />
       <p className={cn("font-mono text-[10px] uppercase tracking-[0.25em] mb-1", t.accent)}>Produced &amp; narrated on</p>
       <p className={cn("font-serif text-lg font-bold tracking-wide", t.heading)}>Lexora</p>
-      <p className={cn("font-mono text-[9px] uppercase tracking-[0.3em] mt-4", t.accent)}>AI Publishing Platform</p>
+      <p className={cn("font-mono text-[9px] uppercase tracking-[0.3em] mt-4", t.accent)}>Publishing Platform</p>
     </div>
   );
 }
@@ -446,6 +465,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipDirection, setFlipDirection] = useState<"left" | "right">("right");
   const [showToc, setShowToc] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>([]);
+  const [readingStateLoaded, setReadingStateLoaded] = useState(false);
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNarrator, setShowNarrator] = useState(false);
   const [fontSize, setFontSize] = useState<number>(() => {
@@ -495,7 +518,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       if (p.type === "intro") {
         result.push({ chapterNumber: 0, chapterTitle: "Introduction", pageInChapter: 1, totalPagesInChapter: 1, text: `${p.title}. Written by ${p.author}. ${p.chapterCount} ${p.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`, globalPageIndex: idx });
       } else if (p.type === "outro") {
-        result.push({ chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`, globalPageIndex: idx });
+        result.push({ chapterNumber: 999, chapterTitle: "Thank You", pageInChapter: 1, totalPagesInChapter: 1, text: `Thank you for listening to ${p.title}, by ${p.author}. This audiobook was produced and narrated on Lexora, the Lexora Publishing Platform. We hope you enjoyed the journey.`, globalPageIndex: idx });
       } else if (p.type === "text") {
         const tp = p as Extract<PageContent, { type: "text" }>;
         result.push({ chapterNumber: tp.chapterNumber, chapterTitle: tp.chapterTitle, pageInChapter: tp.pageInChapter, totalPagesInChapter: tp.totalPagesInChapter, text: tp.text, globalPageIndex: idx, chapterId: tp.chapterId });
@@ -503,6 +526,157 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     });
     return result;
   }, [pages]);
+
+  const resolveBookmarkPage = useCallback((saved: ReaderBookmark | null | undefined) => {
+    if (!saved || pages.length === 0) return 0;
+    if (saved.chapter_number != null) {
+      if (saved.page_in_chapter != null) {
+        const exact = pages.findIndex((candidate) =>
+          candidate.type === "text" &&
+          candidate.chapterNumber === saved.chapter_number &&
+          candidate.pageInChapter === saved.page_in_chapter,
+        );
+        if (exact >= 0) return exact;
+      }
+      const chapterStart = pages.findIndex((candidate) =>
+        (candidate.type === "chapter-title" || candidate.type === "text") &&
+        candidate.chapterNumber === saved.chapter_number,
+      );
+      if (chapterStart >= 0) return chapterStart;
+    }
+    return Math.max(0, Math.min(saved.page_index || 0, pages.length - 1));
+  }, [pages]);
+
+  const pageReadingMeta = useCallback((pageIndex: number) => {
+    const current = pages[pageIndex];
+    if (!current) return { chapterNumber: null, chapterTitle: null, pageInChapter: null };
+    if (current.type === "text") {
+      return {
+        chapterNumber: current.chapterNumber,
+        chapterTitle: current.chapterTitle,
+        pageInChapter: current.pageInChapter,
+      };
+    }
+    if (current.type === "chapter-title") {
+      return {
+        chapterNumber: current.chapterNumber,
+        chapterTitle: current.chapterTitle,
+        pageInChapter: 1,
+      };
+    }
+    return { chapterNumber: null, chapterTitle: null, pageInChapter: null };
+  }, [pages]);
+
+  useEffect(() => {
+    if (!projectId || pages.length === 0) {
+      setReadingStateLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    setReadingStateLoaded(false);
+    fetch(`/api/reader/books/${projectId}/reading-state`, {
+      credentials: "include",
+      cache: "no-store",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Reading state unavailable");
+        return res.json() as Promise<ReadingState>;
+      })
+      .then((state) => {
+        if (cancelled) return;
+        setBookmarks(Array.isArray(state.bookmarks) ? state.bookmarks : []);
+        if (state.progress) setCurrentPage(resolveBookmarkPage(state.progress));
+      })
+      .catch(() => {
+        // Reading still works when persistence is unavailable.
+      })
+      .finally(() => {
+        if (!cancelled) setReadingStateLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !readingStateLoaded || pages.length === 0) return;
+    const meta = pageReadingMeta(currentPage);
+    const timer = window.setTimeout(() => {
+      fetch(`/api/reader/books/${projectId}/progress`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          pageIndex: currentPage,
+          chapterNumber: meta.chapterNumber,
+          chapterTitle: meta.chapterTitle,
+          pageInChapter: meta.pageInChapter,
+        }),
+      }).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [projectId, currentPage, readingStateLoaded, pageReadingMeta, pages.length]);
+
+  const currentBookmark = useMemo(
+    () => bookmarks.find((saved) => resolveBookmarkPage(saved) === currentPage) || null,
+    [bookmarks, currentPage, resolveBookmarkPage],
+  );
+
+  const toggleCurrentBookmark = useCallback(async () => {
+    if (!projectId || bookmarkBusy) return;
+    setBookmarkBusy(true);
+    try {
+      if (currentBookmark) {
+        const res = await fetch(`/api/reader/books/${projectId}/bookmarks/${currentBookmark.id}`, {
+          method: "DELETE",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error("Could not remove bookmark");
+        setBookmarks((items) => items.filter((item) => item.id !== currentBookmark.id));
+        toast({ title: "Bookmark removed" });
+      } else {
+        const meta = pageReadingMeta(currentPage);
+        const label = meta.chapterTitle
+          ? `${meta.chapterTitle}${meta.pageInChapter ? ` · page ${meta.pageInChapter}` : ""}`
+          : `Page ${currentPage + 1}`;
+        const res = await fetch(`/api/reader/books/${projectId}/bookmarks`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            pageIndex: currentPage,
+            chapterNumber: meta.chapterNumber,
+            chapterTitle: meta.chapterTitle,
+            pageInChapter: meta.pageInChapter,
+            label,
+          }),
+        });
+        if (!res.ok) throw new Error("Could not save bookmark");
+        const saved = await res.json() as ReaderBookmark;
+        setBookmarks((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
+        toast({ title: "Page bookmarked", description: label });
+      }
+    } catch (error: any) {
+      toast({ title: "Bookmark failed", description: error.message, variant: "destructive" });
+    } finally {
+      setBookmarkBusy(false);
+    }
+  }, [projectId, bookmarkBusy, currentBookmark, currentPage, pageReadingMeta, toast]);
+
+  const removeBookmark = useCallback(async (bookmark: ReaderBookmark) => {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`/api/reader/books/${projectId}/bookmarks/${bookmark.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) throw new Error("Could not remove bookmark");
+      setBookmarks((items) => items.filter((item) => item.id !== bookmark.id));
+    } catch (error: any) {
+      toast({ title: "Bookmark failed", description: error.message, variant: "destructive" });
+    }
+  }, [projectId, toast]);
 
   useEffect(() => { autoNarRef.current = autoNarrate; }, [autoNarrate]);
 
@@ -597,9 +771,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       return `${pg.title}. Written by ${pg.author}. ${pg.chapterCount} ${pg.chapterCount === 1 ? "chapter" : "chapters"}. Narrated on Lexora.`;
     }
     if (pg.type === "outro") {
-      return `Thank you for listening to ${pg.title}, by ${pg.author}. This audiobook was produced and narrated on Lexora, an AI publishing platform. We hope you enjoyed the journey.`;
+      return `Thank you for listening to ${pg.title}, by ${pg.author}. This audiobook was produced and narrated on Lexora, the Lexora Publishing Platform. We hope you enjoyed the journey.`;
     }
-    if (pg.type === "text") return stripMarkdown(pg.text).slice(0, 4000);
+    if (pg.type === "text") return normalizeNarrationText(stripMarkdown(normalizeNarrationText(pg.text))).slice(0, 4000);
     return null;
   }, []);
 
@@ -620,14 +794,9 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         return narration ? { text: narration, lastIdx: pageIdx } : null;
       }
     }
-    let textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
-    let lastIdx = pageIdx;
-    if (showDual && pageIdx + 1 < pages.length && pages[pageIdx + 1].type === "text") {
-      textToRead += "\n\n" + (pages[pageIdx + 1] as Extract<PageContent, { type: "text" }>).text;
-      lastIdx = pageIdx + 1;
-    }
-    return { text: stripMarkdown(textToRead).slice(0, 4000), lastIdx };
-  }, [pages, showDual, getPageNarrationText]);
+    const textToRead = (pg as Extract<PageContent, { type: "text" }>).text;
+    return { text: normalizeNarrationText(stripMarkdown(normalizeNarrationText(textToRead))).slice(0, 4000), lastIdx: pageIdx };
+  }, [pages, getPageNarrationText]);
 
   const pageAudioContext = useCallback((pageIdx: number) => {
     const pg = pages[pageIdx];
@@ -704,10 +873,11 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           let nextTextIdx = lastPageIdx + 1;
           while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
-            goToImmediate(nextTextIdx);
+            const alreadyVisibleOnRight = showDual && nextTextIdx === pageIdx + 1;
+            if (!alreadyVisibleOnRight) goToImmediate(nextTextIdx);
             setTimeout(() => {
               if (playPageRef.current) playPageRef.current(nextTextIdx);
-            }, 400);
+            }, 220);
           }
         }
       },
@@ -751,7 +921,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
       setReaderWordIndex(-1);
       setNarratedPageIdx(pageIdx);
 
-      const strippedText = stripMarkdown(cleanText).slice(0, 4000);
+      const strippedText = normalizeNarrationText(stripMarkdown(normalizeNarrationText(cleanText))).slice(0, 4000);
       const strippedWords = strippedText.split(/\s+/).filter(Boolean);
       const wordCount = strippedWords.length;
       readerWordCountRef.current = wordCount;
@@ -808,10 +978,11 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
           let nextTextIdx = lastPageIdx + 1;
           while (nextTextIdx < pages.length && !isNarratablePage(pages[nextTextIdx])) nextTextIdx++;
           if (nextTextIdx < pages.length) {
-            goToImmediate(nextTextIdx);
+            const alreadyVisibleOnRight = showDual && nextTextIdx === pageIdx + 1;
+            if (!alreadyVisibleOnRight) goToImmediate(nextTextIdx);
             setTimeout(() => {
               if (playPageRef.current) playPageRef.current(nextTextIdx);
-            }, 400);
+            }, 220);
           }
         }
       };
@@ -821,7 +992,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
         if (audio && audio.duration > 0) {
           const pct = audio.currentTime / audio.duration;
           setNarrationProgress(pct * 100);
-          setReaderWordIndex(wordIndexFromProgress(pct, cumul));
+          setReaderWordIndex(wordIndexFromAudioTime(audio.currentTime, audio.duration, cumul));
         }
         if (!audio.paused) narrationAnimRef.current = requestAnimationFrame(updateProgress);
       };
@@ -944,16 +1115,16 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const sizeLabel = FONT_SIZES[currentSizeIdx]?.label || "M";
   const isNarratableCurrentPage = page.type === "text" || page.type === "intro" || page.type === "outro";
 
-  const activeHighlightIdx = useMemo(() => {
-    if (readerWordIndex >= 0 && narratedPageIdx === currentPage) return readerWordIndex;
+  const highlightForPage = useCallback((pageIndex: number) => {
+    if (readerWordIndex >= 0 && narratedPageIdx === pageIndex) return readerWordIndex;
     if (miniNarration && miniPlayerWordIndex >= 0) {
       const miniPage = miniNarration.allPages[miniNarration.currentPageIndex];
-      if (miniPage?.globalPageIndex === currentPage) return miniPlayerWordIndex;
+      if (miniPage?.globalPageIndex === pageIndex) return miniPlayerWordIndex;
     }
     return undefined;
-  }, [readerWordIndex, narratedPageIdx, miniNarration, miniPlayerWordIndex, currentPage]);
+  }, [readerWordIndex, narratedPageIdx, miniNarration, miniPlayerWordIndex]);
 
-  const closeAllPanels = () => { setShowToc(false); setShowSettings(false); setShowNarrator(false); };
+  const closeAllPanels = () => { setShowToc(false); setShowBookmarks(false); setShowSettings(false); setShowNarrator(false); };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center select-none" ref={containerRef}
@@ -969,6 +1140,16 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               data-testid="button-reader-toc" aria-label="Table of contents"
             >
               <List className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">TOC</span>
+            </Button>
+
+            <Button size="sm" variant="ghost"
+              onClick={() => { closeAllPanels(); setShowBookmarks(!showBookmarks); }}
+              className={cn("h-8 text-xs font-mono px-2 sm:px-3", currentBookmark ? "text-amber-300" : isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
+              data-testid="button-reader-bookmarks" aria-label="Bookmarks"
+            >
+              <BookMarked className="h-3.5 w-3.5 sm:mr-1" />
+              <span className="hidden sm:inline">Bookmarks</span>
+              {bookmarks.length > 0 && <span className="ml-1 text-[9px] opacity-70">{bookmarks.length}</span>}
             </Button>
 
             <div className={cn("flex items-center gap-0.5 rounded-lg border px-1", isDark ? "border-stone-700 bg-stone-800/50" : "border-stone-600 bg-stone-800/50")}>
@@ -1044,6 +1225,69 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               data-testid="button-reader-close" aria-label="Close reader"><X className="h-4 w-4" /></Button>
           </div>
         </div>
+
+        {showBookmarks && (
+          <div className={cn("absolute left-0 top-11 z-30 w-80 max-w-[92vw] rounded-xl shadow-2xl p-4 max-h-[65vh] overflow-y-auto", "bg-stone-800 border border-stone-700")} data-testid="reader-bookmarks-panel">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-[10px] font-mono text-stone-300 uppercase tracking-wider">Bookmarks</p>
+                <p className="text-[9px] text-stone-500 mt-0.5">Your reading position is saved automatically.</p>
+              </div>
+              <button onClick={() => setShowBookmarks(false)} className="h-6 w-6 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close bookmarks">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("w-full h-8 text-[10px] font-mono mb-3", currentBookmark ? "border-amber-500/40 text-amber-200" : "border-stone-600 text-stone-300")}
+              onClick={toggleCurrentBookmark}
+              disabled={!projectId || bookmarkBusy}
+              data-testid="button-toggle-reader-bookmark"
+            >
+              {bookmarkBusy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : currentBookmark ? <BookMarked className="h-3.5 w-3.5 mr-1.5" /> : <Bookmark className="h-3.5 w-3.5 mr-1.5" />}
+              {currentBookmark ? "Remove bookmark from this page" : "Bookmark this page"}
+            </Button>
+
+            {bookmarks.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-stone-700 py-8 text-center">
+                <Bookmark className="h-5 w-5 text-stone-600 mx-auto mb-2" />
+                <p className="text-[10px] text-stone-500">No saved bookmarks yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {bookmarks.map((saved) => {
+                  const target = resolveBookmarkPage(saved);
+                  return (
+                    <div key={saved.id} className={cn("group flex items-center gap-2 rounded-lg border p-2", target === currentPage ? "border-amber-500/35 bg-amber-500/10" : "border-stone-700 bg-stone-900/30")}>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => { goToImmediate(target); setShowBookmarks(false); }}
+                        data-testid={`button-reader-bookmark-${saved.id}`}
+                      >
+                        <p className="text-[10px] text-stone-200 truncate">{saved.label || saved.chapter_title || `Page ${target + 1}`}</p>
+                        <p className="text-[8px] font-mono text-stone-500 mt-0.5">
+                          {saved.chapter_number != null ? `CH ${saved.chapter_number}${saved.page_in_chapter ? ` · ${saved.page_in_chapter}` : ""}` : `PAGE ${target + 1}`}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeBookmark(saved)}
+                        className="h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-stone-600 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                        aria-label="Delete bookmark"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {showSettings && (
           <div className={cn("absolute left-0 top-11 z-20 w-64 rounded-xl shadow-2xl p-4", "bg-stone-800 border border-stone-700")}>
@@ -1225,7 +1469,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                   <BookPage page={page} theme={theme} fontSize={fontSize} side="left"
                     pageNum={currentPage + 1} totalPages={pages.length}
                     isFlipping={isFlipping} flipDir={flipDirection}
-                    highlightWordIndex={activeHighlightIdx} />
+                    highlightWordIndex={highlightForPage(currentPage)} />
                 </div>
                 <div className="w-[3px] relative z-10" style={{
                   background: isDark
@@ -1237,7 +1481,8 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                   {rightPage ? (
                     <BookPage page={rightPage} theme={theme} fontSize={fontSize} side="right"
                       pageNum={currentPage + 2} totalPages={pages.length}
-                      isFlipping={false} flipDir="right" />
+                      isFlipping={false} flipDir="right"
+                      highlightWordIndex={highlightForPage(currentPage + 1)} />
                   ) : (
                     <div className={cn("h-full rounded-r-lg", t.bg, isDark ? "opacity-30" : "opacity-50")} style={{ backgroundImage: t.gradient }} />
                   )}
@@ -1248,7 +1493,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
                 <BookPage page={page} theme={theme} fontSize={fontSize} side="center"
                   pageNum={currentPage + 1} totalPages={pages.length}
                   isFlipping={isFlipping} flipDir={flipDirection}
-                  highlightWordIndex={activeHighlightIdx} />
+                  highlightWordIndex={highlightForPage(currentPage)} />
               </div>
             )}
           </div>

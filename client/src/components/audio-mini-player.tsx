@@ -5,7 +5,8 @@ import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/components/markdown-renderer";
 import { isBrowserVoice, browserTTSSpeak, browserTTSStop, getDefaultBrowserVoice } from "@/lib/browser-tts";
-import { buildCumulativeWeights, wordIndexFromProgress } from "@/lib/word-timing";
+import { buildCumulativeWeights, wordIndexFromAudioTime } from "@/lib/word-timing";
+import { normalizeNarrationText } from "@shared/narration";
 import { useToast } from "@/hooks/use-toast";
 
 export interface PlaybackState {
@@ -98,7 +99,7 @@ async function fetchAudioCached(text: string, voice: NarratorVoice, ctx?: AudioC
   if (regenerate) audioCache.delete(key);
   const cached = audioCache.get(key);
   if (!regenerate && cached) return cached;
-  const cleanText = stripMarkdown(text).slice(0, 4000);
+  const cleanText = normalizeNarrationText(stripMarkdown(normalizeNarrationText(text))).slice(0, 4000);
   const endpoint = isFishAudioVoice(voice) ? "/api/fish-tts" : "/api/tts";
   const response = await fetch(endpoint, {
     method: "POST",
@@ -211,7 +212,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
   }, []);
 
   const playWithBrowserTTS = useCallback((text: string, voice: string, expectedIdx: number) => {
-    const cleanText = stripMarkdown(text).slice(0, 4000);
+    const cleanText = normalizeNarrationText(stripMarkdown(normalizeNarrationText(text))).slice(0, 4000);
     const words = cleanText.split(/\s+/).filter(Boolean);
     wordCountRef.current = words.length;
     onWordIndexChangeRef.current?.(-1);
@@ -258,7 +259,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
       }
       stopBrowserTTS();
 
-      const cleanText = stripMarkdown(text).slice(0, 4000);
+      const cleanText = normalizeNarrationText(stripMarkdown(normalizeNarrationText(text))).slice(0, 4000);
       const words = cleanText.split(/\s+/).filter(Boolean);
       wordCountRef.current = words.length;
       cumulWeightsRef.current = buildCumulativeWeights(words);
@@ -334,7 +335,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
           setProgress(pct * 100);
           setCurrentTime(audio.currentTime);
           setDuration(audio.duration);
-          onWordIndexChangeRef.current?.(wordIndexFromProgress(pct, cumul));
+          onWordIndexChangeRef.current?.(wordIndexFromAudioTime(audio.currentTime, audio.duration, cumul));
         }
         if (!audio.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);
@@ -410,7 +411,7 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
           const pct = audioRef.current.currentTime / audioRef.current.duration;
           setProgress(pct * 100);
           setCurrentTime(audioRef.current.currentTime);
-          onWordIndexChangeRef.current?.(wordIndexFromProgress(pct, resumeCumul));
+          onWordIndexChangeRef.current?.(wordIndexFromAudioTime(audioRef.current.currentTime, audioRef.current.duration, resumeCumul));
         }
         if (audioRef.current && !audioRef.current.paused) {
           animationRef.current = requestAnimationFrame(updateProgress);
@@ -497,6 +498,9 @@ export default function AudioMiniPlayer({ narration, onClose, onUpdateNarration,
     audioRef.current.currentTime = newTime;
     setProgress(pct);
     setCurrentTime(newTime);
+    onWordIndexChangeRef.current?.(
+      wordIndexFromAudioTime(newTime, audioRef.current.duration, cumulWeightsRef.current),
+    );
   }, []);
 
   const hasNextPage = narration.currentPageIndex < narration.allPages.length - 1;

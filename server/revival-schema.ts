@@ -149,6 +149,27 @@ export async function ensureRevivalSchema(): Promise<void> {
       updated_at timestamp NOT NULL DEFAULT now(),
       CONSTRAINT custom_ai_provider_singleton CHECK (id = 1)
     )`,
+
+    `CREATE TABLE IF NOT EXISTS reader_bookmarks (
+      id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      owner_type text NOT NULL,
+      owner_key text NOT NULL,
+      kind text NOT NULL DEFAULT 'bookmark',
+      page_index integer NOT NULL DEFAULT 0,
+      chapter_number integer,
+      chapter_title text,
+      page_in_chapter integer,
+      label text,
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now()
+    )`,
+    `CREATE INDEX IF NOT EXISTS reader_bookmarks_project_owner_idx
+      ON reader_bookmarks(project_id, owner_type, owner_key)`,
+    `ALTER TABLE reader_bookmarks ADD COLUMN IF NOT EXISTS page_in_chapter integer`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS reader_progress_owner_project_unique
+      ON reader_bookmarks(project_id, owner_type, owner_key, kind)
+      WHERE kind = 'progress'`,
   ];
 
   for (const statement of statements) {
