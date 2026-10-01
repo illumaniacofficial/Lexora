@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 interface LexoraCopilotProps {
   open: boolean;
+  onOpen: () => void;
   onClose: () => void;
 }
 
@@ -56,7 +57,7 @@ function projectIdFromLocation(location: string): number | null {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
+export default function LexoraCopilot({ open, onOpen, onClose }: LexoraCopilotProps) {
   const [location] = useLocation();
   const projectId = projectIdFromLocation(location);
   const [input, setInput] = useState("");
@@ -167,10 +168,7 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
         <Button
           type="button"
           size="icon"
-          onClick={() => {
-            const toggle = document.querySelector<HTMLButtonElement>('[data-testid="button-toggle-copilot"]');
-            if (toggle) toggle.click();
-          }}
+          onClick={onOpen}
           className="md:hidden fixed bottom-5 right-5 z-50 h-14 w-14 rounded-full shadow-2xl border border-purple-400/25 bg-purple-600 hover:bg-purple-500 text-white neon-glow"
           aria-label="Open Lexora Copilot"
           data-testid="button-open-copilot-bubble"
