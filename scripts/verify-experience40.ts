@@ -73,5 +73,13 @@ check("dashboard uses ProjectCoverCard", dashboard.includes("ProjectCoverCard"))
 check("dashboard uses EmptyCreativeState", dashboard.includes("EmptyCreativeState"));
 check("dashboard removed legacy neon stat config", !dashboard.includes("neon-glow-cool") && !dashboard.includes("glow-text-cyan"));
 
+const library = read("client/src/pages/Library.tsx");
+check("library defines 4.0 view modes", library.includes('type LibraryView = "covers" | "editorial" | "compact"'));
+check("library uses ProjectCoverCard", library.includes("ProjectCoverCard"));
+check("library uses EmptyCreativeState", library.includes("EmptyCreativeState"));
+check("library keeps search", library.includes("input-library-search"));
+check("library keeps exports", library.includes("ExportMenu"));
+check("library avoids fixed-height clipping", !library.includes("h-screen overflow-hidden"));
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
