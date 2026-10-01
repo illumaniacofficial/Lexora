@@ -644,6 +644,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const transientProjectStates = new Set(["trend_analysis", "outlining", "marketing"]);
     for (const project of await storage.getProjects()) {
       const projectChapters = await storage.getChapters(project.id);
+      const projectRunSteps = await storage.getRunSteps(project.id);
+      for (const step of projectRunSteps) {
+        if (step.status === "running") {
+          await storage.updateRunStep(step.id, {
+            status: "failed",
+            errorMessage: "Interrupted by a service restart. The saved project data is safe; retry this step when ready.",
+          });
+        }
+      }
       for (const chapter of projectChapters) {
         if (chapter.status === "generating") {
           await storage.updateChapter(chapter.id, { status: "pending" });
@@ -2838,11 +2847,28 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         chapterCount: newChapters.length,
         status: "writing",
       });
+      await storage.createNotification({
+        kind: "pipeline",
+        title: `Outline ready: ${project.title}`,
+        body: `${newChapters.length} chapter blueprints and the Book DNA are ready to review.`,
+        link: `/projects/${projectId}`,
+        metadata: { projectId, workflow: "outline", chapterCount: newChapters.length },
+      }).catch(() => {});
       saveDbSeed().catch(() => {});
     } catch (err: any) {
       console.error(`Outline generation failed for project ${projectId}:`, err?.message || err);
       if (isCurrent()) {
         await storage.updateProject(projectId, { status: job.previousStatus }).catch(() => {});
+        const project = await storage.getProject(projectId).catch(() => undefined);
+        await storage.createNotification({
+          kind: "pipeline",
+          title: "Outline generation failed",
+          body: project
+            ? `${project.title}: ${err?.message || "The outline could not be completed."} Your previous saved outline was preserved.`
+            : `The outline could not be completed: ${err?.message || "Unknown error"}`,
+          link: `/projects/${projectId}`,
+          metadata: { projectId, workflow: "outline", status: "failed" },
+        }).catch(() => {});
       }
     } finally {
       if (outlineGenerationJobs.get(projectId) === job) outlineGenerationJobs.delete(projectId);
