@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { getConfig } from "../config/env";
 import { storage } from "../storage";
-import { openai, HIGH_MODEL, OPENAI_CONFIGURED } from "../openai";
+import { openai, HIGH_MODEL, isCloudTextConfigured } from "../openai";
 import { hashArtifactContent } from "./artifacts";
 import { ensurePropertyForProject } from "./propertyService";
 import { isOllamaAvailable, ollamaChat } from "./ollama";
@@ -208,7 +208,7 @@ export async function scribeChat(opts: {
     );
   }
 
-  if (!OPENAI_CONFIGURED) {
+  if (!(await isCloudTextConfigured())) {
     if (await isOllamaAvailable()) {
       const text = await ollamaChat({
         model: config.ollama.model,

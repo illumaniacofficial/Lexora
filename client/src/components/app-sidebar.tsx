@@ -5,10 +5,8 @@ import {
 } from "@/components/ui/sidebar";
 import {
   LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Settings, MessageSquare,
-  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, Lightbulb, BarChart3, Sparkles,
+  Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, BarChart3, Sparkles,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import type { BookRequest } from "@shared/schema";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useNarration } from "@/App";
 import { VOICE_OPTIONS } from "@/components/audio-mini-player";
@@ -24,9 +22,7 @@ const navItems = [
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
-  { title: "Referrals", url: "/referrals", icon: Share2 },
   { title: "Library", url: "/library", icon: Library },
-  { title: "Requests", url: "/requests", icon: Lightbulb },
   { title: "Scribe", url: "/chat", icon: MessageSquare },
   { title: "Autopilot", url: "/autopilot", icon: Bot },
   { title: "Settings", url: "/settings", icon: Settings },
@@ -92,12 +88,6 @@ export function AppSidebar() {
   const { state: sidebarState } = useSidebar();
   const isCollapsed = sidebarState === "collapsed";
 
-  const { data: bookRequests = [] } = useQuery<BookRequest[]>({
-    queryKey: ["/api/book-requests"],
-    refetchInterval: 30000,
-  });
-  const unreadRequestCount = bookRequests.filter(r => !r.isRead).length;
-
   const voiceLabel = narrationState ? VOICE_OPTIONS.find(v => v.value === narrationState.voice)?.label : "";
   const hasNextPage = narrationState ? narrationState.currentPageIndex < narrationState.allPages.length - 1 : false;
   const totalPages = narrationState?.allPages.length || 0;
@@ -150,15 +140,7 @@ export function AppSidebar() {
                           isActive ? "text-purple-400 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]" : ""
                         )} />
                         <span className="text-[13px] tracking-tight">{item.title}</span>
-                        {item.title === "Requests" && unreadRequestCount > 0 && (
-                          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold px-1.5" data-testid="badge-unread-requests">
-                            {unreadRequestCount}
-                          </span>
-                        )}
-                        {isActive && item.title !== "Requests" && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
-                        )}
-                        {isActive && item.title === "Requests" && unreadRequestCount === 0 && (
+                        {isActive && (
                           <span className="ml-auto h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
                         )}
                       </Link>

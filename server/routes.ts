@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL, OPENAI_CONFIGURED } from "./openai";
+import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL, OPENAI_CONFIGURED, getCustomProviderPublic, saveCustomProvider, testCustomProvider, isCloudTextConfigured } from "./openai";
 import { buildConsistencyContext, type ContinuityExtras } from "./consistency";
 import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
 import { deriveStyleProfile, buildStyleContext } from "./style";
@@ -513,6 +513,112 @@ function parseId(raw: string | string[] | undefined): number | null {
   if (typeof value !== "string") return null;
   const id = parseInt(value, 10);
   return isNaN(id) || id < 1 ? null : id;
+}
+
+function conceptGenreToVertical(label: unknown): typeof VERTICALS[number] | null {
+  if (typeof label !== "string") return null;
+  const normalized = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const direct = (VERTICALS as readonly string[]).find((genre) => genre === normalized);
+  if (direct) return direct as typeof VERTICALS[number];
+
+  const aliases: Record<string, typeof VERTICALS[number]> = {
+    "science-fiction": "sci-fi",
+    "speculative-fiction": "sci-fi",
+    "psychological-thriller": "thriller",
+    "crime-thriller": "thriller",
+    "crime-fiction": "thriller",
+    "detective-fiction": "mystery",
+    "literary": "literary-fiction",
+    "literary-fiction": "literary-fiction",
+    "romantic-fiction": "romance",
+    "historical-fiction": "history",
+    "self-help": "mindset",
+    "personal-development": "mindset",
+    "business-nonfiction": "business",
+    "true-crime": "true-crime",
+    "young-adult": "young-adult",
+    "childrens": "children",
+    "children-s": "children",
+    "cookbook": "cooking",
+    "food": "cooking",
+    "artificial-intelligence": "ai",
+    "real-estate": "real-estate",
+  };
+  if (aliases[normalized]) return aliases[normalized];
+
+  const fuzzy = (VERTICALS as readonly string[]).find((genre) =>
+    normalized.includes(genre) || genre.includes(normalized),
+  );
+  return (fuzzy as typeof VERTICALS[number] | undefined) || null;
+}
+
+function conceptLanguageToLanguage(value: unknown): typeof LANGUAGES[number] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  const found = (LANGUAGES as readonly string[]).find((language) => language === normalized);
+  return (found as typeof LANGUAGES[number] | undefined) || "english";
+}
+
+function dossierProjectHandoff(row: any) {
+  const dossier = (row?.dossier || {}) as Record<string, any>;
+  const genres = Array.from(new Set(
+    [
+      ...(Array.isArray(dossier.genreTags) ? dossier.genreTags : []),
+      ...(Array.isArray(dossier.content?.genres) ? dossier.content.genres : []),
+    ].map(conceptGenreToVertical).filter(Boolean),
+  )).slice(0, 6) as Array<typeof VERTICALS[number]>;
+
+  if (genres.length === 0) {
+    const formatFallback: Record<string, typeof VERTICALS[number]> = {
+      fiction: "novel",
+      children: "children",
+      biography: "biography",
+      memoir: "memoir",
+      history: "history",
+      music: "music",
+      fashion: "fashion",
+      cookbook: "cooking",
+      educational: "education",
+      poetry: "poetry",
+    };
+    genres.push(formatFallback[String(dossier.format || "").toLowerCase()] || "novel");
+  }
+
+  const tone = [
+    ...(Array.isArray(dossier.voiceExperience?.tone) ? dossier.voiceExperience.tone : []),
+    ...(Array.isArray(dossier.reader?.desiredFeelings) ? dossier.reader.desiredFeelings : []),
+  ].filter(Boolean);
+  const themes = [
+    ...(Array.isArray(dossier.themes) ? dossier.themes : []),
+    ...(Array.isArray(dossier.topicTags) ? dossier.topicTags : []),
+    ...(Array.isArray(dossier.content?.subgenres) ? dossier.content.subgenres : []),
+  ].filter(Boolean);
+  const avoid = [
+    ...(Array.isArray(dossier.risks) ? dossier.risks : []),
+    ...(Array.isArray(dossier.intelligence?.redactorConcerns) ? dossier.intelligence.redactorConcerns : []),
+  ].filter(Boolean);
+
+  return {
+    dossierId: row.id,
+    propertyId: row.propertyId || null,
+    status: row.status,
+    title: dossier.workingTitle || "Untitled Concept",
+    description: dossier.premise || dossier.identity?.premise || "",
+    targetAudience: dossier.targetReader || dossier.reader?.targetReader || "",
+    toneStyle: tone.join("; "),
+    keyThemes: themes.join("; "),
+    comparableTitles: "",
+    avoid: avoid.join("; "),
+    genres,
+    vertical: genres[0],
+    targetLanguage: conceptLanguageToLanguage(dossier.voiceExperience?.language),
+    summary: {
+      oneLine: dossier.identity?.angle || dossier.corePromise || "",
+      corePromise: dossier.corePromise || dossier.identity?.promise || "",
+      uniqueAngle: dossier.uniqueAngle || dossier.identity?.differentiation || "",
+      oracleSummary: dossier.intelligence?.oracleFindings?.summary || "",
+      format: dossier.format || dossier.structure?.intendedFormat || "",
+    },
+  };
 }
 
 const aiRateLimit = rateLimit({
@@ -1700,7 +1806,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       runtimeMode: config.studio.runtimeMode,
       privateStudio: config.studio.privateMode,
       commerceEnabled: config.studio.commerceEnabled,
-      cloudConfigured: config.openai.configured,
+      cloudConfigured: await isCloudTextConfigured(),
       local: {
         provider: "ollama",
         model: config.ollama.model,
@@ -1950,7 +2056,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const includeArchived = String(req.query.includeArchived || "").toLowerCase() === "true";
       const dossiers = await storage.getConceptDossiers();
       const ideas = dossiers.filter((row) =>
-        (row.status === "saved" || (includeArchived && row.status === "archived")) &&
+        (
+          row.status === "saved" ||
+          row.status === "developing" ||
+          row.status === "greenlit" ||
+          (includeArchived && row.status === "archived")
+        ) &&
         (row.sourceType === "triad" || row.sourceType === "manual-idea"),
       );
       res.json(ideas);
@@ -2135,6 +2246,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/concept-lab/dossiers/:id", async (req, res) => {
+    try {
+      const dossier = await storage.getConceptDossier(req.params.id);
+      if (!dossier) return res.status(404).json({ error: "Dossier not found" });
+      const property = dossier.propertyId ? await storage.getStudioProperty(dossier.propertyId) : null;
+      res.json({ dossier, property, handoff: dossierProjectHandoff(dossier) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/concept-lab/dossiers/:id/handoff", async (req, res) => {
+    try {
+      const dossier = await storage.getConceptDossier(req.params.id);
+      if (!dossier) return res.status(404).json({ error: "Dossier not found" });
+      if (dossier.sourceType === "manual-idea") {
+        return res.status(409).json({ error: "Quick-captured ideas need a full Concept Dossier before they can create a project." });
+      }
+      if (dossier.status !== "greenlit" || !dossier.propertyId) {
+        return res.status(409).json({ error: "Review and greenlight this dossier before creating a project." });
+      }
+      const property = await storage.getStudioProperty(dossier.propertyId);
+      if (!property) return res.status(409).json({ error: "The greenlit Property linked to this dossier could not be found." });
+      res.json({ ...dossierProjectHandoff(dossier), property });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/concept-lab/dossiers/from-direction", async (req, res) => {
     try {
       const input = conceptDossierFromDirectionSchema.parse(req.body);
@@ -2197,15 +2337,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(409).json({ error: "Quick-captured ideas must be developed into a full Concept Dossier before greenlighting." });
       }
 
-      const { createPropertyFromDossier } = await import("./core/conceptPropertyService");
-      const property = await createPropertyFromDossier(dossier.dossier as any);
+      let property = dossier.propertyId ? await storage.getStudioProperty(dossier.propertyId) : undefined;
+      if (!property) {
+        const { createPropertyFromDossier } = await import("./core/conceptPropertyService");
+        property = await createPropertyFromDossier(dossier.dossier as any);
+      }
 
-      await storage.updateConceptDossier(input.dossierId, {
+      const updatedDossier = await storage.updateConceptDossier(input.dossierId, {
+        propertyId: property.id,
         status: "greenlit",
-        dossier: { ...(dossier.dossier as Record<string, unknown>), status: "greenlit" },
+        dossier: {
+          ...(dossier.dossier as Record<string, unknown>),
+          status: "greenlit",
+          greenlitAt: new Date().toISOString(),
+          propertyId: property.id,
+        },
       });
 
-      res.status(201).json({ property, dossier });
+      res.status(201).json({ property, dossier: updatedDossier });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -2213,6 +2362,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/projects", async (req, res) => {
     try {
+      const sourceDossierId = typeof req.body?.sourceDossierId === "string" ? req.body.sourceDossierId : null;
+      const sourceDossier = sourceDossierId ? await storage.getConceptDossier(sourceDossierId) : null;
+      if (sourceDossierId && !sourceDossier) {
+        return res.status(404).json({ error: "Source Concept Dossier not found" });
+      }
+      if (sourceDossier && (sourceDossier.status !== "greenlit" || !sourceDossier.propertyId)) {
+        return res.status(409).json({ error: "The source dossier must be greenlit before creating a project." });
+      }
+      const sourceProperty = sourceDossier?.propertyId
+        ? await storage.getStudioProperty(sourceDossier.propertyId)
+        : undefined;
+      if (sourceDossier && !sourceProperty) {
+        return res.status(409).json({ error: "The source dossier is missing its greenlit Property." });
+      }
+
       const allowedGenres = new Set<string>(VERTICALS as readonly string[]);
       const requestedGenres = Array.from(new Set(
         (Array.isArray(req.body?.genres) ? req.body.genres : [])
@@ -2233,9 +2397,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
       const project = await storage.createProject(data);
 
-      // Every Project is wrapped in a first-class Property. Keep the legacy
-      // primary vertical intact while storing the full reviewed genre blend in Canon.
-      const property = await ensurePropertyForProject(project.id);
+      // A project created from Concept Lab inherits the already-greenlit Property
+      // instead of creating a duplicate. Ordinary projects still get the legacy bridge.
+      const property = sourceProperty
+        ? sourceProperty
+        : await ensurePropertyForProject(project.id);
+      if (sourceProperty) {
+        await storage.linkProjectToProperty({
+          propertyId: sourceProperty.id,
+          projectId: project.id,
+          relation: "book",
+          isPrimary: true,
+        });
+        await storage.updateStudioProperty(sourceProperty.id, {
+          workingTitle: project.title,
+          status: "in-production",
+        });
+      }
+
       const genres = requestedGenres.length > 0 ? requestedGenres : [project.vertical];
       const primaryGenre = genres.includes(project.vertical) ? project.vertical : genres[0];
       const existingClassification = (property.classification || {}) as Record<string, any>;
@@ -2262,7 +2441,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       });
 
-      res.status(201).json({ ...project, genres });
+      if (sourceDossier) {
+        await storage.updateConceptDossier(sourceDossier.id, {
+          dossier: {
+            ...(sourceDossier.dossier as Record<string, unknown>),
+            status: "greenlit",
+            propertyId: property.id,
+            projectId: project.id,
+            projectCreatedAt: new Date().toISOString(),
+          },
+        });
+      }
+
+      res.status(201).json({ ...project, genres, propertyId: property.id, sourceDossierId });
       saveDbSeed().catch(() => {});
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -3227,7 +3418,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       const useLocalDraft =
         (config.studio.runtimeMode === "off-grid" && localAvailable) ||
         (config.studio.runtimeMode === "hybrid" && localAvailable) ||
-        (!config.openai.configured && localAvailable);
+        (!(await isCloudTextConfigured()) && localAvailable);
 
       if (config.studio.runtimeMode === "off-grid" && !localAvailable) {
         throw new Error("Cannot draft chapter in off-grid mode because Ollama is unavailable.");
@@ -5026,6 +5217,108 @@ Return JSON with:
     }
   });
 
+  app.get("/api/projects/:id/autopilot", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const runs = await storage.getAutopilotRuns();
+      const latest = runs.find((run) => run.projectId === projectId) || null;
+      const active = latest && (latest.status === "pending" || latest.status === "running") ? latest : null;
+      const config = await storage.getAutopilotConfig();
+
+      res.json({
+        projectId,
+        active: Boolean(active),
+        run: latest,
+        guardrails: {
+          minQualityScore: config?.minQualityScore ?? 7,
+          budgetCapUsd: config?.budgetCapUsd ?? 50,
+          requireOwnerApproval: true,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/autopilot/start", requireRole("editor"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      if (project.status === "complete") {
+        return res.status(409).json({ error: "This project is already complete. Revert it to editing before using Project Autopilot." });
+      }
+      if (isAutopilotRunning()) {
+        return res.status(409).json({ error: "Another Autopilot run is already active. Stop or finish it first." });
+      }
+
+      const input = z.object({
+        minQualityScore: z.number().min(1).max(10).optional(),
+        budgetCapUsd: z.number().positive().max(1000).optional(),
+      }).parse(req.body || {});
+      const config = await storage.getAutopilotConfig();
+      const minQualityScore = input.minQualityScore ?? config?.minQualityScore ?? 7;
+      const budgetCapUsd = input.budgetCapUsd ?? config?.budgetCapUsd ?? 50;
+
+      const run = await storage.createAutopilotRun({
+        projectId,
+        vertical: project.vertical,
+        status: "pending",
+        currentStep: "Preparing project",
+        bookTitle: project.title,
+      });
+
+      executeAutopilotRun(
+        run.id,
+        project.vertical,
+        project.targetLanguage || "english",
+        minQualityScore,
+        budgetCapUsd,
+        {
+          targetProjectId: projectId,
+          requireOwnerApproval: true,
+          allowDuplicateVertical: true,
+        },
+      ).catch(async (err) => {
+        console.error("Project Autopilot run failed:", err.message);
+        await storage.updateAutopilotRun(run.id, {
+          status: "failed",
+          errorMessage: err.message,
+          completedAt: new Date(),
+        }).catch(() => {});
+      });
+
+      res.status(202).json({
+        ...run,
+        guardrails: { minQualityScore, budgetCapUsd, requireOwnerApproval: true },
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/projects/:id/autopilot/stop", requireRole("editor"), async (req, res) => {
+    try {
+      const projectId = parseId(req.params.id);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const runs = await storage.getAutopilotRuns();
+      const active = runs.find((run) => run.projectId === projectId && (run.status === "pending" || run.status === "running"));
+      if (!active) return res.status(409).json({ error: "This project does not have an active Autopilot run." });
+
+      const stopped = requestAutopilotStop();
+      if (!stopped) return res.status(409).json({ error: "Autopilot is not currently running." });
+
+      res.json({ success: true, runId: active.id, message: "Stop requested. Lexora will stop after the current safe step." });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/autopilot/run", async (_req, res) => {
     try {
       if (isAutopilotRunning()) {
@@ -5169,6 +5462,38 @@ Return JSON with:
       res.json(settings);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/settings/custom-ai-provider", requireRole("owner"), async (_req, res) => {
+    try {
+      res.json(await getCustomProviderPublic());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/settings/custom-ai-provider", requireRole("owner"), async (req, res) => {
+    try {
+      const input = z.object({
+        enabled: z.boolean(),
+        name: z.string().trim().min(1).max(120),
+        baseUrl: z.string().trim().max(500),
+        apiKey: z.string().max(1000).optional(),
+        fastModel: z.string().trim().max(250),
+        writingModel: z.string().trim().max(250),
+      }).parse(req.body || {});
+      res.json(await saveCustomProvider(input));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/settings/custom-ai-provider/test", requireRole("owner"), async (_req, res) => {
+    try {
+      res.json(await testCustomProvider());
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
   });
 

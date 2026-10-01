@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users, LockKeyhole } from "lucide-react";
+import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users, LockKeyhole, KeyRound, PlugZap } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -42,7 +42,7 @@ type FormData = z.infer<typeof schema>;
 
 const aiModelOptions = [
   { value: "fast", label: "Fast (GPT-5 Mini)", desc: "Faster, lower cost" },
-  { value: "high", label: "High Quality (GPT-5.1)", desc: "Best quality, higher cost" },
+  { value: "high", label: "High Quality (GPT-5.6 Sol)", desc: "Best quality, higher cost" },
 ];
 
 const exportFormatOptions = [
@@ -480,6 +480,168 @@ function SecurityManager() {
   );
 }
 
+
+interface CustomAiProviderConfig {
+  enabled: boolean;
+  name: string;
+  baseUrl: string;
+  fastModel: string;
+  writingModel: string;
+  hasApiKey: boolean;
+  maskedApiKey: string | null;
+}
+
+function CustomAiProviderSettings() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<CustomAiProviderConfig>({
+    queryKey: ["/api/settings/custom-ai-provider"],
+  });
+  const [enabled, setEnabled] = useState(false);
+  const [name, setName] = useState("Custom API");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [fastModel, setFastModel] = useState("");
+  const [writingModel, setWritingModel] = useState("");
+
+  useEffect(() => {
+    if (!data) return;
+    setEnabled(data.enabled);
+    setName(data.name || "Custom API");
+    setBaseUrl(data.baseUrl || "");
+    setFastModel(data.fastModel || "");
+    setWritingModel(data.writingModel || "");
+    setApiKey("");
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/settings/custom-ai-provider", {
+        enabled,
+        name,
+        baseUrl,
+        apiKey: apiKey.trim() || undefined,
+        fastModel,
+        writingModel,
+      });
+      return res.json() as Promise<CustomAiProviderConfig>;
+    },
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["/api/settings/custom-ai-provider"], saved);
+      setApiKey("");
+      toast({ title: "Custom AI provider saved", description: saved.enabled ? "Lexora text generation will use this provider." : "Lexora will use its default provider." });
+    },
+    onError: (error: any) => toast({ title: "Provider save failed", description: error.message, variant: "destructive" }),
+  });
+
+  const test = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/settings/custom-ai-provider/test", {});
+      return res.json() as Promise<{ ok: boolean; model: string; text: string }>;
+    },
+    onSuccess: (result) => toast({ title: "Connection successful", description: `${result.model}: ${result.text || "responded"}` }),
+    onError: (error: any) => toast({ title: "Connection failed", description: error.message, variant: "destructive" }),
+  });
+
+  const preset = (provider: "openrouter" | "gemini" | "groq") => {
+    if (provider === "openrouter") {
+      setName("OpenRouter");
+      setBaseUrl("https://openrouter.ai/api/v1");
+      setFastModel("openrouter/free");
+      setWritingModel("google/gemma-4-26b-a4b-it:free");
+    } else if (provider === "gemini") {
+      setName("Google Gemini");
+      setBaseUrl("https://generativelanguage.googleapis.com/v1beta/openai");
+      setFastModel("gemini-3.7-flash");
+      setWritingModel("gemini-3.7-flash");
+    } else {
+      setName("Groq");
+      setBaseUrl("https://api.groq.com/openai/v1");
+      setFastModel("openai/gpt-oss-20b");
+      setWritingModel("qwen/qwen3.8-27b");
+    }
+  };
+
+  if (isLoading) return <Skeleton className="h-72 rounded-xl bg-muted/20" />;
+
+  return (
+    <Card className="border-cyan-500/20 bg-gradient-to-br from-cyan-500/[0.04] via-card/30 to-purple-500/[0.04]" data-testid="custom-ai-provider-settings">
+      <CardHeader className="pb-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+              <PlugZap className="h-3.5 w-3.5 text-cyan-400/70" /> Custom AI Provider
+            </CardTitle>
+            <CardDescription className="text-[10px] font-mono text-muted-foreground/40 mt-1">
+              Bring your own OpenAI-compatible API endpoint, key, and model IDs. Text generation only; image and voice providers stay separate.
+            </CardDescription>
+          </div>
+          <Switch checked={enabled} onCheckedChange={setEnabled} data-testid="switch-custom-ai-provider" />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" className="h-7 text-[9px] font-mono" onClick={() => preset("openrouter")}>OpenRouter</Button>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-[9px] font-mono" onClick={() => preset("gemini")}>Gemini</Button>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-[9px] font-mono" onClick={() => preset("groq")}>Groq</Button>
+          <span className="self-center text-[9px] font-mono text-muted-foreground/35">or enter any compatible endpoint</span>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/45">Provider name</label>
+            <Input value={name} onChange={(event) => setName(event.target.value)} className="mt-1 h-9 text-[11px] font-mono" placeholder="My Provider" />
+          </div>
+          <div>
+            <label className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/45">Base URL</label>
+            <Input value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} className="mt-1 h-9 text-[11px] font-mono" placeholder="https://provider.example/v1" data-testid="input-custom-ai-base-url" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/45">API key</label>
+          <div className="relative mt-1">
+            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/35" />
+            <Input
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              className="h-9 pl-9 text-[11px] font-mono"
+              placeholder={data?.hasApiKey ? `Saved: ${data.maskedApiKey || "••••••••"} — leave blank to keep it` : "Paste API key"}
+              autoComplete="new-password"
+              data-testid="input-custom-ai-api-key"
+            />
+          </div>
+          <p className="text-[9px] font-mono text-muted-foreground/35 mt-1">The key is encrypted before storage and is never returned to the browser.</p>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/45">Fast model</label>
+            <Input value={fastModel} onChange={(event) => setFastModel(event.target.value)} className="mt-1 h-9 text-[11px] font-mono" placeholder="model/id-for-fast-tasks" data-testid="input-custom-ai-fast-model" />
+            <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">Classification, summaries, market, metadata.</p>
+          </div>
+          <div>
+            <label className="text-[9px] font-mono uppercase tracking-wider text-muted-foreground/45">Writing model</label>
+            <Input value={writingModel} onChange={(event) => setWritingModel(event.target.value)} className="mt-1 h-9 text-[11px] font-mono" placeholder="model/id-for-long-form-writing" data-testid="input-custom-ai-writing-model" />
+            <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">Outlines, chapters, revisions, Scribe.</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="h-8 text-[10px] font-mono" data-testid="button-save-custom-ai-provider">
+            {save.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
+            Save Provider
+          </Button>
+          <Button type="button" variant="outline" onClick={() => test.mutate()} disabled={test.isPending || !data?.hasApiKey} className="h-8 text-[10px] font-mono" data-testid="button-test-custom-ai-provider">
+            {test.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
+            Test Saved Connection
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const { data: settings, isLoading, error } = useQuery<AppSettings | null>({ queryKey: ["/api/settings"] });
@@ -710,6 +872,8 @@ export default function Settings() {
               )} />
             </CardContent>
           </Card>
+
+          <CustomAiProviderSettings />
 
           <Card className="border-border/20 bg-card/30">
             <CardHeader className="pb-4">
