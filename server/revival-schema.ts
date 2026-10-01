@@ -136,6 +136,19 @@ export async function ensureRevivalSchema(): Promise<void> {
     `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_property_idx ON concept_synthesis_runs(property_id)`,
     `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_status_idx ON concept_synthesis_runs(status)`,
     `CREATE INDEX IF NOT EXISTS concept_synthesis_runs_created_idx ON concept_synthesis_runs(created_at)`,
+
+    `CREATE TABLE IF NOT EXISTS custom_ai_provider (
+      id integer PRIMARY KEY DEFAULT 1,
+      enabled boolean NOT NULL DEFAULT false,
+      name text NOT NULL DEFAULT 'Custom API',
+      base_url text NOT NULL DEFAULT '',
+      api_key_ciphertext text,
+      fast_model text NOT NULL DEFAULT '',
+      writing_model text NOT NULL DEFAULT '',
+      created_at timestamp NOT NULL DEFAULT now(),
+      updated_at timestamp NOT NULL DEFAULT now(),
+      CONSTRAINT custom_ai_provider_singleton CHECK (id = 1)
+    )`,
   ];
 
   for (const statement of statements) {
