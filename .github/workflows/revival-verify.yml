@@ -5,6 +5,7 @@ on:
     branches:
       - revival/wave-01-foundation
       - revival/wave-04-emergent-runtime
+      - "codex/**"
   pull_request:
     branches:
       - main
