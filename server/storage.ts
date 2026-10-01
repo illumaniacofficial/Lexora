@@ -56,6 +56,7 @@ export interface IStorage {
 
   getBookDna(projectId: number): Promise<BookDna | undefined>;
   upsertBookDna(data: InsertBookDna): Promise<BookDna>;
+  commitOutline(projectId: number, dna: InsertBookDna, newChapters: InsertChapter[]): Promise<{ dna: BookDna; chapters: Chapter[]; project: Project }>;
 
   getTrendReports(vertical?: string): Promise<TrendReport[]>;
   getTrendReportByProject(projectId: number): Promise<TrendReport | undefined>;
@@ -290,6 +291,36 @@ export class DatabaseStorage implements IStorage {
       }
       const [created] = await tx.insert(bookDna).values(data).returning();
       return created;
+    });
+  }
+
+  async commitOutline(projectId: number, dnaData: InsertBookDna, newChapters: InsertChapter[]) {
+    return db.transaction(async (tx) => {
+      const [existingDna] = await tx.select().from(bookDna).where(eq(bookDna.projectId, projectId));
+      let savedDna: BookDna;
+      if (existingDna) {
+        const [updatedDna] = await tx.update(bookDna)
+          .set(dnaData)
+          .where(eq(bookDna.id, existingDna.id))
+          .returning();
+        savedDna = updatedDna;
+      } else {
+        const [createdDna] = await tx.insert(bookDna).values(dnaData).returning();
+        savedDna = createdDna;
+      }
+
+      await tx.delete(chapters).where(eq(chapters.projectId, projectId));
+      const createdChapters = newChapters.length > 0
+        ? await tx.insert(chapters).values(newChapters).returning()
+        : [];
+
+      const [updatedProject] = await tx.update(projects)
+        .set({ chapterCount: createdChapters.length, status: "writing" })
+        .where(eq(projects.id, projectId))
+        .returning();
+
+      if (!updatedProject) throw new Error("Project disappeared while committing outline");
+      return { dna: savedDna, chapters: createdChapters, project: updatedProject };
     });
   }
 

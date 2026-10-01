@@ -136,8 +136,9 @@ function EditorialPanel({
 
   return (
     <div className="px-4 pb-4 border-t border-cyan-500/15">
-      <Tabs defaultValue="board" className="mt-3">
-        <TabsList className="bg-card/40 border border-border/20 h-8">
+      <Tabs defaultValue="board" className="mt-3 min-w-0">
+        <div className="max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]">
+          <TabsList className="bg-card/40 border border-border/20 h-8 min-w-max w-max flex-nowrap">
           <TabsTrigger value="board" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-board">
             <ClipboardCheck className="h-2.5 w-2.5 mr-1" /> BOARD
           </TabsTrigger>
@@ -147,7 +148,8 @@ function EditorialPanel({
           <TabsTrigger value="beta" className="text-[9px] font-mono px-2 h-6" data-testid="tab-editorial-beta">
             <Users className="h-2.5 w-2.5 mr-1" /> BETA READERS
           </TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
 
         <TabsContent value="board" className="mt-3">
           <div className="flex items-center justify-between mb-2">
@@ -326,6 +328,7 @@ function CollaborationPanel({ projectId, chapter, role, isProjectComplete, onCha
   role: WorkspaceRole;
   isProjectComplete: boolean;
   onChanged: () => void;
+  forceOutlineOpen?: boolean;
 }) {
   const { toast } = useToast();
   const chapterId = chapter.id;
@@ -503,7 +506,7 @@ function CollaborationPanel({ projectId, chapter, role, isProjectComplete, onCha
   );
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, role, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi, onChanged }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, role, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi, onChanged, forceOutlineOpen }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -535,6 +538,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   onInlineAi: (id: number, payload: { action: "continue" | "rewrite"; before: string; after: string; selection: string; instruction: string }) => Promise<string>;
   role: WorkspaceRole;
   onChanged: () => void;
+  forceOutlineOpen?: boolean;
 }) {
   const canEdit = role !== "viewer";
   const [expanded, setExpanded] = useState(false);
@@ -546,6 +550,10 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   const [cowriteInstruction, setCowriteInstruction] = useState("");
   const [cowriteBusy, setCowriteBusy] = useState<"continue" | "rewrite" | null>(null);
   const [suggestion, setSuggestion] = useState<{ text: string; mode: "continue" | "rewrite"; selStart: number; selEnd: number } | null>(null);
+
+  useEffect(() => {
+    if (forceOutlineOpen !== undefined) setExpanded(forceOutlineOpen);
+  }, [forceOutlineOpen]);
 
   const isEditing = editingChapterId === chapter.id;
   const isRevisingThis = revisingChapterId === chapter.id;
@@ -782,7 +790,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           </div>
           <div className="flex items-center gap-2 mt-1">
             {chapter.blueprint && (
-              <p className="text-[10px] text-muted-foreground/40 line-clamp-1 font-mono flex-1">{chapter.blueprint}</p>
+              <p className="text-[10px] text-muted-foreground/50 line-clamp-2 font-mono flex-1"><span className="text-purple-400/60 uppercase tracking-wider mr-1">Outline</span>{chapter.blueprint}</p>
             )}
             {lastEditedLabel && (
               <span className="text-[8px] font-mono text-amber-500/40 shrink-0">edited {lastEditedLabel}</span>
@@ -962,11 +970,29 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           betaPending={betaPending}
         />
       )}
-      {expanded && !isEditing && !isRevisingThis && !showCollab && !showEditorial && chapter.content && (
-        <div className="px-4 pb-4 border-t border-border/15">
-          <ScrollArea className="h-52 mt-3">
-            <MarkdownRendererDark content={chapter.content} />
-          </ScrollArea>
+      {expanded && !isEditing && !isRevisingThis && !showCollab && !showEditorial && (chapter.blueprint || chapter.content) && (
+        <div className="px-4 pb-4 border-t border-border/15 space-y-3">
+          {chapter.blueprint && (
+            <div className="mt-3 rounded-lg border border-purple-500/20 bg-purple-500/[0.05] p-3" data-testid={`outline-blueprint-${chapter.id}`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <List className="h-3 w-3 text-purple-400" />
+                <span className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-purple-300/80">Outline Blueprint</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground/75 whitespace-pre-wrap">{chapter.blueprint}</p>
+            </div>
+          )}
+          {chapter.content ? (
+            <div>
+              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-muted-foreground/40 mb-2">Manuscript Draft</p>
+              <ScrollArea className="h-52">
+                <MarkdownRendererDark content={chapter.content} />
+              </ScrollArea>
+            </div>
+          ) : (
+            <div className="rounded-md border border-border/15 bg-card/20 px-3 py-2.5">
+              <p className="text-[10px] font-mono text-muted-foreground/50">Blueprint ready. Use WRITE when you are ready to draft this chapter.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1969,15 +1995,17 @@ function BusinessPanel({ projectId, forecasts, tests, onChanged }: {
   onChanged: () => void;
 }) {
   return (
-    <Tabs defaultValue="forecaster" className="w-full">
-      <TabsList className="bg-card/40 border border-border/20 h-8">
+    <Tabs defaultValue="forecaster" className="w-full min-w-0">
+      <div className="max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]">
+        <TabsList className="bg-card/40 border border-border/20 h-8 min-w-max w-max flex-nowrap">
         <TabsTrigger value="forecaster" className="text-[9px] font-mono px-2 h-6" data-testid="tab-business-forecaster">
           <DollarSign className="h-3 w-3 mr-1" /> Forecaster
         </TabsTrigger>
         <TabsTrigger value="ablab" className="text-[9px] font-mono px-2 h-6" data-testid="tab-business-ablab">
           <FlaskConical className="h-3 w-3 mr-1" /> A/B Lab
         </TabsTrigger>
-      </TabsList>
+        </TabsList>
+      </div>
       <TabsContent value="forecaster" className="mt-3">
         <ForecasterPanel projectId={projectId} latest={forecasts[0]} onChanged={onChanged} />
       </TabsContent>
@@ -2405,6 +2433,7 @@ export default function ProjectDetail() {
   const [coverText, setCoverText] = useState("");
   const [coverAvoid, setCoverAvoid] = useState("");
   const [showOutlineConfirm, setShowOutlineConfirm] = useState(false);
+  const [outlineExpandAll, setOutlineExpandAll] = useState(false);
   const [priceInput, setPriceInput] = useState<string>("");
   const { startNarration } = useNarration();
 
@@ -2412,10 +2441,35 @@ export default function ProjectDetail() {
     queryKey: ["/api/projects", projectId],
     // Reading/listening is a stable session. Background project polling must not
     // interrupt the reader or compete with long-running narration requests.
-    refetchInterval: showReader ? false : 5000,
+    refetchInterval: showReader ? false : 3000,
   });
   const { data: workspaceMe } = useQuery<{ role: WorkspaceRole }>({ queryKey: ["/api/workspace/me"] });
   const role: WorkspaceRole = workspaceMe?.role ?? "viewer";
+
+  const previousOutlineStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const status = data?.project?.status;
+    const previous = previousOutlineStatusRef.current;
+    const latestOutlineRun = [...(data?.runSteps || [])].reverse().find((step) => step.stepName === "Book Outline + DNA");
+
+    if (previous === "outlining" && status && status !== "outlining") {
+      if (latestOutlineRun?.status === "complete" && (data?.chapters?.length || 0) > 0) {
+        setOutlineExpandAll(true);
+        toast({
+          title: "Outline ready",
+          description: `${data?.chapters?.length || 0} chapter blueprints are ready to review.`,
+        });
+      } else if (latestOutlineRun?.status === "failed") {
+        toast({
+          title: "Outline generation failed",
+          description: latestOutlineRun.errorMessage || "Your previous outline was preserved. Try again when ready.",
+          variant: "destructive",
+        });
+      }
+    }
+
+    previousOutlineStatusRef.current = status;
+  }, [data?.project?.status, data?.chapters?.length, data?.runSteps, toast]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId] });
@@ -2430,8 +2484,14 @@ export default function ProjectDetail() {
   });
   const outlineMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/generate-outline`),
-    onSuccess: () => { invalidate(); toast({ title: "Outline generated" }); },
-    onError: (e: any) => toast({ title: "Outline failed", description: e.message, variant: "destructive" }),
+    onSuccess: () => {
+      invalidate();
+      toast({
+        title: "Outline generation started",
+        description: "Lexora is building the Book DNA and chapter blueprints in the background. You can leave this screen.",
+      });
+    },
+    onError: (e: any) => toast({ title: "Could not start outline generation", description: e.message, variant: "destructive" }),
   });
   const chapterMutation = useMutation({
     mutationFn: (chapterId: number) => apiRequest("POST", `/api/projects/${projectId}/chapters/${chapterId}/generate`),
@@ -2654,6 +2714,8 @@ export default function ProjectDetail() {
   const pacingAnalysis = (data.chapterAnalyses || []).find(a => a.chapterId == null && a.kind === "pacing_curve") || null;
   const completedChapters = chapters.filter(c => c.status === "complete");
   const isEditingMode = project.status === "editing";
+  const latestOutlineRun = [...runSteps].reverse().find((step) => step.stepName === "Book Outline + DNA") || null;
+  const outlineIsRunning = project.status === "outlining";
   const mostRecentEditId = (() => {
     const edited = chapters.filter(c => c.lastEditedAt);
     if (edited.length === 0) return null;
@@ -2669,18 +2731,18 @@ export default function ProjectDetail() {
     total += 1; if (!!marketing) done += 1;
     return Math.round((done / total) * 100);
   })();
-  const anyRunning = trendMutation.isPending || outlineMutation.isPending || chapterMutation.isPending || marketingMutation.isPending || coverMutation.isPending;
+  const anyRunning = trendMutation.isPending || outlineMutation.isPending || outlineIsRunning || chapterMutation.isPending || marketingMutation.isPending || coverMutation.isPending;
 
   const pipelineActions = [
     { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp, glow: "neon-glow-cool" },
-    { label: "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending, icon: List, glow: "neon-glow" },
+    { label: outlineIsRunning ? "Outlining…" : "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (outlineIsRunning) return; if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending || outlineIsRunning, icon: List, glow: "neon-glow" },
     { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image, glow: "neon-glow-warm" },
     { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool, glow: "neon-glow-fire" },
     { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone, glow: "neon-glow-nature" },
   ];
 
   return (
-    <div className="p-8 space-y-6 overflow-y-auto h-full">
+    <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto p-4 sm:p-5 md:p-6 xl:p-8 space-y-5 md:space-y-6">
       <Helmet>
         <title>{project.title} — Lexora</title>
         <meta name="description" content={`${project.title} by ${project.authorName || "Unknown Author"} — ${statusLabel(project.status)} in ${VERTICAL_LABELS[project.vertical] || project.vertical}.`} />
@@ -2887,63 +2949,119 @@ export default function ProjectDetail() {
             </Card>
           )}
 
+          {outlineIsRunning && (
+            <Card className="border-purple-500/25 bg-purple-500/[0.05] glow-border" data-testid="outline-generation-status">
+              <CardContent className="py-4 flex items-start gap-3">
+                <div className="h-9 w-9 rounded-lg border border-purple-500/25 bg-purple-500/10 flex items-center justify-center shrink-0">
+                  <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold tracking-tight text-purple-200">Building your book architecture</p>
+                  <p className="text-[10px] font-mono text-muted-foreground/55 mt-1">
+                    Lexora is generating Book DNA and the complete chapter-by-chapter blueprint in the background. You can safely leave this project and come back.
+                  </p>
+                  {latestOutlineRun?.status === "running" && (
+                    <p className="text-[9px] font-mono text-purple-400/55 mt-2">Book Outline + DNA · running</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Tabs defaultValue="chapters">
-            <TabsList className="h-10 bg-card/30 border border-border/20">
-              <TabsTrigger value="chapters" data-testid="tab-chapters" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
-                <BookOpen className="h-3 w-3" /> Chapters ({chapters.length})
-              </TabsTrigger>
-              <TabsTrigger value="dna" data-testid="tab-dna" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
-                <Zap className="h-3 w-3" /> DNA
-              </TabsTrigger>
-              <TabsTrigger value="marketing" data-testid="tab-marketing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
-                <Megaphone className="h-3 w-3" /> Marketing
-              </TabsTrigger>
-              <TabsTrigger value="continuity" data-testid="tab-continuity" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
-                <Network className="h-3 w-3" /> Continuity
-              </TabsTrigger>
-              <TabsTrigger value="market" data-testid="tab-market" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
-                <Crosshair className="h-3 w-3" /> Market
-              </TabsTrigger>
-              <TabsTrigger value="pacing" data-testid="tab-pacing" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
-                <Activity className="h-3 w-3" /> Pacing
-              </TabsTrigger>
-              <TabsTrigger value="business" data-testid="tab-business" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
-                <DollarSign className="h-3 w-3" /> Business
-              </TabsTrigger>
-              <TabsTrigger value="studio" data-testid="tab-studio" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
-                <Headphones className="h-3 w-3" /> Studio
-              </TabsTrigger>
-              <TabsTrigger value="languages" data-testid="tab-languages" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
-                <Globe className="h-3 w-3" /> Languages
-              </TabsTrigger>
-              <TabsTrigger value="logs" data-testid="tab-logs" className="text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
-                <FileText className="h-3 w-3" /> Logs
-              </TabsTrigger>
-            </TabsList>
+            <div
+              className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]"
+              data-testid="project-workspace-tab-scroll"
+            >
+              <TabsList className="h-10 min-w-max w-max bg-card/30 border border-border/20 flex-nowrap">
+                <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
+                  <BookOpen className="h-3 w-3" /> Outline & Chapters ({chapters.length})
+                </TabsTrigger>
+                <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
+                  <Zap className="h-3 w-3" /> DNA
+                </TabsTrigger>
+                <TabsTrigger value="marketing" data-testid="tab-marketing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
+                  <Megaphone className="h-3 w-3" /> Marketing
+                </TabsTrigger>
+                <TabsTrigger value="continuity" data-testid="tab-continuity" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                  <Network className="h-3 w-3" /> Continuity
+                </TabsTrigger>
+                <TabsTrigger value="market" data-testid="tab-market" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
+                  <Crosshair className="h-3 w-3" /> Market
+                </TabsTrigger>
+                <TabsTrigger value="pacing" data-testid="tab-pacing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
+                  <Activity className="h-3 w-3" /> Pacing
+                </TabsTrigger>
+                <TabsTrigger value="business" data-testid="tab-business" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                  <DollarSign className="h-3 w-3" /> Business
+                </TabsTrigger>
+                <TabsTrigger value="studio" data-testid="tab-studio" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
+                  <Headphones className="h-3 w-3" /> Studio
+                </TabsTrigger>
+                <TabsTrigger value="languages" data-testid="tab-languages" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
+                  <Globe className="h-3 w-3" /> Languages
+                </TabsTrigger>
+                <TabsTrigger value="logs" data-testid="tab-logs" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
+                  <FileText className="h-3 w-3" /> Logs
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             <TabsContent value="chapters" className="mt-4 space-y-2">
               {chapters.length === 0 ? (
-                <Card className="border-border/20 bg-card/30">
-                  <CardContent className="flex flex-col items-center justify-center py-14">
-                    <div className="relative">
-                      <div className="absolute inset-0 neon-glow opacity-20 blur-2xl rounded-full" />
-                      <BookOpen className="h-10 w-10 text-purple-500/30 relative" />
-                    </div>
-                    <p className="font-bold mt-4 tracking-tight">No chapters yet</p>
-                    <p className="text-[11px] text-muted-foreground/40 font-mono mt-1">Generate outline first</p>
-                    <Button className="mt-5 neon-glow text-white border-0 font-mono text-[11px]" onClick={() => outlineMutation.mutate()} disabled={outlineMutation.isPending} data-testid="button-generate-outline-empty">
-                      {outlineMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <List className="h-3.5 w-3.5 mr-1.5" />}
-                      GENERATE OUTLINE
-                    </Button>
-                  </CardContent>
-                </Card>
+                outlineIsRunning ? (
+                  <Card className="border-purple-500/20 bg-card/30">
+                    <CardContent className="flex flex-col items-center justify-center py-14 text-center">
+                      <Loader2 className="h-9 w-9 text-purple-400 animate-spin" />
+                      <p className="font-bold mt-4 tracking-tight">Architecting the outline</p>
+                      <p className="text-[11px] text-muted-foreground/45 font-mono mt-1 max-w-md">
+                        Chapter blueprints will appear here automatically when the generation finishes. No refresh is required.
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="border-border/20 bg-card/30">
+                    <CardContent className="flex flex-col items-center justify-center py-14">
+                      <div className="relative">
+                        <div className="absolute inset-0 neon-glow opacity-20 blur-2xl rounded-full" />
+                        <BookOpen className="h-10 w-10 text-purple-500/30 relative" />
+                      </div>
+                      <p className="font-bold mt-4 tracking-tight">No outline yet</p>
+                      <p className="text-[11px] text-muted-foreground/40 font-mono mt-1">Generate Book DNA and chapter blueprints first</p>
+                      <Button className="mt-5 neon-glow text-white border-0 font-mono text-[11px]" onClick={() => outlineMutation.mutate()} disabled={outlineMutation.isPending} data-testid="button-generate-outline-empty">
+                        {outlineMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <List className="h-3.5 w-3.5 mr-1.5" />}
+                        GENERATE OUTLINE
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )
               ) : (
-                chapters.map(ch => (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border/20 bg-card/20 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-purple-300/80">Outline Review</p>
+                      <p className="text-[9px] font-mono text-muted-foreground/40 mt-0.5">
+                        {chapters.length} chapter blueprint{chapters.length === 1 ? "" : "s"} · click any chapter or open them all
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 border-purple-500/20 text-[9px] font-mono text-purple-300 hover:bg-purple-500/10"
+                      onClick={() => setOutlineExpandAll((value) => !value)}
+                      data-testid="button-toggle-all-outline-blueprints"
+                    >
+                      {outlineExpandAll ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                      {outlineExpandAll ? "Collapse All" : "Expand All"}
+                    </Button>
+                  </div>
+                  {chapters.map(ch => (
                   <ChapterCard
                     key={ch.id}
                     chapter={ch}
+                    forceOutlineOpen={outlineExpandAll}
                     onGenerate={(cid) => chapterMutation.mutate(cid)}
-                    isGenerating={chapterMutation.isPending}
+                    isGenerating={chapterMutation.isPending || outlineIsRunning}
                     onCancel={(cid) => cancelChapterMutation.mutate(cid)}
                     isCancelling={cancelChapterMutation.isPending}
                     projectId={projectId}
@@ -2973,7 +3091,8 @@ export default function ProjectDetail() {
                     role={role}
                     onChanged={invalidate}
                   />
-                ))
+                  ))}
+                </div>
               )}
             </TabsContent>
 
@@ -3012,7 +3131,7 @@ export default function ProjectDetail() {
                   <CardContent className="flex flex-col items-center justify-center py-14">
                     <Megaphone className="h-10 w-10 text-pink-500/30" />
                     <p className="font-bold mt-4 tracking-tight">Marketing not generated</p>
-                    <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[11px]" onClick={() => marketingMutation.mutate()} disabled={marketingMutation.isPending || chapters.length === 0}>
+                    <Button className="mt-5 neon-glow-warm text-white border-0 font-mono text-[11px]" onClick={() => marketingMutation.mutate()} disabled={marketingMutation.isPending || outlineIsRunning || chapters.length === 0}>
                       {marketingMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5 mr-1.5" />}
                       GENERATE MARKETING
                     </Button>
