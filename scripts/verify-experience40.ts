@@ -63,7 +63,15 @@ if (exists(coverCardPath)) {
   check("ProjectCoverCard handles missing covers deliberately", coverCard.includes("lexora-cover-placeholder"));
   check("ProjectCoverCard supports compact mode", coverCard.includes("compact?: boolean"));
   check("ProjectCoverCard bounds long titles", coverCard.includes("line-clamp-2") || coverCard.includes("truncate"));
-}
+} 
+
+const dashboard = read("client/src/pages/Dashboard.tsx");
+check("dashboard names Continue Creating", dashboard.includes("Continue Creating"));
+check("dashboard names Recent Worlds", dashboard.includes("Recent Worlds"));
+check("dashboard names Creative Pulse", dashboard.includes("Creative Pulse"));
+check("dashboard uses ProjectCoverCard", dashboard.includes("ProjectCoverCard"));
+check("dashboard uses EmptyCreativeState", dashboard.includes("EmptyCreativeState"));
+check("dashboard removed legacy neon stat config", !dashboard.includes("neon-glow-cool") && !dashboard.includes("glow-text-cyan"));
 
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
