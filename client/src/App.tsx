@@ -15,6 +15,7 @@ import LexoraCopilot from "@/components/lexora-copilot";
 import { Bot } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import Login from "@/pages/Login";
+import { MobileBottomNav } from "@/components/experience/mobile-bottom-nav";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Projects = lazy(() => import("@/pages/Projects"));
@@ -79,7 +80,7 @@ export function useNarration() {
 function PageLoader() {
   return (
     <div className="flex items-center justify-center h-full">
-      <Loader2 className="h-8 w-8 animate-spin text-purple-400/50" />
+      <Loader2 className="h-8 w-8 animate-spin text-[#C0A06B]/55" />
     </div>
   );
 }
@@ -122,17 +123,17 @@ function AdminLayout() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full overflow-hidden">
+      <div className="flex h-screen w-full overflow-hidden bg-[#0B090C]">
         <AppSidebar />
         <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
-          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-14 border-b border-[#c19d66]/10 bg-[#100d12]/95 backdrop-blur-xl shrink-0 shadow-[0_14px_40px_-34px_rgba(0,0,0,.9)]">
-            <div className="flex items-center gap-3"><SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-[#c19d66] transition-colors" aria-label="Toggle sidebar" /><div className="hidden sm:block"><p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#c19d66]/55">Lexora</p><p className="text-[11px] text-muted-foreground/55">Stories become worlds.</p></div></div>
+          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-14 border-b border-[#C0A06B]/10 bg-[#0D0A0E]/94 backdrop-blur-xl shrink-0">
+            <div className="flex items-center gap-3"><SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-[#C0A06B] transition-colors" aria-label="Toggle sidebar" /><div className="hidden sm:block"><p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#C0A06B]/55">Lexora</p><p className="text-[11px] text-muted-foreground/55">Stories become worlds.</p></div></div>
             <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 size="sm"
                 variant={copilotOpen ? "secondary" : "ghost"}
                 onClick={() => setCopilotOpen((value) => !value)}
-                className="hidden md:inline-flex h-8 gap-1.5 text-[9px] font-mono text-purple-300"
+                className="hidden md:inline-flex h-8 gap-1.5 text-[9px] font-mono text-[#C0A06B]/75"
                 data-testid="button-toggle-copilot"
                 aria-label="Toggle Lexora Copilot"
               >
@@ -140,15 +141,16 @@ function AdminLayout() {
                 <span className="hidden sm:inline">Copilot</span>
               </Button>
               <NotificationCenter />
-              <div className="h-px w-10 bg-gradient-to-r from-[#8f4a5e] to-[#c19d66] opacity-70" />
-              <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
+              <div className="h-px w-10 bg-gradient-to-r from-[#7E3E51] to-[#C0A06B] opacity-70" />
+              <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v4.0</span>
             </div>
           </header>
-          <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-            <main className="min-w-0 flex-1 overflow-hidden aurora-bg">
+          <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden pb-[4.5rem] md:pb-0">
+            <main className="min-w-0 flex-1 overflow-hidden bg-[#0B090C]">
               <AdminRouter />
             </main>
             <LexoraCopilot open={copilotOpen} onOpen={() => setCopilotOpen(true)} onClose={() => setCopilotOpen(false)} />
+            <MobileBottomNav />
           </div>
         </div>
       </div>
@@ -174,7 +176,7 @@ function AuthGatedAdmin() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center aurora-bg">
+      <div className="min-h-screen flex items-center justify-center bg-[#0B090C]">
         <Loader2 className="h-8 w-8 animate-spin text-purple-400/50" />
       </div>
     );

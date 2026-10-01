@@ -798,3 +798,121 @@ h1, .lexora-display {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+
+
+/* --------------------------------------------------------------------------
+   LEXORA EXPERIENCE 4.0 — EDITORIAL CINEMATIC FOUNDATION
+   -------------------------------------------------------------------------- */
+:root {
+  --lexora-obsidian: #0B090C;
+  --lexora-deep: #131015;
+  --lexora-raised: #1A151C;
+  --lexora-burgundy: #7E3E51;
+  --lexora-rose: #A55B70;
+  --lexora-gold: #C0A06B;
+  --lexora-ivory: #EFE5D9;
+  --lexora-muted-ivory: #BCAF9F;
+}
+
+@layer components {
+  .lexora-page {
+    min-height: 100%;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle at 78% -10%, rgba(192, 160, 107, .07), transparent 31rem),
+      radial-gradient(circle at 8% 22%, rgba(126, 62, 81, .07), transparent 28rem),
+      var(--lexora-obsidian);
+    color: var(--lexora-ivory);
+  }
+
+  .lexora-editorial-surface {
+    border: 1px solid rgba(192, 160, 107, .10);
+    background: linear-gradient(145deg, rgba(26, 21, 28, .96), rgba(19, 16, 21, .92));
+    box-shadow: 0 26px 70px -54px rgba(0, 0, 0, .96);
+  }
+
+  .lexora-kicker {
+    font-family: var(--font-mono);
+    font-size: .625rem;
+    font-weight: 700;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: rgba(192, 160, 107, .72);
+  }
+
+  .lexora-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(192, 160, 107, .22), rgba(126, 62, 81, .24), transparent);
+  }
+
+  .lexora-cover-placeholder {
+    position: relative;
+    overflow: hidden;
+    background:
+      linear-gradient(155deg, rgba(192, 160, 107, .10), transparent 38%),
+      radial-gradient(circle at 78% 18%, rgba(165, 91, 112, .22), transparent 38%),
+      linear-gradient(160deg, #21171D, #100D11 72%);
+  }
+
+  .lexora-cover-placeholder::after {
+    content: "";
+    position: absolute;
+    inset: 10%;
+    border: 1px solid rgba(192, 160, 107, .10);
+    border-radius: .8rem;
+    pointer-events: none;
+  }
+
+  .lexora-display {
+    font-family: var(--font-serif);
+    letter-spacing: -.035em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lexora-page *,
+  .lexora-page *::before,
+  .lexora-page *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* LX-4.0D — Manuscript workspace */
+@layer components {
+  .lexora-manuscript-canvas {
+    border: 1px solid rgba(126, 62, 81, .13);
+    background:
+      linear-gradient(180deg, rgba(255, 252, 247, .98), rgba(239, 229, 217, .96)),
+      #EFE5D9;
+    color: #211A22;
+    box-shadow:
+      0 28px 80px -54px rgba(0, 0, 0, .92),
+      inset 0 1px 0 rgba(255,255,255,.7);
+  }
+
+  .lexora-manuscript-canvas textarea {
+    color: #211A22;
+    caret-color: #7E3E51;
+  }
+
+  .lexora-manuscript-canvas textarea::placeholder {
+    color: rgba(74, 55, 62, .38);
+  }
+
+  .lexora-manuscript-reading {
+    font-family: var(--font-serif);
+    font-size: 1.03rem;
+    line-height: 1.82;
+    color: #E9DED2;
+  }
+
+  .lexora-manuscript-reading p,
+  .lexora-manuscript-reading li,
+  .lexora-manuscript-reading blockquote {
+    line-height: 1.82;
+  }
+}

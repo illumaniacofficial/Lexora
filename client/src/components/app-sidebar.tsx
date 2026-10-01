@@ -15,17 +15,19 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 const logoPath = "/icons/lexora-mark.svg?v=3";
 
-const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+const primaryNavItems = [
+  { title: "Home", url: "/", icon: LayoutDashboard },
+  { title: "Library", url: "/library", icon: Library },
   { title: "Projects", url: "/projects", icon: FolderOpen },
   { title: "Concept Lab", url: "/concept-lab", icon: Sparkles },
+  { title: "Scribe", url: "/chat", icon: MessageSquare },
+];
+
+const secondaryNavItems = [
   { title: "Trend Intel", url: "/trends", icon: TrendingUp },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Marketing", url: "/marketing", icon: Megaphone },
-  { title: "Library", url: "/library", icon: Library },
-  { title: "Scribe", url: "/chat", icon: MessageSquare },
   { title: "Autopilot", url: "/autopilot", icon: Bot },
-  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 function WaveformBars({ isPlaying }: { isPlaying: boolean }) {
@@ -35,7 +37,7 @@ function WaveformBars({ isPlaying }: { isPlaying: boolean }) {
         <div
           key={i}
           className={cn(
-            "w-[3px] rounded-full bg-gradient-to-t from-purple-500 to-cyan-400 transition-all",
+            "w-[3px] rounded-full bg-gradient-to-t from-[#7E3E51] to-[#C0A06B] transition-all",
             isPlaying ? `waveform-bar-${i}` : "h-[4px] opacity-40"
           )}
         />
@@ -57,7 +59,7 @@ function ProgressRing({ progress, size = 36 }: { progress: number; size?: number
         cy={size / 2}
         r={radius}
         fill="none"
-        stroke="hsl(270 50% 40% / 0.15)"
+        stroke="rgba(192,160,107,.12)"
         strokeWidth={strokeWidth}
       />
       <circle
@@ -74,8 +76,8 @@ function ProgressRing({ progress, size = 36 }: { progress: number; size?: number
       />
       <defs>
         <linearGradient id="sidebar-progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="hsl(270 100% 65%)" />
-          <stop offset="100%" stopColor="hsl(190 100% 55%)" />
+          <stop offset="0%" stopColor="#7E3E51" />
+          <stop offset="100%" stopColor="#C0A06B" />
         </linearGradient>
       </defs>
     </svg>
@@ -104,7 +106,7 @@ export function AppSidebar() {
           <div>
             <div className="text-[15px] font-semibold tracking-[-0.025em] text-[#f1e7dc] leading-none">Lexora</div>
             <div className="text-[10px] font-mono font-medium text-[#c19d66]/70 mt-1 leading-none tracking-widest uppercase">
-              STORY STUDIO
+              CREATIVE OS
             </div>
           </div>
         </div>
@@ -112,13 +114,12 @@ export function AppSidebar() {
 
       <SidebarContent className="px-3 py-4">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[9px] uppercase tracking-[0.2em] font-mono font-bold text-muted-foreground/40 px-3 mb-2">
-            <Hexagon className="h-2.5 w-2.5 mr-1.5 inline" />
-            NAVIGATION
+          <SidebarGroupLabel className="px-3 mb-2 text-[9px] uppercase tracking-[0.2em] font-mono font-bold text-[#C0A06B]/45">
+            CREATE
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {primaryNavItems.map((item) => {
                 const isActive = item.url === "/" ? location === "/" : location.startsWith(item.url);
                 return (
                   <SidebarMenuItem key={item.title}>
@@ -127,22 +128,50 @@ export function AppSidebar() {
                       data-active={isActive}
                       data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
                       className={cn(
-                        "relative transition-all duration-300",
+                        "relative border border-transparent rounded-xl transition-all duration-200",
                         isActive
-                          ? "bg-[#8f4a5e]/15 text-[#f1e7dc] font-semibold border border-[#c19d66]/15"
-                          : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border border-transparent hover:border-[#c19d66]/10"
+                          ? "bg-[#7E3E51]/10 text-[#EFE5D9] font-semibold border-[#C0A06B]/10"
+                          : "text-[#BCAF9F]/60 hover:text-[#EFE5D9] hover:bg-white/[0.025] hover:border-white/[0.04]"
                       )}
                     >
                       <Link href={item.url}>
-                        {isActive && <span className="nav-active-bar" />}
-                        <item.icon className={cn(
-                          "h-4 w-4 transition-all duration-300",
-                          isActive ? "text-[#c19d66]" : ""
-                        )} />
+                        {isActive ? <span className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-[#C0A06B]" /> : null}
+                        <item.icon className={cn("h-4 w-4 transition-colors duration-200", isActive ? "text-[#C0A06B]" : "text-[#BCAF9F]/45")} />
                         <span className="text-[13px] tracking-tight">{item.title}</span>
-                        {isActive && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#c19d66] shadow-[0_0_8px_rgba(193,157,102,.45)]" />
-                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup className="pt-1">
+          <SidebarGroupLabel className="px-3 mb-2 text-[9px] uppercase tracking-[0.2em] font-mono font-bold text-[#BCAF9F]/30">
+            INTELLIGENCE
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {secondaryNavItems.map((item) => {
+                const isActive = location.startsWith(item.url);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      data-active={isActive}
+                      data-testid={`nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                      className={cn(
+                        "relative border border-transparent rounded-xl transition-all duration-200",
+                        isActive
+                          ? "bg-[#7E3E51]/10 text-[#EFE5D9] border-[#C0A06B]/10"
+                          : "text-[#BCAF9F]/52 hover:text-[#EFE5D9] hover:bg-white/[0.02]"
+                      )}
+                    >
+                      <Link href={item.url}>
+                        {isActive ? <span className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-[#C0A06B]/75" /> : null}
+                        <item.icon className={cn("h-4 w-4", isActive ? "text-[#C0A06B]/80" : "text-[#BCAF9F]/38")} />
+                        <span className="text-[12px] tracking-tight">{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -154,27 +183,27 @@ export function AppSidebar() {
 
         {narrationState && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-[9px] uppercase tracking-[0.2em] font-mono font-bold text-purple-400/50 px-3 mb-2">
+            <SidebarGroupLabel className="text-[9px] uppercase tracking-[0.2em] font-mono font-bold text-[#C0A06B]/50 px-3 mb-2">
               <Volume2 className="h-2.5 w-2.5 mr-1.5 inline" />
               NOW PLAYING
             </SidebarGroupLabel>
             <SidebarGroupContent>
-              <div className="mx-2 rounded-xl border border-purple-500/20 bg-gradient-to-b from-purple-500/[0.08] to-transparent overflow-hidden" data-testid="sidebar-now-playing">
+              <div className="mx-2 rounded-xl border border-[#C0A06B]/15 bg-gradient-to-b from-[#7E3E51]/[0.08] to-transparent overflow-hidden" data-testid="sidebar-now-playing">
                 <div className="h-0.5 bg-border/10 relative">
                   <div
-                    className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-purple-500 to-cyan-400 transition-all duration-300"
+                    className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-[#7E3E51] to-[#C0A06B] transition-all duration-300"
                     style={{ width: `${playbackState.progress}%` }}
                   />
                 </div>
 
                 <div className="p-3 space-y-3">
                   <div className="flex items-start gap-2.5">
-                    <div className="relative flex items-center justify-center h-9 w-9 shrink-0 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <div className="relative flex items-center justify-center h-9 w-9 shrink-0 rounded-lg bg-[#7E3E51]/10 border border-[#C0A06B]/15">
                       <ProgressRing progress={playbackState.progress} size={36} />
-                      <Mic className="h-3.5 w-3.5 text-purple-400 relative z-10" />
+                      <Mic className="h-3.5 w-3.5 text-[#C0A06B] relative z-10" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-semibold truncate text-purple-200 leading-tight">{narrationState.bookTitle}</p>
+                      <p className="text-[11px] font-semibold truncate text-[#EFE5D9] leading-tight">{narrationState.bookTitle}</p>
                       <p className="text-[9px] font-mono text-muted-foreground/50 truncate mt-0.5">
                         Ch {narrationState.chapterNumber}: {narrationState.chapterTitle}
                       </p>
@@ -199,7 +228,7 @@ export function AppSidebar() {
                         size="icon" variant="ghost"
                         onClick={() => playbackControls?.replay()}
                         disabled={playbackState.isLoading}
-                        className="h-7 w-7 text-muted-foreground/50 hover:text-purple-300 disabled:opacity-20"
+                        className="h-7 w-7 text-muted-foreground/50 hover:text-[#EFE5D9] disabled:opacity-20"
                         data-testid="button-sidebar-replay" aria-label="Replay"
                       >
                         <RotateCcw className="h-3 w-3" />
@@ -212,8 +241,8 @@ export function AppSidebar() {
                         className={cn(
                           "h-8 w-8 rounded-full transition-all duration-300",
                           playbackState.isPlaying
-                            ? "bg-purple-500 hover:bg-purple-600 text-white shadow-[0_0_16px_rgba(147,51,234,0.4)]"
-                            : "bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30"
+                            ? "bg-[#7E3E51] hover:bg-[#914c61] text-white shadow-[0_12px_26px_-18px_rgba(192,160,107,.7)]"
+                            : "bg-[#7E3E51]/15 hover:bg-[#7E3E51]/24 text-[#EFE5D9] border border-[#C0A06B]/20"
                         )}
                         data-testid="button-sidebar-play" aria-label={playbackState.isPlaying ? "Pause" : "Play"}
                       >
@@ -230,7 +259,7 @@ export function AppSidebar() {
                         size="icon" variant="ghost"
                         onClick={() => playbackControls?.nextPage()}
                         disabled={!hasNextPage || playbackState.isLoading}
-                        className="h-7 w-7 text-muted-foreground/50 hover:text-purple-300 disabled:opacity-20"
+                        className="h-7 w-7 text-muted-foreground/50 hover:text-[#EFE5D9] disabled:opacity-20"
                         data-testid="button-sidebar-next" aria-label="Next page"
                       >
                         <SkipForward className="h-3 w-3" />
@@ -240,8 +269,8 @@ export function AppSidebar() {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
-                      <Volume2 className="h-2.5 w-2.5 text-purple-400/40" />
-                      <span className="text-[8px] font-mono text-purple-400/40 uppercase tracking-widest">{voiceLabel}</span>
+                      <Volume2 className="h-2.5 w-2.5 text-[#C0A06B]/40" />
+                      <span className="text-[8px] font-mono text-[#C0A06B]/40 uppercase tracking-widest">{voiceLabel}</span>
                     </div>
                     <span className="text-[8px] font-mono text-muted-foreground/30">
                       {currentPage}/{totalPages}
@@ -256,20 +285,20 @@ export function AppSidebar() {
                   <TooltipTrigger asChild>
                     <button
                       onClick={() => playbackControls?.togglePlay()}
-                      className="relative flex items-center justify-center h-9 w-9 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all duration-300"
+                      className="relative flex items-center justify-center h-9 w-9 rounded-lg border border-[#C0A06B]/20 bg-[#7E3E51]/10 hover:bg-[#7E3E51]/18 transition-all duration-300"
                       data-testid="sidebar-now-playing-icon"
                       aria-label={playbackState.isPlaying ? "Pause narration" : "Play narration"}
                     >
                       <ProgressRing progress={playbackState.progress} size={36} />
                       {playbackState.isLoading ? (
-                        <Loader2 className="h-3.5 w-3.5 text-purple-400 animate-spin relative z-10" />
+                        <Loader2 className="h-3.5 w-3.5 text-[#C0A06B] animate-spin relative z-10" />
                       ) : playbackState.isPlaying ? (
-                        <Pause className="h-3.5 w-3.5 text-purple-400 relative z-10" />
+                        <Pause className="h-3.5 w-3.5 text-[#C0A06B] relative z-10" />
                       ) : (
-                        <Play className="h-3.5 w-3.5 text-purple-400 ml-0.5 relative z-10" />
+                        <Play className="h-3.5 w-3.5 text-[#C0A06B] ml-0.5 relative z-10" />
                       )}
                       {playbackState.isPlaying && (
-                        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)] border border-background" />
+                        <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#C0A06B] shadow-[0_0_8px_rgba(192,160,107,.45)] border border-background" />
                       )}
                     </button>
                   </TooltipTrigger>
@@ -285,20 +314,26 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/20 px-4 py-3 space-y-2">
+      <SidebarFooter className="border-t border-[#C0A06B]/10 px-4 py-3 space-y-2">
+        <Link href="/settings">
+          <button className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[11px] font-mono text-muted-foreground/50 hover:text-[#EFE5D9] hover:bg-white/[0.025] transition-all duration-200" data-testid="nav-settings">
+            <Settings className="h-3.5 w-3.5 text-[#C0A06B]/45" />
+            <span className="tracking-wider uppercase">Settings</span>
+          </button>
+        </Link>
         <Link href="/library#invites">
           <button
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[11px] font-mono text-muted-foreground/50 hover:text-purple-300 hover:bg-purple-500/5 transition-all duration-300 border border-transparent hover:border-purple-500/15"
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[11px] font-mono text-muted-foreground/50 hover:text-[#EFE5D9] hover:bg-[#7E3E51]/8 transition-all duration-300 border border-transparent hover:border-[#C0A06B]/12"
             data-testid="button-sidebar-invites"
           >
-            <Share2 className="h-3.5 w-3.5 text-purple-400/50" />
+            <Share2 className="h-3.5 w-3.5 text-[#C0A06B]/50" />
             <span className="tracking-wider uppercase">Share & Invites</span>
           </button>
         </Link>
         <div className="flex items-center justify-between px-3">
           <div className="flex items-center gap-2.5">
-            <Zap className="h-3 w-3 text-cyan-400/50" />
-            <span className="text-[9px] font-mono text-muted-foreground/40 tracking-wider uppercase">v3.0</span>
+            <Zap className="h-3 w-3 text-[#C0A06B]/45" />
+            <span className="text-[9px] font-mono text-muted-foreground/40 tracking-wider uppercase">v4.0</span>
           </div>
           <button
             onClick={async () => {

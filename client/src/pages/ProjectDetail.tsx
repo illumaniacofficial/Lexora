@@ -27,6 +27,8 @@ import { LANGUAGE_LABELS } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import CanonWorkspace from "@/components/canon-workspace";
+import { ProjectHero } from "@/components/experience/project-hero";
+import { WorkspaceTabs } from "@/components/experience/workspace-tabs";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
 import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion, StudioProperty, ContinuitySnapshot, AutopilotRun } from "@shared/schema";
@@ -108,7 +110,7 @@ interface BetaReadersData {
 
 function StepStatus({ status }: { status: string }) {
   if (status === "complete") return <CheckCircle className="h-4 w-4 text-emerald-400 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]" />;
-  if (status === "running") return <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />;
+  if (status === "running") return <Loader2 className="h-4 w-4 animate-spin text-[#C0A06B]/70" />;
   if (status === "failed") return <AlertCircle className="h-4 w-4 text-red-400" />;
   return <Clock className="h-4 w-4 text-muted-foreground/30" />;
 }
@@ -655,24 +657,24 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   const lastEditedLabel = chapter.lastEditedAt ? new Date(chapter.lastEditedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
 
   return (
-    <div className={cn(
-      "border rounded-xl overflow-hidden bg-card/30 hover:border-purple-500/15 transition-all duration-300",
-      isLastEdited ? "border-amber-500/30 ring-1 ring-amber-500/10" : "border-border/20"
+    <article className={cn(
+      "lexora-editorial-surface overflow-hidden rounded-[22px] border transition-colors duration-200",
+      isLastEdited ? "border-[#C0A06B]/25 ring-1 ring-[#C0A06B]/8" : "border-[#C0A06B]/8 hover:border-[#C0A06B]/16"
     )} data-testid={`chapter-${chapter.id}`}>
       <div
-        className="flex items-start gap-3 p-4 cursor-pointer hover:bg-white/[0.02] transition-colors"
+        className="flex cursor-pointer items-start gap-3 p-4 transition-colors hover:bg-white/[0.018] md:p-5"
         onClick={() => setExpanded(!expanded)}
       >
         <div className={cn(
           "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold font-mono",
-          isLastEdited ? "bg-amber-500/15 border border-amber-500/25 text-amber-300" : "bg-purple-500/10 border border-purple-500/20 text-purple-300"
+          isLastEdited ? "bg-[#C0A06B]/12 border border-[#C0A06B]/20 text-[#C0A06B]" : "bg-[#7E3E51]/10 border border-[#C0A06B]/10 text-[#C0A06B]/70"
         )}>
           {chapter.chapterNumber}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2 min-w-0">
-              <p className="text-sm font-bold tracking-tight truncate">{chapter.title}</p>
+              <p className="lexora-display truncate text-base font-semibold tracking-[-0.025em] text-[#EFE5D9]">{chapter.title}</p>
               {isLastEdited && (
                 <Badge variant="outline" className="text-[8px] font-mono border-amber-500/20 bg-amber-500/5 text-amber-400 shrink-0">
                   LAST EDITED
@@ -687,7 +689,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                   </Badge>
                   {chapter.audioUrl && (
                     <a href={`/api/projects/${projectId}/chapters/${chapter.id}/audio`} download onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40 px-1.5" data-testid={`button-download-chapter-audio-${chapter.id}`} aria-label="Download chapter audio">
+                      <Button size="sm" variant="outline" className="h-6 text-[9px] font-mono border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28 px-1.5" data-testid={`button-download-chapter-audio-${chapter.id}`} aria-label="Download chapter audio">
                         <Music className="h-2.5 w-2.5 mr-0.5" /> MP3
                       </Button>
                     </a>
@@ -695,7 +697,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                   {!chapter.audioUrl && canEdit && (
                     <Button
                       size="sm" variant="outline"
-                      className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 px-1.5"
+                      className="h-6 text-[9px] font-mono border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28 px-1.5"
                       onClick={(e) => { e.stopPropagation(); onGenerateAudio(chapter.id); }}
                       disabled={isGeneratingAudio}
                       data-testid={`button-gen-audio-${chapter.id}`}
@@ -729,7 +731,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                       </Button>
                       <Button
                         size="sm" variant="outline"
-                        className="h-6 text-[9px] font-mono border-purple-500/20 text-purple-400 hover:border-purple-500/40 hover:text-purple-300 px-1.5"
+                        className="h-6 text-[9px] font-mono border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28 hover:text-[#EFE5D9] px-1.5"
                         onClick={startRevising}
                         data-testid={`button-revise-chapter-${chapter.id}`}
                         aria-label="Revise chapter with AI"
@@ -742,7 +744,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                     size="sm" variant="outline"
                     className={cn(
                       "h-6 text-[9px] font-mono px-1.5",
-                      showEditorial ? "border-cyan-500/40 text-cyan-300 bg-cyan-500/10" : "border-cyan-500/20 text-cyan-400 hover:border-cyan-500/40"
+                      showEditorial ? "border-[#C0A06B]/28 text-[#EFE5D9]/75 bg-[#7E3E51]/10" : "border-[#C0A06B]/14 text-[#C0A06B]/70 hover:border-[#C0A06B]/28"
                     )}
                     onClick={(e) => { e.stopPropagation(); setShowEditorial(v => !v); setExpanded(true); }}
                     data-testid={`button-editorial-chapter-${chapter.id}`}
@@ -765,8 +767,8 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
                 </>
               ) : chapter.status === "generating" ? (
                 <>
-                  <Badge variant="outline" className="text-[10px] font-mono border-purple-500/20">
-                    <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-purple-400" /> Writing...
+                  <Badge variant="outline" className="text-[10px] font-mono border-[#C0A06B]/14">
+                    <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin text-[#C0A06B]/70" /> Writing...
                   </Badge>
                   {canEdit && (
                     <Button
@@ -785,7 +787,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
               ) : canEdit ? (
                 <Button
                   size="sm" variant="outline"
-                  className="h-7 text-[10px] font-mono border-border/30 hover:border-purple-500/30 hover:text-purple-300"
+                  className="h-7 text-[10px] font-mono border-border/30 hover:border-[#C0A06B]/22 hover:text-[#EFE5D9]"
                   onClick={(e) => { e.stopPropagation(); onGenerate(chapter.id); }}
                   disabled={isGenerating}
                   data-testid={`button-generate-chapter-${chapter.id}`}
@@ -805,7 +807,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           </div>
           <div className="flex items-center gap-2 mt-1">
             {chapter.blueprint && (
-              <p className="text-[10px] text-muted-foreground/50 line-clamp-2 font-mono flex-1"><span className="text-purple-400/60 uppercase tracking-wider mr-1">Outline</span>{chapter.blueprint}</p>
+              <p className="line-clamp-2 flex-1 text-[10px] leading-5 text-[#BCAF9F]/45"><span className="mr-1 font-mono text-[8px] uppercase tracking-[.15em] text-[#C0A06B]/55">Blueprint</span>{chapter.blueprint}</p>
             )}
             {lastEditedLabel && (
               <span className="text-[8px] font-mono text-amber-500/40 shrink-0">edited {lastEditedLabel}</span>
@@ -814,119 +816,122 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
         </div>
       </div>
       {expanded && isEditing && (
-        <div className="px-4 pb-4 border-t border-amber-500/15">
-          <div className="flex items-center justify-between mt-3 mb-2">
-            <span className="text-[9px] font-mono text-amber-400/60 uppercase tracking-wider">Editing Chapter {chapter.chapterNumber}</span>
+        <div className="border-t border-[#C0A06B]/10 bg-[#0B090C]/22 p-3 md:p-5" data-testid={`manuscript-editor-${chapter.id}`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="lexora-kicker">Manuscript Workspace</p>
+              <p className="lexora-display mt-1 text-xl font-semibold text-[#EFE5D9]">Chapter {chapter.chapterNumber}: {chapter.title}</p>
+            </div>
             <div className="flex items-center gap-1.5">
               <Button
-                size="sm" variant="outline"
-                className="h-6 text-[9px] font-mono border-border/30 text-muted-foreground hover:text-foreground px-2"
+                size="sm" variant="ghost"
+                className="h-8 rounded-full px-3 text-[10px] text-[#BCAF9F]/55 hover:bg-white/[.03] hover:text-[#EFE5D9]"
                 onClick={cancelEdit}
                 data-testid={`button-cancel-edit-${chapter.id}`}
               >
-                <X className="h-2.5 w-2.5 mr-0.5" /> Cancel
+                <X className="mr-1 h-3 w-3" /> Cancel
               </Button>
               <Button
                 size="sm"
-                className="h-6 text-[9px] font-mono bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 px-2"
+                className="h-8 rounded-full border border-[#C0A06B]/20 bg-[#7E3E51] px-4 text-[10px] text-[#FFF9F2] hover:bg-[#915065]"
                 onClick={saveEdit}
                 disabled={isSavingEdit}
                 data-testid={`button-save-edit-${chapter.id}`}
               >
-                {isSavingEdit ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Save className="h-2.5 w-2.5 mr-0.5" />}
-                Save
+                {isSavingEdit ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
+                Save chapter
               </Button>
             </div>
           </div>
-          <Textarea
-            ref={editTextareaRef}
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            readOnly={cowriteBusy !== null || suggestion !== null}
-            className={cn(
-              "min-h-[300px] text-[12px] bg-card/50 border-amber-500/15 font-mono resize-y focus:border-amber-500/30 leading-relaxed",
-              (cowriteBusy !== null || suggestion !== null) && "opacity-80 cursor-not-allowed",
-            )}
-            data-testid={`textarea-edit-chapter-${chapter.id}`}
-          />
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-[8px] font-mono text-muted-foreground/30">
-              {editContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
-            </p>
-          </div>
-          <div className="mt-2 rounded-md border border-violet-500/20 bg-violet-500/5 p-2.5">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Sparkles className="h-3 w-3 text-violet-400" />
-              <span className="text-[9px] font-mono text-violet-300/80 uppercase tracking-wider">AI Co-Writer</span>
-            </div>
-            <input
-              value={cowriteInstruction}
-              onChange={(e) => setCowriteInstruction(e.target.value)}
-              placeholder="Optional direction (e.g. raise the tension, add sensory detail)…"
-              className="w-full mb-2 rounded bg-card/50 border border-violet-500/15 px-2 py-1 text-[10px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-violet-500/40"
-              data-testid={`input-cowrite-instruction-${chapter.id}`}
-            />
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm" variant="outline"
-                className="h-6 text-[9px] font-mono border-violet-500/25 text-violet-300 hover:bg-violet-500/15 px-2"
-                disabled={cowriteBusy !== null}
-                onClick={() => runCowrite("continue")}
-                data-testid={`button-cowrite-continue-${chapter.id}`}
-              >
-                {cowriteBusy === "continue" ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <ArrowRight className="h-2.5 w-2.5 mr-0.5" />}
-                Continue from cursor
-              </Button>
-              <Button
-                size="sm" variant="outline"
-                className="h-6 text-[9px] font-mono border-violet-500/25 text-violet-300 hover:bg-violet-500/15 px-2"
-                disabled={cowriteBusy !== null}
-                onClick={() => runCowrite("rewrite")}
-                data-testid={`button-cowrite-rewrite-${chapter.id}`}
-              >
-                {cowriteBusy === "rewrite" ? <Loader2 className="h-2.5 w-2.5 mr-0.5 animate-spin" /> : <Wand2 className="h-2.5 w-2.5 mr-0.5" />}
-                Rewrite selection
-              </Button>
-              <span className="text-[8px] font-mono text-muted-foreground/30 ml-auto">
-                {cowriteBusy ? "thinking…" : "place cursor or select text"}
-              </span>
-            </div>
-            {suggestion && (
-              <div className="mt-2 rounded border border-violet-500/30 bg-card/60 p-2" data-testid={`panel-cowrite-suggestion-${chapter.id}`}>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <TextCursorInput className="h-3 w-3 text-violet-400" />
-                  <span className="text-[8px] font-mono text-violet-300/70 uppercase tracking-wider">
-                    {suggestion.mode === "continue" ? "Suggested continuation" : "Suggested rewrite"}
-                  </span>
-                </div>
-                <p className="text-[11px] font-mono text-foreground/90 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{suggestion.text}</p>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <Button
-                    size="sm"
-                    className="h-6 text-[9px] font-mono bg-violet-500/20 text-violet-200 hover:bg-violet-500/30 border border-violet-500/30 px-2"
-                    onClick={acceptSuggestion}
-                    data-testid={`button-cowrite-accept-${chapter.id}`}
-                  >
-                    <Check className="h-2.5 w-2.5 mr-0.5" /> Accept
-                  </Button>
-                  <Button
-                    size="sm" variant="outline"
-                    className="h-6 text-[9px] font-mono border-border/30 text-muted-foreground hover:text-foreground px-2"
-                    onClick={() => setSuggestion(null)}
-                    data-testid={`button-cowrite-reject-${chapter.id}`}
-                  >
-                    <X className="h-2.5 w-2.5 mr-0.5" /> Reject
-                  </Button>
-                </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="lexora-manuscript-canvas overflow-hidden rounded-[20px] p-1">
+              <Textarea
+                ref={editTextareaRef}
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                readOnly={cowriteBusy !== null || suggestion !== null}
+                className={cn(
+                  "min-h-[520px] resize-y border-0 bg-transparent px-5 py-6 font-serif text-[16px] leading-[1.85] shadow-none focus-visible:ring-0 md:px-8 md:py-8 md:text-[17px]",
+                  (cowriteBusy !== null || suggestion !== null) && "cursor-not-allowed opacity-75",
+                )}
+                data-testid={`textarea-edit-chapter-${chapter.id}`}
+              />
+              <div className="flex items-center justify-between border-t border-[#7E3E51]/10 px-5 py-2.5 font-mono text-[8px] uppercase tracking-[.12em] text-[#4A373E]/45 md:px-8">
+                <span>{editContent.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
+                <span>Chapter {chapter.chapterNumber}</span>
               </div>
-            )}
+            </div>
+
+            <aside className="lexora-editorial-surface self-start rounded-[20px] border-[#C0A06B]/10 p-4 xl:sticky xl:top-4" data-testid={`story-intelligence-${chapter.id}`}>
+              <div className="mb-4">
+                <p className="lexora-kicker">Story Intelligence</p>
+                <h4 className="lexora-display mt-1 text-lg font-semibold text-[#EFE5D9]">Shape the scene</h4>
+                <p className="mt-1 text-[11px] leading-5 text-[#BCAF9F]/45">Work from the cursor or a selected passage. Suggestions stay review-first until you accept them.</p>
+              </div>
+
+              <label className="font-mono text-[8px] uppercase tracking-[.14em] text-[#BCAF9F]/35" htmlFor={`cowrite-${chapter.id}`}>Direction</label>
+              <input
+                id={`cowrite-${chapter.id}`}
+                value={cowriteInstruction}
+                onChange={(e) => setCowriteInstruction(e.target.value)}
+                placeholder="Raise tension, add sensory detail…"
+                className="mt-1.5 w-full rounded-xl border border-[#C0A06B]/10 bg-white/[.025] px-3 py-2.5 text-[11px] text-[#EFE5D9] outline-none placeholder:text-[#BCAF9F]/25 focus:border-[#C0A06B]/24"
+                data-testid={`input-cowrite-instruction-${chapter.id}`}
+              />
+
+              <div className="mt-3 grid gap-2">
+                <Button
+                  size="sm" variant="outline"
+                  className="h-9 justify-start rounded-xl border-[#C0A06B]/12 bg-white/[.02] px-3 text-[10px] text-[#BCAF9F]/65 hover:bg-white/[.035] hover:text-[#EFE5D9]"
+                  disabled={cowriteBusy !== null}
+                  onClick={() => runCowrite("continue")}
+                  data-testid={`button-cowrite-continue-${chapter.id}`}
+                >
+                  {cowriteBusy === "continue" ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ArrowRight className="mr-2 h-3 w-3 text-[#C0A06B]/70" />}
+                  <span><strong className="font-semibold text-[#EFE5D9]/80">Scribe</strong> — Continue scene</span>
+                </Button>
+                <Button
+                  size="sm" variant="outline"
+                  className="h-9 justify-start rounded-xl border-[#C0A06B]/12 bg-white/[.02] px-3 text-[10px] text-[#BCAF9F]/65 hover:bg-white/[.035] hover:text-[#EFE5D9]"
+                  disabled={cowriteBusy !== null}
+                  onClick={() => runCowrite("rewrite")}
+                  data-testid={`button-cowrite-rewrite-${chapter.id}`}
+                >
+                  {cowriteBusy === "rewrite" ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3 text-[#C0A06B]/70" />}
+                  <span><strong className="font-semibold text-[#EFE5D9]/80">Redactor</strong> — Rewrite selection</span>
+                </Button>
+              </div>
+
+              <p className="mt-2 font-mono text-[8px] leading-4 text-[#BCAF9F]/28">{cowriteBusy ? "Thinking…" : "Place the cursor to continue, or select text to rewrite."}</p>
+
+              {suggestion && (
+                <div className="mt-4 rounded-xl border border-[#C0A06B]/14 bg-[#C0A06B]/[.035] p-3" data-testid={`panel-cowrite-suggestion-${chapter.id}`}>
+                  <div className="mb-2 flex items-center gap-1.5">
+                    <TextCursorInput className="h-3 w-3 text-[#C0A06B]/70" />
+                    <span className="font-mono text-[8px] uppercase tracking-[.12em] text-[#C0A06B]/60">
+                      {suggestion.mode === "continue" ? "Suggested continuation" : "Suggested rewrite"}
+                    </span>
+                  </div>
+                  <p className="max-h-64 overflow-y-auto whitespace-pre-wrap font-serif text-[13px] leading-6 text-[#EFE5D9]/78">{suggestion.text}</p>
+                  <div className="mt-3 flex items-center gap-1.5">
+                    <Button size="sm" className="h-7 rounded-full bg-[#7E3E51] px-3 text-[9px] text-[#FFF9F2] hover:bg-[#915065]" onClick={acceptSuggestion} data-testid={`button-cowrite-accept-${chapter.id}`}>
+                      <Check className="mr-1 h-2.5 w-2.5" /> Accept
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 rounded-full px-3 text-[9px] text-[#BCAF9F]/50 hover:text-[#EFE5D9]" onClick={() => setSuggestion(null)} data-testid={`button-cowrite-reject-${chapter.id}`}>
+                      <X className="mr-1 h-2.5 w-2.5" /> Reject
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </aside>
           </div>
         </div>
       )}
       {expanded && !isEditing && isRevisingThis && (
-        <div className="px-4 pb-4 border-t border-purple-500/15">
+        <div className="px-4 pb-4 border-t border-[#C0A06B]/12">
           <div className="flex items-center justify-between mt-3 mb-2">
-            <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-wider flex items-center gap-1">
+            <span className="text-[9px] font-mono text-[#C0A06B]/70/60 uppercase tracking-wider flex items-center gap-1">
               <Wand2 className="h-2.5 w-2.5" /> Revise Chapter {chapter.chapterNumber} with AI
             </span>
             <div className="flex items-center gap-1.5">
@@ -941,7 +946,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
               </Button>
               <Button
                 size="sm"
-                className="h-6 text-[9px] font-mono bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 px-2"
+                className="h-6 text-[9px] font-mono bg-[#7E3E51]/18 text-[#EFE5D9]/75 hover:bg-[#7E3E51]/28 border border-[#C0A06B]/22 px-2"
                 onClick={submitRevise}
                 disabled={isRevising}
                 data-testid={`button-submit-revise-${chapter.id}`}
@@ -956,7 +961,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
             onChange={(e) => setReviseInstruction(e.target.value)}
             disabled={isRevising}
             placeholder="Optional instruction — e.g. 'make the opening more dramatic', 'rename the mentor to Elias', 'tighten the middle section'. Leave blank for a general polish."
-            className="min-h-[80px] text-[12px] bg-card/50 border-purple-500/15 font-mono resize-y focus:border-purple-500/30 leading-relaxed"
+            className="min-h-[80px] text-[12px] bg-card/50 border-[#C0A06B]/12 font-mono resize-y focus:border-[#C0A06B]/22 leading-relaxed"
             data-testid={`textarea-revise-chapter-${chapter.id}`}
           />
           <p className="text-[8px] font-mono text-muted-foreground/30 mt-1">
@@ -986,21 +991,21 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
         />
       )}
       {expanded && !isEditing && !isRevisingThis && !showCollab && !showEditorial && (chapter.blueprint || chapter.content) && (
-        <div className="px-4 pb-4 border-t border-border/15 space-y-3">
+        <div className="space-y-4 border-t border-[#C0A06B]/8 px-4 pb-5 md:px-5">
           {chapter.blueprint && (
-            <div className="mt-3 rounded-lg border border-purple-500/20 bg-purple-500/[0.05] p-3" data-testid={`outline-blueprint-${chapter.id}`}>
+            <div className="mt-4 rounded-[16px] border border-[#C0A06B]/10 bg-[#C0A06B]/[.025] p-4" data-testid={`outline-blueprint-${chapter.id}`}>
               <div className="flex items-center gap-1.5 mb-2">
-                <List className="h-3 w-3 text-purple-400" />
-                <span className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-purple-300/80">Outline Blueprint</span>
+                <List className="h-3 w-3 text-[#C0A06B]/65" />
+                <span className="font-mono text-[8px] font-bold uppercase tracking-[0.16em] text-[#C0A06B]/60">Chapter Blueprint</span>
               </div>
               <p className="text-[11px] leading-relaxed text-muted-foreground/75 whitespace-pre-wrap">{chapter.blueprint}</p>
             </div>
           )}
           {chapter.content ? (
             <div>
-              <p className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-muted-foreground/40 mb-2">Manuscript Draft</p>
-              <ScrollArea className="h-52">
-                <MarkdownRendererDark content={chapter.content} />
+              <p className="lexora-kicker mb-2">Manuscript Draft</p>
+              <ScrollArea className="h-[420px] rounded-[18px] border border-[#C0A06B]/8 bg-[#0D0A0E]/42 px-4 py-2 md:px-6">
+                <div className="lexora-manuscript-reading py-4"><MarkdownRendererDark content={chapter.content} /></div>
               </ScrollArea>
             </div>
           ) : (
@@ -1010,7 +1015,7 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
           )}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -2806,97 +2811,85 @@ export default function ProjectDetail() {
   const anyRunning = trendMutation.isPending || outlineMutation.isPending || outlineIsRunning || chapterMutation.isPending || marketingMutation.isPending || coverMutation.isPending;
 
   const pipelineActions = [
-    { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp, glow: "neon-glow-cool" },
-    { label: outlineIsRunning ? "Outlining…" : "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (outlineIsRunning) return; if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending || outlineIsRunning, icon: List, glow: "neon-glow" },
-    { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image, glow: "neon-glow-warm" },
-    { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool, glow: "neon-glow-fire" },
-    { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone, glow: "neon-glow-nature" },
+    { label: "Trend Analysis", step: "1", done: !!trendReport, action: () => trendMutation.mutate(), loading: trendMutation.isPending, icon: TrendingUp },
+    { label: outlineIsRunning ? "Outlining…" : "Gen Outline", step: "2", done: chapters.length > 0, action: () => { if (outlineIsRunning) return; if (chapters.length > 0) { setShowOutlineConfirm(true); } else { outlineMutation.mutate(); } }, loading: outlineMutation.isPending || outlineIsRunning, icon: List },
+    { label: "AI Cover", step: "3", done: !!project.coverImageUrl, action: () => coverMutation.mutate(), loading: coverMutation.isPending, icon: Image },
+    { label: "Write Chs", step: "4", done: completedChapters.length === chapters.length && chapters.length > 0, action: () => { const p = chapters.filter(c => c.status === "pending"); if (p.length > 0) { chapterMutation.mutate(p[0].id); } else if (chapters.length > 0) { chapterMutation.mutate(chapters[0].id); } }, loading: chapterMutation.isPending, icon: PenTool },
+    { label: "Marketing", step: "5", done: !!marketing, action: () => marketingMutation.mutate(), loading: marketingMutation.isPending, icon: Megaphone },
   ];
 
   return (
-    <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto p-4 sm:p-5 md:p-6 xl:p-8 space-y-5 md:space-y-6">
+    <div className="lexora-page h-full min-w-0 overflow-x-hidden overflow-y-auto space-y-6 p-4 sm:p-5 md:p-7 xl:p-9">
       <Helmet>
         <title>{project.title} — Lexora</title>
         <meta name="description" content={`${project.title} by ${project.authorName || "Unknown Author"} — ${statusLabel(project.status)} in ${VERTICAL_LABELS[project.vertical] || project.vertical}.`} />
       </Helmet>
-      <div className="flex items-center gap-2 flex-wrap text-sm">
+      <div className="mx-auto flex w-full max-w-[1540px] items-center gap-2 text-sm">
         <Link href="/projects">
-          <Button variant="ghost" size="sm" className="text-muted-foreground/50 hover:text-purple-400 font-mono text-[11px]" data-testid="button-back-projects">
-            <ArrowLeft className="h-4 w-4 mr-1" /> PROJECTS
+          <Button variant="ghost" size="sm" className="h-8 px-2 font-mono text-[9px] uppercase tracking-[.14em] text-[#BCAF9F]/40 hover:bg-white/[.025] hover:text-[#EFE5D9]" data-testid="button-back-projects">
+            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Projects
           </Button>
         </Link>
-        <span className="text-muted-foreground/20">/</span>
-        <span className="font-mono text-[11px] truncate max-w-xs text-muted-foreground/50">{project.title}</span>
+        <span className="text-[#BCAF9F]/15">/</span>
+        <span className="lexora-kicker truncate">Project Workspace</span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-border/20 bg-card/30 overflow-hidden relative">
-            <div className="absolute top-0 left-0 right-0 h-[1px] neon-glow opacity-40" />
-            <CardContent className="pt-6 pb-5">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl glow-border bg-card/50 text-xl">
-                  {VERTICAL_ICONS[project.vertical] || "\u{1F4D6}"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h1 className="text-xl font-bold tracking-tighter leading-tight">{project.title}</h1>
-                  {project.authorName && (
-                    <p className="text-[11px] text-muted-foreground/50 mt-1 flex items-center gap-1.5 font-mono">
-                      <User className="h-3 w-3 text-purple-400/50" /> {project.authorName}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono text-purple-400/60 uppercase tracking-wider">{VERTICAL_LABELS[project.vertical] || project.vertical}</span>
-                    <span className="text-muted-foreground/15">\u2022</span>
-                    <span className="text-[10px] font-mono text-muted-foreground/40 capitalize">{project.targetLanguage}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {anyRunning && <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />}
-                  <Button size="icon" variant="ghost" onClick={() => { invalidate(); refetch(); }} data-testid="button-refresh" className="h-8 w-8 text-muted-foreground/40 hover:text-purple-400" aria-label="Refresh project data">
-                    <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                  </Button>
-                </div>
+          <ProjectHero
+            title={project.title}
+            author={project.authorName}
+            coverUrl={project.coverImageUrl ? `/api/projects/${projectId}/cover-image` : null}
+            genre={VERTICAL_LABELS[project.vertical] || project.vertical}
+            language={LANGUAGE_LABELS[project.targetLanguage] || project.targetLanguage}
+            progress={pct}
+            status={
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-2 rounded-full border border-[#C0A06B]/12 bg-white/[.02] px-3 py-1.5 font-mono text-[9px] uppercase tracking-[.12em] text-[#BCAF9F]/60">
+                  <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
+                  {statusLabel(project.status)}
+                </span>
+                {project.greenlightScore ? <span className="font-mono text-[9px] uppercase tracking-[.12em] text-[#C0A06B]/60">Greenlight {formatScore(project.greenlightScore)}</span> : null}
+                {anyRunning ? <span className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[.12em] text-[#C0A06B]/55"><Loader2 className="h-3 w-3 animate-spin" /> Working</span> : null}
               </div>
-
-              <div className="mt-5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground/60">
-                    <span className={`h-1.5 w-1.5 rounded-full ${STATUS_GLOW[project.status] || "bg-zinc-500"}`} />
-                    {statusLabel(project.status)}
-                    {project.greenlightScore && (
-                      <Badge variant="outline" className="text-[10px] font-mono ml-2 border-border/30">GL {formatScore(project.greenlightScore)}</Badge>
-                    )}
-                  </span>
-                  <span className="text-[10px] font-mono text-muted-foreground/40">{pct}%</span>
-                </div>
-                <Progress value={pct} className="h-[3px]" />
-              </div>
-
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-5">
+            }
+            meta={
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
                 {[
-                  { label: "WORDS", value: project.wordCount.toLocaleString() },
-                  { label: "CH", value: `${completedChapters.length}/${project.chapterCount || chapters.length}` },
-                  { label: "QUAL", value: project.qualityScore ? formatScore(project.qualityScore) : "\u2014", color: scoreColor(project.qualityScore) },
-                  { label: "GL", value: project.greenlightScore ? formatScore(project.greenlightScore) : "\u2014" },
-                  { label: "COST", value: project.estimatedCost > 0 ? `$${project.estimatedCost.toFixed(3)}` : "$0" },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-white/[0.02] border border-border/15 rounded-lg py-2.5 text-center">
-                    <div className={`text-[12px] font-bold font-mono ${color || ""}`}>{value}</div>
-                    <div className="text-[8px] font-mono text-muted-foreground/30 mt-0.5 tracking-widest">{label}</div>
+                  { label: "Words", value: project.wordCount.toLocaleString() },
+                  { label: "Chapters", value: `${completedChapters.length}/${project.chapterCount || chapters.length}` },
+                  { label: "Quality", value: project.qualityScore ? formatScore(project.qualityScore) : "—" },
+                  { label: "Greenlight", value: project.greenlightScore ? formatScore(project.greenlightScore) : "—" },
+                  { label: "Spend", value: project.estimatedCost > 0 ? `$${project.estimatedCost.toFixed(3)}` : "$0" },
+                ].map((item) => (
+                  <div key={item.label} className="min-w-0">
+                    <p className="font-mono text-[8px] uppercase tracking-[.16em] text-[#BCAF9F]/28">{item.label}</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-[#EFE5D9]/85">{item.value}</p>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
+            }
+            actions={
+              <>
+                {completedChapters.length > 0 ? (
+                  <Button type="button" className="h-9 rounded-full bg-[#EFE5D9] px-4 text-[#0B090C] hover:bg-white" onClick={() => setShowReader(true)} data-testid="button-open-reader-hero">
+                    <Eye className="mr-1.5 h-3.5 w-3.5" /> Read
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" className="h-9 rounded-full border-[#C0A06B]/15 bg-transparent px-4 text-[#BCAF9F]/65 hover:bg-white/[.03] hover:text-[#EFE5D9]" onClick={() => { invalidate(); refetch(); }} data-testid="button-refresh">
+                  <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} /> Refresh
+                </Button>
+              </>
+            }
+          />
 
-          <Card className="border-purple-500/20 bg-gradient-to-r from-purple-500/[0.06] via-card/35 to-cyan-500/[0.04]" data-testid="project-autopilot-control">
+          <Card className="lexora-editorial-surface rounded-[24px] border-[#C0A06B]/10 bg-transparent" data-testid="project-autopilot-control">
             <CardContent className="py-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-purple-400" />
-                    <span className="text-[11px] font-mono font-bold uppercase tracking-[0.15em] text-purple-200">Project Autopilot</span>
+                    <Zap className="h-4 w-4 text-[#C0A06B]/70" />
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-[#EFE5D9]/78">Project Autopilot</span>
                     {projectAutopilot?.active && (
                       <Badge variant="outline" className="text-[8px] font-mono border-emerald-500/25 text-emerald-300">RUNNING</Badge>
                     )}
@@ -2930,7 +2923,7 @@ export default function ProjectDetail() {
                   ) : (
                     <Button
                       type="button"
-                      className="h-9 text-[10px] font-mono neon-glow text-white"
+                      className="h-9 rounded-full bg-[#7E3E51] px-4 text-[10px] font-mono text-[#FFF9F2] hover:bg-[#915065]"
                       onClick={() => startProjectAutopilot.mutate()}
                       disabled={startProjectAutopilot.isPending || project.status === "complete" || role === "viewer"}
                       data-testid="button-start-project-autopilot"
@@ -2945,26 +2938,26 @@ export default function ProjectDetail() {
           </Card>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {pipelineActions.map(({ label, step, done, action, loading, icon: Icon, glow }) => (
+            {pipelineActions.map(({ label, step, done, action, loading, icon: Icon }) => (
               <button
                 key={label}
                 onClick={action}
                 disabled={loading || anyRunning}
                 data-testid={`pipeline-step-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                className={`flex flex-col items-center gap-2 p-3.5 rounded-xl border text-center text-[10px] font-mono font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${done
-                  ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:border-amber-500/20 hover:bg-amber-500/[0.03] hover:text-amber-300"
-                  : "border-border/20 bg-card/20 hover:border-purple-500/20 hover:bg-purple-500/[0.03] text-muted-foreground/60"}`}
+                className={`flex flex-col items-center gap-2 rounded-[18px] border p-3.5 text-center text-[9px] font-mono font-bold uppercase tracking-[.08em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${done
+                  ? "border-emerald-500/14 bg-emerald-500/[.035] text-emerald-300/75 hover:border-[#C0A06B]/16"
+                  : "border-[#C0A06B]/9 bg-white/[.018] text-[#BCAF9F]/52 hover:border-[#C0A06B]/18 hover:bg-white/[.028]"}`}
               >
                 {loading ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
+                  <Loader2 className="h-5 w-5 animate-spin text-[#C0A06B]/70" />
                 ) : done ? (
                   <div className="relative">
                     <CheckCircle className="h-5 w-5 text-emerald-400 drop-shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
                     <RefreshCw className="absolute -bottom-1 -right-1.5 h-2.5 w-2.5 text-muted-foreground/40" />
                   </div>
                 ) : (
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${glow} shadow-lg`}>
-                    <Icon className="h-3.5 w-3.5 text-white" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#C0A06B]/10 bg-[#7E3E51]/10">
+                    <Icon className="h-3.5 w-3.5 text-[#C0A06B]/70" />
                   </div>
                 )}
                 <span className="leading-tight tracking-wider uppercase">{done ? `↻ ${label}` : `${step}. ${label}`}</span>
@@ -2989,7 +2982,7 @@ export default function ProjectDetail() {
                     </div>
                   </div>
                   <Button
-                    className="neon-glow-nature text-white border-0 font-mono text-[11px] h-9 px-5"
+                    className="h-9 rounded-full border border-emerald-500/18 bg-emerald-500/10 px-5 font-mono text-[10px] text-emerald-200 hover:bg-emerald-500/16"
                     onClick={() => markCompleteMutation.mutate()}
                     disabled={markCompleteMutation.isPending || completedChapters.length < chapters.length}
                     data-testid="button-mark-complete"
@@ -3022,8 +3015,8 @@ export default function ProjectDetail() {
                     <Button
                       variant="outline"
                       className={project.publishedToStore
-                        ? "border-purple-500/30 text-purple-300 font-mono text-[11px] h-9 hover:border-purple-500/50 hover:bg-purple-500/10"
-                        : "border-purple-500/20 text-purple-400 font-mono text-[11px] h-9 hover:border-purple-500/40 hover:bg-purple-500/5"
+                        ? "h-9 rounded-full border-[#C0A06B]/24 bg-[#C0A06B]/[.05] font-mono text-[10px] text-[#EFE5D9] hover:border-[#C0A06B]/34 hover:bg-[#C0A06B]/[.08]"
+                        : "h-9 rounded-full border-[#C0A06B]/14 bg-transparent font-mono text-[10px] text-[#C0A06B]/70 hover:border-[#C0A06B]/26 hover:bg-white/[.025]"
                       }
                       onClick={() => toggleStorefrontMutation.mutate()}
                       disabled={toggleStorefrontMutation.isPending}
@@ -3076,18 +3069,18 @@ export default function ProjectDetail() {
           )}
 
           {outlineIsRunning && (
-            <Card className="border-purple-500/25 bg-purple-500/[0.05] glow-border" data-testid="outline-generation-status">
+            <Card className="lexora-editorial-surface rounded-[22px] border-[#C0A06B]/14 bg-[#C0A06B]/[.025]" data-testid="outline-generation-status">
               <CardContent className="py-4 flex items-start gap-3">
-                <div className="h-9 w-9 rounded-lg border border-purple-500/25 bg-purple-500/10 flex items-center justify-center shrink-0">
-                  <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#C0A06B]/16 bg-[#7E3E51]/10">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#C0A06B]/70" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold tracking-tight text-purple-200">Building your book architecture</p>
+                  <p className="lexora-display text-base font-semibold text-[#EFE5D9]">Building your book architecture</p>
                   <p className="text-[10px] font-mono text-muted-foreground/55 mt-1">
                     Lexora is generating Book DNA and the complete chapter-by-chapter blueprint in the background. You can safely leave this project and come back.
                   </p>
                   {latestOutlineRun?.status === "running" && (
-                    <p className="text-[9px] font-mono text-purple-400/55 mt-2">Book Outline + DNA · running</p>
+                    <p className="mt-2 font-mono text-[9px] uppercase tracking-[.12em] text-[#C0A06B]/50">Book Outline + DNA · running</p>
                   )}
                 </div>
               </CardContent>
@@ -3095,46 +3088,41 @@ export default function ProjectDetail() {
           )}
 
           <Tabs defaultValue="chapters">
-            <div
-              className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]"
-              data-testid="project-workspace-tab-scroll"
-            >
-              <TabsList className="h-10 min-w-max w-max bg-card/30 border border-border/20 flex-nowrap">
-                <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-purple-300">
-                  <BookOpen className="h-3 w-3" /> Outline & Chapters ({chapters.length})
+            <WorkspaceTabs>
+                <TabsTrigger value="chapters" data-testid="tab-chapters" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
+                  <BookOpen className="h-3 w-3" /> Manuscript ({chapters.length})
                 </TabsTrigger>
-                <TabsTrigger value="canon" data-testid="tab-canon" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <TabsTrigger value="canon" data-testid="tab-canon" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <ShieldCheck className="h-3 w-3" /> Canon
                 </TabsTrigger>
-                <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-cyan-300">
+                <TabsTrigger value="dna" data-testid="tab-dna" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Zap className="h-3 w-3" /> DNA
                 </TabsTrigger>
-                <TabsTrigger value="marketing" data-testid="tab-marketing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-pink-300">
+                <TabsTrigger value="marketing" data-testid="tab-marketing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Megaphone className="h-3 w-3" /> Marketing
                 </TabsTrigger>
-                <TabsTrigger value="continuity" data-testid="tab-continuity" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <TabsTrigger value="continuity" data-testid="tab-continuity" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Network className="h-3 w-3" /> Continuity
                 </TabsTrigger>
-                <TabsTrigger value="market" data-testid="tab-market" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-orange-300">
+                <TabsTrigger value="market" data-testid="tab-market" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Crosshair className="h-3 w-3" /> Market
                 </TabsTrigger>
-                <TabsTrigger value="pacing" data-testid="tab-pacing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-violet-300">
+                <TabsTrigger value="pacing" data-testid="tab-pacing" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Activity className="h-3 w-3" /> Pacing
                 </TabsTrigger>
-                <TabsTrigger value="business" data-testid="tab-business" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-emerald-300">
+                <TabsTrigger value="business" data-testid="tab-business" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <DollarSign className="h-3 w-3" /> Business
                 </TabsTrigger>
-                <TabsTrigger value="studio" data-testid="tab-studio" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-fuchsia-300">
+                <TabsTrigger value="studio" data-testid="tab-studio" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Headphones className="h-3 w-3" /> Studio
                 </TabsTrigger>
-                <TabsTrigger value="languages" data-testid="tab-languages" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-blue-300">
+                <TabsTrigger value="languages" data-testid="tab-languages" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <Globe className="h-3 w-3" /> Languages
                 </TabsTrigger>
-                <TabsTrigger value="logs" data-testid="tab-logs" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:text-amber-300">
+                <TabsTrigger value="logs" data-testid="tab-logs" className="shrink-0 whitespace-nowrap text-[11px] gap-1.5 font-mono data-[state=active]:bg-[#7E3E51]/14 data-[state=active]:text-[#EFE5D9]">
                   <FileText className="h-3 w-3" /> Logs
                 </TabsTrigger>
-              </TabsList>
-            </div>
+            </WorkspaceTabs>
 
             <TabsContent value="canon" className="mt-4">
               <CanonWorkspace

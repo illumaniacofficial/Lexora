@@ -1,7 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,36 +8,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  Library as LibraryIcon, Search, ArrowRight, Crown, BookOpen, Star, Filter,
-  ArrowUpDown, Hexagon, AlertCircle, Trophy, Medal, Share2, Copy, Trash2, Link as LinkIcon, Eye, Plus, Loader2, Music,
-  Download, FileText, FileCode, FileDown, Globe,
+  Search, BookOpen, Filter, ArrowUpDown, AlertCircle, Share2, Copy, Trash2, Link as LinkIcon, Eye, Plus, Loader2,
+  Download, FileText, FileCode, FileDown, Globe, LayoutGrid, Rows3, List,
 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
-import { VERTICAL_LABELS, VERTICAL_ICONS, formatScore, scoreColor } from "@/lib/utils";
+import { VERTICAL_LABELS, formatScore } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { exportBookPdf, downloadBookFile } from "@/lib/export-book";
 import { useToast } from "@/hooks/use-toast";
 import BookReader from "@/components/book-reader";
 import { useNarration } from "@/App";
 import type { Project, InviteToken, Chapter } from "@shared/schema";
+import { LexoraPageHeader } from "@/components/experience/lexora-page-header";
+import { EmptyCreativeState } from "@/components/experience/empty-creative-state";
+import { ProjectCoverCard } from "@/components/experience/project-cover-card";
+import { EditorialSection } from "@/components/experience/editorial-section";
 
 type LibraryBook = Omit<Project, "coverImageUrl"> & { hasCover: boolean; shortBlurb: string | null; completedChapters: number; chaptersWithAudio: number; editionLanguages?: string[] };
 
 type SortKey = "rank" | "title" | "words" | "quality" | "date";
-
-function getRankIcon(rank: number) {
-  if (rank === 1) return <Crown className="h-4 w-4 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]" />;
-  if (rank === 2) return <Trophy className="h-3.5 w-3.5 text-slate-300 drop-shadow-[0_0_4px_rgba(203,213,225,0.5)]" />;
-  if (rank === 3) return <Medal className="h-3.5 w-3.5 text-amber-600 drop-shadow-[0_0_4px_rgba(217,119,6,0.5)]" />;
-  return null;
-}
-
-function getRankBorder(rank: number) {
-  if (rank === 1) return "border-amber-500/30 hover:border-amber-400/40";
-  if (rank === 2) return "border-slate-400/20 hover:border-slate-300/30";
-  if (rank === 3) return "border-amber-700/20 hover:border-amber-600/30";
-  return "border-purple-500/15 hover:border-purple-400/25";
-}
+type LibraryView = "covers" | "editorial" | "compact";
 
 function ExportMenu({ book, variant }: { book: LibraryBook; variant: "card" | "row" }) {
   const { toast } = useToast();
@@ -117,6 +106,7 @@ export default function Library() {
   const [search, setSearch] = useState("");
   const [verticalFilter, setVerticalFilter] = useState("all");
   const [sortBy, setSortBy] = useState<SortKey>("rank");
+  const [view, setView] = useState<LibraryView>("covers");
   const [showInvites, setShowInvites] = useState(() => window.location.hash === "#invites");
   const [inviteLabel, setInviteLabel] = useState("");
   const [readerBook, setReaderBook] = useState<{ id: number; title: string; authorName: string; coverImageUrl?: string | null } | null>(null);
@@ -209,8 +199,6 @@ export default function Library() {
     return result;
   }, [ranked, search, verticalFilter, sortBy]);
 
-  const top5 = filtered.slice(0, 5);
-  const rest = filtered.slice(5);
   const verticals = [...new Set(books.map(b => b.vertical))];
 
   if (error) {
@@ -224,346 +212,223 @@ export default function Library() {
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-5 md:space-y-7 overflow-y-auto h-full aurora-bg-animated">
+    <div className="lexora-page">
       <Helmet>
         <title>Library — Lexora</title>
-        <meta name="description" content="Your completed book library — browse, search, and explore published manuscripts ranked by quality." />
+        <meta name="description" content="Your Lexora library of completed books, narrated editions, and published worlds." />
       </Helmet>
-      <div className="animate-fade-in-up">
-        <div className="flex items-center gap-2 mb-2">
-          <Hexagon className="h-3 w-3 text-emerald-500/50" />
-          <span className="text-[9px] font-mono font-bold text-emerald-400/60 tracking-[0.2em] uppercase">LIBRARY</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">Published <span className="shimmer-text">Library</span></h1>
-            <p className="text-muted-foreground/50 text-[11px] font-mono mt-1 hidden sm:block">Your completed books, ranked by quality</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowInvites(!showInvites)}
-            className="border-purple-500/20 text-purple-300 hover:bg-purple-500/10 hover:scale-105 transition-all duration-300 font-mono text-[11px] h-8"
-            data-testid="button-toggle-invites"
-          >
-            <Share2 className="h-3.5 w-3.5 mr-1.5" /> <span className="hidden sm:inline">{showInvites ? "Hide" : "Invites"}</span> {invites.length > 0 && `(${invites.length})`}
-          </Button>
-        </div>
-      </div>
 
-      {showInvites && (
-        <Card className="border-purple-500/15 bg-purple-500/[0.03] glass-card-premium animate-fade-in-up">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-1.5 mb-3">
-              <Share2 className="h-3 w-3 text-purple-400" />
-              <span className="text-[9px] font-mono text-purple-400/60 uppercase tracking-[0.2em]">Reader Invites</span>
+      <div className="mx-auto max-w-[1480px] space-y-8 px-4 py-6 md:px-8 md:py-9">
+        <LexoraPageHeader
+          kicker="Library"
+          title={<>Your Worlds <span className="text-[#BCAF9F]/45">live here.</span></>}
+          description="Browse finished books as covers, editorial editions, or a compact working catalog."
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowInvites(!showInvites)}
+              className="h-9 rounded-full border-[#C0A06B]/15 bg-transparent px-4 text-[#BCAF9F]/65 hover:bg-white/[.03] hover:text-[#EFE5D9]"
+              data-testid="button-toggle-invites"
+            >
+              <Share2 className="mr-1.5 h-3.5 w-3.5" /> Reader invites {invites.length > 0 ? `(${invites.length})` : ""}
+            </Button>
+          }
+        />
+
+        {showInvites ? (
+          <section className="lexora-editorial-surface rounded-[24px] p-5 md:p-6">
+            <div className="mb-4">
+              <p className="lexora-kicker">Reader access</p>
+              <h2 className="lexora-display mt-1 text-xl font-semibold text-[#EFE5D9]">Share your collection</h2>
+              <p className="mt-1 text-sm leading-6 text-[#BCAF9F]/50">Create private reader links for beta readers, collaborators, or launch groups.</p>
             </div>
-            <p className="text-[11px] text-muted-foreground/50 mb-4">Create invite links to share your book collection as a storefront. Readers can browse, read, and listen with AI narration.</p>
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 value={inviteLabel}
-                onChange={e => setInviteLabel(e.target.value)}
-                placeholder="Label (e.g., Beta Readers, Marketing Team)"
-                className="bg-white/[0.03] border-border/20 text-sm font-mono placeholder:text-muted-foreground/25 flex-1"
+                onChange={event => setInviteLabel(event.target.value)}
+                placeholder="Invite label"
+                className="h-10 flex-1 border-[#C0A06B]/10 bg-white/[.025]"
                 data-testid="input-invite-label"
               />
               <Button
                 onClick={() => createInviteMutation.mutate(inviteLabel)}
                 disabled={createInviteMutation.isPending}
-                className="neon-glow text-white border-0 font-mono text-[11px] h-9 px-4 hover:scale-105 transition-transform"
+                className="h-10 bg-[#7E3E51] text-[#FFF9F2] hover:bg-[#915065]"
                 data-testid="button-create-invite"
               >
-                {createInviteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
-                Create
+                {createInviteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
+                Create invite
               </Button>
             </div>
-            {invites.length > 0 && (
-              <div className="space-y-2">
-                {invites.map(inv => (
-                  <div key={inv.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/[0.02] border border-border/10 group hover:border-purple-500/15 transition-all duration-300" data-testid={`invite-${inv.id}`}>
-                    <LinkIcon className="h-3.5 w-3.5 text-purple-400/50 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[12px] font-medium truncate">{inv.label}</p>
-                      <p className="text-[9px] font-mono text-muted-foreground/30 truncate">{window.location.origin}/store/{inv.token}</p>
+            {invites.length > 0 ? (
+              <div className="mt-5 divide-y divide-[#C0A06B]/10 border-y border-[#C0A06B]/10">
+                {invites.map(invite => (
+                  <div key={invite.id} className="flex items-center gap-3 py-3" data-testid={`invite-${invite.id}`}>
+                    <LinkIcon className="h-3.5 w-3.5 shrink-0 text-[#C0A06B]/55" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] font-medium text-[#EFE5D9]">{invite.label}</p>
+                      <p className="truncate font-mono text-[9px] text-[#BCAF9F]/30">{window.location.origin}/store/{invite.token}</p>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[9px] font-mono text-muted-foreground/30 shrink-0">
-                      <Eye className="h-3 w-3" /> {inv.viewCount}
-                    </div>
-                    <Button
-                      size="icon" variant="ghost"
-                      onClick={() => copyInviteLink(inv.token)}
-                      className="h-7 w-7 text-muted-foreground/40 hover:text-purple-300"
-                      data-testid={`button-copy-invite-${inv.id}`} aria-label="Copy invite link"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="icon" variant="ghost"
-                      onClick={() => deleteInviteMutation.mutate(inv.id)}
-                      className="h-7 w-7 text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                      data-testid={`button-delete-invite-${inv.id}`} aria-label="Delete invite"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                    <span className="hidden items-center gap-1 font-mono text-[9px] text-[#BCAF9F]/30 sm:flex"><Eye className="h-3 w-3" />{invite.viewCount}</span>
+                    <Button size="icon" variant="ghost" onClick={() => copyInviteLink(invite.token)} className="h-8 w-8 text-[#BCAF9F]/40 hover:text-[#EFE5D9]" data-testid={`button-copy-invite-${invite.id}`} aria-label="Copy invite link"><Copy className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" onClick={() => deleteInviteMutation.mutate(invite.id)} className="h-8 w-8 text-[#BCAF9F]/30 hover:text-red-400" data-testid={`button-delete-invite-${invite.id}`} aria-label="Delete invite"><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            ) : null}
+          </section>
+        ) : null}
 
-      <div className="line-glow" />
+        <div className="lexora-divider" />
 
-      <div className="flex flex-col sm:flex-row gap-2 md:gap-3 animate-fade-in-up stagger-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
-          <Input
-            data-testid="input-library-search"
-            placeholder="Search books..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-10 h-9 md:h-10 bg-white/[0.03] border-border/20 text-[12px] md:text-sm font-mono placeholder:text-muted-foreground/25 focus-visible:ring-purple-500/30"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Select value={verticalFilter} onValueChange={setVerticalFilter}>
-            <SelectTrigger className="w-32 md:w-44 h-9 md:h-10 bg-white/[0.03] border-border/20 text-[11px] md:text-[12px] font-mono" data-testid="select-vertical-filter">
-              <Filter className="h-3.5 w-3.5 mr-1 md:mr-1.5 text-muted-foreground/40" />
-              <SelectValue placeholder="All Verticals" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Verticals</SelectItem>
-              {verticals.map(v => (
-                <SelectItem key={v} value={v}>
-                  {VERTICAL_ICONS[v] || ""} {VERTICAL_LABELS[v] || v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={sortBy} onValueChange={v => setSortBy(v as SortKey)}>
-            <SelectTrigger className="w-28 md:w-36 h-9 md:h-10 bg-white/[0.03] border-border/20 text-[11px] md:text-[12px] font-mono" data-testid="select-sort">
-              <ArrowUpDown className="h-3.5 w-3.5 mr-1 md:mr-1.5 text-muted-foreground/40" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="rank">By Rank</SelectItem>
-              <SelectItem value="title">By Title</SelectItem>
-              <SelectItem value="words">By Word Count</SelectItem>
-              <SelectItem value="quality">By Quality</SelectItem>
-              <SelectItem value="date">By Date</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-36 rounded-xl bg-muted/20" />)}
-        </div>
-      ) : books.length === 0 ? (
-        <Card className="border-border/20 bg-card/30 glass-card-premium">
-          <CardContent className="flex flex-col items-center justify-center py-20">
-            <div className="relative animate-float">
-              <div className="absolute inset-0 neon-glow opacity-20 blur-2xl rounded-full scale-150" />
-              <LibraryIcon className="h-12 w-12 text-emerald-500/30 relative" />
-            </div>
-            <p className="font-bold text-lg mt-5 tracking-tight">Library is empty</p>
-            <p className="text-[11px] text-muted-foreground/40 font-mono mt-1 text-center max-w-sm">Complete a book through the full pipeline to see it here</p>
-            <Link href="/projects/new">
-              <Button className="mt-5 neon-glow text-white border-0 font-mono text-[12px]" data-testid="button-start-project">
-                <BookOpen className="h-4 w-4 mr-2" /> START A PROJECT
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : filtered.length === 0 ? (
-        <Card className="border-border/20 bg-card/30 glass-card-premium">
-          <CardContent className="flex flex-col items-center justify-center py-14">
-            <Search className="h-10 w-10 text-muted-foreground/20 animate-float" />
-            <p className="font-bold mt-4 tracking-tight">No matches found</p>
-            <p className="text-[11px] text-muted-foreground/40 font-mono mt-1">Try adjusting your search or filters</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <div className="animate-fade-in-up stagger-3">
-            <h2 className="text-[9px] font-mono font-bold text-emerald-400/50 tracking-[0.2em] uppercase mb-3 flex items-center gap-2">
-              <Star className="h-3 w-3" /> FEATURED ({top5.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {top5.map((book, idx) => (
-                <Link key={book.id} href={`/projects/${book.id}`}>
-                  <Card
-                    className={`cursor-pointer bg-card/30 transition-all duration-300 group h-full overflow-hidden card-hover-lift animate-fade-in-up stagger-${Math.min(idx + 1, 6)} ${getRankBorder(book.rank)} ${book.rank <= 3 ? "glass-card-premium" : ""}`}
-                    data-testid={`library-featured-${book.id}`}
-                  >
-                    {book.hasCover && (
-                      <div className="relative w-full aspect-[2/3] max-h-56 overflow-hidden rounded-t-xl -mt-0 -mx-0">
-                        <img
-                          src={`/api/projects/${book.id}/cover-image`}
-                          alt={`Cover for ${book.title}`}
-                          loading="lazy"
-                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                          data-testid={`img-cover-${book.id}`}
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
-                        <div className="absolute top-2.5 left-2.5">
-                          <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono backdrop-blur-md ${
-                            book.rank === 1 ? "neon-glow-fire shadow-[0_0_12px_rgba(245,158,11,0.3)]" : book.rank <= 3 ? "neon-glow" : "bg-card/70 border border-border/20"
-                          }`}>
-                            {book.rank <= 3 ? getRankIcon(book.rank) : <span className="text-muted-foreground/50">#{book.rank}</span>}
-                          </div>
-                        </div>
-                        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
-                          {book.chaptersWithAudio > 0 && (
-                            <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/40 text-cyan-300 backdrop-blur-md bg-card/50">
-                              <Music className="h-2.5 w-2.5 mr-0.5" />{book.chaptersWithAudio} CH
-                            </Badge>
-                          )}
-                          {(book.editionLanguages?.length ?? 0) > 0 && (
-                            <Badge variant="outline" className="text-[9px] font-mono border-blue-500/40 text-blue-300 backdrop-blur-md bg-card/50" data-testid={`badge-editions-${book.id}`}>
-                              <Globe className="h-2.5 w-2.5 mr-0.5" />{book.editionLanguages!.length}
-                            </Badge>
-                          )}
-                          {book.publishedToStore && (
-                            <Badge variant="outline" className="text-[9px] font-mono border-purple-500/30 text-purple-300 backdrop-blur-md bg-card/50">
-                              STOREFRONT
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/30 text-emerald-400 backdrop-blur-md bg-card/50">
-                            COMPLETE
-                          </Badge>
-                        </div>
-                      </div>
-                    )}
-                    <CardContent className={`pb-5 ${book.hasCover ? "pt-3" : "pt-5"}`}>
-                      {!book.hasCover && (
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold font-mono ${
-                              book.rank === 1 ? "neon-glow-fire" : book.rank <= 3 ? "neon-glow" : "bg-card/50 border border-border/20"
-                            }`}>
-                              {book.rank <= 3 ? getRankIcon(book.rank) : <span className="text-muted-foreground/50">#{book.rank}</span>}
-                            </div>
-                            <Badge variant="outline" className="text-[9px] font-mono border-emerald-500/20 text-emerald-400">
-                              COMPLETE
-                            </Badge>
-                            {book.chaptersWithAudio > 0 && (
-                              <Badge variant="outline" className="text-[9px] font-mono border-cyan-500/30 text-cyan-400">
-                                <Music className="h-2.5 w-2.5 mr-0.5" />{book.chaptersWithAudio} CH
-                              </Badge>
-                            )}
-                            {(book.editionLanguages?.length ?? 0) > 0 && (
-                              <Badge variant="outline" className="text-[9px] font-mono border-blue-500/30 text-blue-300" data-testid={`badge-editions-row-${book.id}`}>
-                                <Globe className="h-2.5 w-2.5 mr-0.5" />{book.editionLanguages!.length}
-                              </Badge>
-                            )}
-                            {book.publishedToStore && (
-                              <Badge variant="outline" className="text-[9px] font-mono border-purple-500/20 text-purple-300">
-                                STOREFRONT
-                              </Badge>
-                            )}
-                          </div>
-                          <span className="text-lg">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
-                        </div>
-                      )}
-
-                      <h3 className="font-bold text-sm tracking-tight group-hover:text-purple-300 transition-colors mb-1 line-clamp-2">{book.title}</h3>
-                      <p className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider mb-2">
-                        {book.authorName || "Unknown Author"} · {VERTICAL_LABELS[book.vertical] || book.vertical}
-                      </p>
-
-                      {book.shortBlurb && (
-                        <p className="text-[11px] text-muted-foreground/60 leading-relaxed line-clamp-3 mb-3">{book.shortBlurb}</p>
-                      )}
-
-                      <div className="flex items-center gap-3 text-[9px] font-mono text-muted-foreground/30 mt-auto pt-2 border-t border-border/10">
-                        <span>{book.wordCount.toLocaleString()} words</span>
-                        <span>{book.chapterCount} chapters</span>
-                        {book.qualityScore && (
-                          <span className={scoreColor(book.qualityScore)}>
-                            ★ {formatScore(book.qualityScore)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-3">
-                        <Button
-                          size="sm"
-                          className="flex-1 neon-glow-nature text-white border-0 font-mono text-[10px] h-8 hover:shadow-[0_0_20px_-5px_rgba(16,185,129,0.4)] transition-shadow"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
-                          disabled={loadingReaderId === book.id}
-                          data-testid={`button-read-library-${book.id}`}
-                        >
-                          {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <Eye className="h-3 w-3 mr-1.5" />}
-                          READ BOOK
-                        </Button>
-                        <ExportMenu book={book} variant="card" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#BCAF9F]/30" />
+            <Input
+              data-testid="input-library-search"
+              placeholder="Search titles, authors, genres..."
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              className="h-11 border-[#C0A06B]/10 bg-white/[.025] pl-10 text-sm placeholder:text-[#BCAF9F]/28 focus-visible:ring-[#C0A06B]/25"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Select value={verticalFilter} onValueChange={setVerticalFilter}>
+              <SelectTrigger className="h-10 w-[150px] border-[#C0A06B]/10 bg-white/[.02] text-[11px]" data-testid="select-vertical-filter">
+                <Filter className="mr-1.5 h-3.5 w-3.5 text-[#BCAF9F]/35" />
+                <SelectValue placeholder="All genres" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All genres</SelectItem>
+                {verticals.map(vertical => <SelectItem key={vertical} value={vertical}>{VERTICAL_LABELS[vertical] || vertical}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={value => setSortBy(value as SortKey)}>
+              <SelectTrigger className="h-10 w-[135px] border-[#C0A06B]/10 bg-white/[.02] text-[11px]" data-testid="select-sort">
+                <ArrowUpDown className="mr-1.5 h-3.5 w-3.5 text-[#BCAF9F]/35" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rank">By rank</SelectItem>
+                <SelectItem value="title">By title</SelectItem>
+                <SelectItem value="words">By words</SelectItem>
+                <SelectItem value="quality">By quality</SelectItem>
+                <SelectItem value="date">By date</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex h-10 items-center rounded-xl border border-[#C0A06B]/10 bg-white/[.02] p-1">
+              {([
+                ["covers", LayoutGrid, "Covers"],
+                ["editorial", Rows3, "Editorial"],
+                ["compact", List, "Compact"],
+              ] as const).map(([mode, Icon, label]) => (
+                <Button
+                  key={mode}
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setView(mode)}
+                  className={`h-8 rounded-lg px-2.5 ${view === mode ? "bg-[#7E3E51]/18 text-[#EFE5D9]" : "text-[#BCAF9F]/40 hover:text-[#EFE5D9]"}`}
+                  aria-label={label}
+                  data-testid={`library-view-${mode}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </Button>
               ))}
             </div>
           </div>
+        </div>
 
-          {rest.length > 0 && (
-            <div className="animate-fade-in-up stagger-5">
-              <h2 className="text-[9px] font-mono font-bold text-muted-foreground/40 tracking-[0.2em] uppercase mb-3 flex items-center gap-2">
-                <BookOpen className="h-3 w-3" /> ALL BOOKS ({rest.length} more)
-              </h2>
-              <Card className="border-border/15 bg-card/30 overflow-hidden glass-card-premium">
-                <div className="divide-y divide-border/10">
-                  {rest.map((book) => (
-                    <Link key={book.id} href={`/projects/${book.id}`}>
-                      <div
-                        className="flex items-center gap-3 md:gap-4 px-3 md:px-5 py-3 md:py-3.5 cursor-pointer hover:bg-purple-500/[0.03] transition-all duration-300 group"
-                        data-testid={`library-book-${book.id}`}
-                      >
-                        {book.hasCover ? (
-                          <div className="h-10 w-7 rounded overflow-hidden shrink-0 border border-border/15">
-                            <img src={`/api/projects/${book.id}/cover-image`} alt="" loading="lazy" className="h-full w-full object-cover" />
-                          </div>
-                        ) : (
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-card/50 border border-border/15 text-[10px] font-mono font-bold text-muted-foreground/40">
-                            #{book.rank}
-                          </div>
-                        )}
-                        <span className="text-base shrink-0">{VERTICAL_ICONS[book.vertical] || "📖"}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-[13px] tracking-tight truncate group-hover:text-purple-300 transition-colors">{book.title}</h4>
-                          </div>
-                          <p className="text-[10px] font-mono text-muted-foreground/30 truncate mt-0.5">
-                            {book.authorName || "Unknown"} · {book.wordCount.toLocaleString()} words · {book.chapterCount} ch
-                            {book.shortBlurb && ` — ${book.shortBlurb.slice(0, 80)}...`}
-                          </p>
-                        </div>
-                        {book.qualityScore && (
-                          <span className={`text-[11px] font-mono font-bold ${scoreColor(book.qualityScore)}`}>
-                            ★ {formatScore(book.qualityScore)}
-                          </span>
-                        )}
-                        <Button
-                          size="sm" variant="ghost"
-                          className="h-7 px-2.5 text-[10px] font-mono text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-500/10 shrink-0"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); openReader(book); }}
-                          disabled={loadingReaderId === book.id}
-                          data-testid={`button-read-list-${book.id}`}
-                        >
-                          {loadingReaderId === book.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <><Eye className="h-3 w-3 mr-1" /> Read</>}
-                        </Button>
-                        <ExportMenu book={book} variant="row" />
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/15 group-hover:text-purple-400/50 group-hover:translate-x-1 transition-all duration-300 shrink-0" />
-                      </div>
-                    </Link>
-                  ))}
+        {isLoading ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {[0,1,2,3,4].map(item => <Skeleton key={item} className="aspect-[2/3] rounded-[18px] bg-white/[.035]" />)}
+          </div>
+        ) : books.length === 0 ? (
+          <EmptyCreativeState
+            title="Your library is waiting for its first book."
+            description="Finish a project and it will arrive here with its cover, reader, narration, and export tools."
+            action={<Link href="/projects/new"><Button className="rounded-full bg-[#7E3E51] text-[#FFF9F2] hover:bg-[#915065]"><BookOpen className="mr-2 h-4 w-4" /> Start a project</Button></Link>}
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyCreativeState title="No worlds match that search." description="Try a different title, author, genre, or clear the active filters." icon={Search} />
+        ) : view === "covers" ? (
+          <EditorialSection eyebrow="Covers" title={`${filtered.length} finished ${filtered.length === 1 ? "world" : "worlds"}`}>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+              {filtered.map(book => (
+                <div key={book.id} className="min-w-0">
+                  <ProjectCoverCard
+                    id={book.id}
+                    title={book.title}
+                    href={`/projects/${book.id}`}
+                    coverUrl={book.hasCover ? `/api/projects/${book.id}/cover-image` : null}
+                    status="Complete"
+                    genre={VERTICAL_LABELS[book.vertical] || book.vertical}
+                    meta={`${book.wordCount.toLocaleString()} words · ${book.chapterCount} chapters`}
+                  />
+                  <div className="mt-2 flex items-center gap-1">
+                    <Button size="sm" variant="ghost" className="h-8 flex-1 justify-start px-2 text-[10px] text-[#BCAF9F]/55 hover:text-[#EFE5D9]" onClick={() => openReader(book)} disabled={loadingReaderId === book.id} data-testid={`button-read-library-${book.id}`}>
+                      {loadingReaderId === book.id ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Eye className="mr-1.5 h-3 w-3" />} Read
+                    </Button>
+                    <ExportMenu book={book} variant="card" />
+                  </div>
                 </div>
-              </Card>
+              ))}
             </div>
-          )}
-        </>
-      )}
+          </EditorialSection>
+        ) : view === "editorial" ? (
+          <EditorialSection eyebrow="Editorial" title="Edition details at a glance">
+            <div className="grid gap-4 lg:grid-cols-2">
+              {filtered.map(book => (
+                <div key={book.id} className="lexora-editorial-surface rounded-[22px] p-4">
+                  <ProjectCoverCard
+                    id={book.id}
+                    title={book.title}
+                    href={`/projects/${book.id}`}
+                    coverUrl={book.hasCover ? `/api/projects/${book.id}/cover-image` : null}
+                    status={`#${book.rank}`}
+                    genre={VERTICAL_LABELS[book.vertical] || book.vertical}
+                    meta={book.authorName || "Unknown author"}
+                    compact
+                  />
+                  {book.shortBlurb ? <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#BCAF9F]/55">{book.shortBlurb}</p> : null}
+                  <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[#C0A06B]/10 pt-3 font-mono text-[9px] text-[#BCAF9F]/35">
+                    <span>{book.wordCount.toLocaleString()} words</span>
+                    <span>{book.chapterCount} chapters</span>
+                    {book.chaptersWithAudio > 0 ? <span>{book.chaptersWithAudio} narrated</span> : null}
+                    {book.qualityScore ? <span>★ {formatScore(book.qualityScore)}</span> : null}
+                  </div>
+                  <div className="mt-2 flex gap-1">
+                    <Button size="sm" variant="ghost" className="h-8 px-2 text-[10px] text-[#BCAF9F]/55 hover:text-[#EFE5D9]" onClick={() => openReader(book)} disabled={loadingReaderId === book.id} data-testid={`button-read-editorial-${book.id}`}><Eye className="mr-1.5 h-3 w-3" /> Read</Button>
+                    <ExportMenu book={book} variant="row" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </EditorialSection>
+        ) : (
+          <EditorialSection eyebrow="Compact" title="Working catalog">
+            <div className="divide-y divide-[#C0A06B]/10 border-y border-[#C0A06B]/10">
+              {filtered.map(book => (
+                <div key={book.id} className="flex min-w-0 items-center gap-3 py-3" data-testid={`library-book-${book.id}`}>
+                  <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md border border-[#C0A06B]/10">
+                    {book.hasCover ? <img src={`/api/projects/${book.id}/cover-image`} alt="" loading="lazy" className="h-full w-full object-cover" /> : <div className="lexora-cover-placeholder h-full w-full" />}
+                  </div>
+                  <Link href={`/projects/${book.id}`} className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-[#EFE5D9]">{book.title}</p>
+                    <p className="mt-0.5 truncate font-mono text-[9px] text-[#BCAF9F]/32">{book.authorName || "Unknown"} · {book.wordCount.toLocaleString()} words · {book.chapterCount} ch</p>
+                  </Link>
+                  {book.qualityScore ? <span className="hidden font-mono text-[10px] text-[#C0A06B]/60 sm:inline">★ {formatScore(book.qualityScore)}</span> : null}
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-[10px] text-[#BCAF9F]/50 hover:text-[#EFE5D9]" onClick={() => openReader(book)} disabled={loadingReaderId === book.id} data-testid={`button-read-list-${book.id}`}><Eye className="h-3 w-3 sm:mr-1" /><span className="hidden sm:inline">Read</span></Button>
+                  <ExportMenu book={book} variant="row" />
+                </div>
+              ))}
+            </div>
+          </EditorialSection>
+        )}
+
+        <div className="pb-8" />
+      </div>
 
       {readerBook && (
         <BookReader
