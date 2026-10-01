@@ -115,8 +115,8 @@ function AdminLayout() {
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full overflow-hidden">
         <AppSidebar />
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <header className="flex items-center justify-between px-6 h-12 border-b border-border/30 glass-panel shrink-0">
+        <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
+          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-12 border-b border-border/30 glass-panel shrink-0">
             <SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-purple-400 transition-colors" aria-label="Toggle sidebar" />
             <div className="flex items-center gap-3">
               <NotificationCenter />
@@ -124,7 +124,7 @@ function AdminLayout() {
               <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
             </div>
           </header>
-          <main className="flex-1 overflow-hidden aurora-bg">
+          <main className="min-w-0 flex-1 overflow-hidden aurora-bg">
             <AdminRouter />
           </main>
         </div>
