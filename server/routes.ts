@@ -486,18 +486,40 @@ const aiRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  message: { error: "Too many authentication attempts. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 async function ensureAdminUser() {
   const { admin, production } = getConfig();
   const existing = await storage.getUserByUsername(admin.username);
-  if (existing) return;
+  const recoveryPassword = process.env.ADMIN_PASSWORD_RESET?.trim();
 
-  if (!admin.initialPassword) {
+  if (recoveryPassword && recoveryPassword.length < 12) {
+    throw new Error("ADMIN_PASSWORD_RESET must be at least 12 characters.");
+  }
+
+  if (existing) {
+    if (recoveryPassword) {
+      const hashed = await bcrypt.hash(recoveryPassword, 12);
+      await storage.updateUserPassword(existing.id, hashed);
+      console.warn("Admin password reset from ADMIN_PASSWORD_RESET. Clear the variable after recovery.");
+    }
+    return;
+  }
+
+  const bootstrapPassword = recoveryPassword || admin.initialPassword;
+  if (!bootstrapPassword) {
     throw new Error(
       `No admin account exists for "${admin.username}". Set ADMIN_INITIAL_PASSWORD before first boot.`,
     );
   }
 
-  const hashed = await bcrypt.hash(admin.initialPassword, 12);
+  const hashed = await bcrypt.hash(bootstrapPassword, 12);
   await storage.createUser({ username: admin.username, password: hashed });
   console.log(
     `Admin user created (username: ${admin.username})${production ? "" : " for local development"}`,
@@ -662,7 +684,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.use("/uploads", express.static(path.resolve("uploads")));
 
-  app.post("/api/auth/login", async (req, res) => {
+  app.post("/api/auth/login", authRateLimit, async (req, res) => {
     try {
       const { username, password } = req.body;
       if (!username || !password) {
@@ -681,6 +703,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true, username: user.username });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/change-password", authRateLimit, requireAdmin, async (req, res) => {
+    try {
+      const parsed = z.object({
+        currentPassword: z.string().min(1),
+        newPassword: z.string().min(12).max(128),
+      }).safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({ error: "New password must be 12 to 128 characters." });
+      }
+
+      const user = await storage.getUser(req.session.adminId!);
+      if (!user) {
+        return res.status(404).json({ error: "Admin account not found" });
+      }
+
+      const currentValid = await bcrypt.compare(parsed.data.currentPassword, user.password);
+      if (!currentValid) {
+        return res.status(401).json({ error: "Current password is incorrect" });
+      }
+
+      const unchanged = await bcrypt.compare(parsed.data.newPassword, user.password);
+      if (unchanged) {
+        return res.status(400).json({ error: "Choose a different password" });
+      }
+
+      const hashed = await bcrypt.hash(parsed.data.newPassword, 12);
+      await storage.updateUserPassword(user.id, hashed);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
     }
   });
 

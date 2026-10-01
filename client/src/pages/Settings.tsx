@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users } from "lucide-react";
+import { Settings as SettingsIcon, User, Globe, Brain, FileText, Image, Megaphone, Volume2, Store, Download, Zap, Hexagon, AlertCircle, Save, Play, Square, Loader2, Users, LockKeyhole } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { VERTICAL_LABELS, LANGUAGE_LABELS } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -379,6 +379,107 @@ function WorkspaceMemberManager() {
   );
 }
 
+
+function SecurityManager() {
+  const { toast } = useToast();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const matches = newPassword.length >= 12 && newPassword === confirmPassword;
+
+  const mutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/auth/change-password", {
+      currentPassword,
+      newPassword,
+    }),
+    onSuccess: () => {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({ title: "Password updated", description: "Your Lexora admin password has been changed." });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Password change failed",
+        description: err?.message || "Check your current password and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Card className="border-border/20 bg-card/30">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-sm font-bold tracking-tight flex items-center gap-2">
+          <LockKeyhole className="h-3.5 w-3.5 text-emerald-400/70" /> Account Security
+        </CardTitle>
+        <CardDescription className="text-[10px] font-mono text-muted-foreground/40">
+          Change the password used to access the Lexora admin workspace
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider" htmlFor="current-password">Current Password</label>
+          <Input
+            id="current-password"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="h-10 bg-card/30 border-border/30 font-mono text-sm"
+            data-testid="input-current-password"
+          />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider" htmlFor="new-password">New Password</label>
+            <Input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="h-10 bg-card/30 border-border/30 font-mono text-sm"
+              data-testid="input-new-password"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider" htmlFor="confirm-password">Confirm Password</label>
+            <Input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="h-10 bg-card/30 border-border/30 font-mono text-sm"
+              data-testid="input-confirm-password"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-[10px] font-mono text-muted-foreground/40">
+            Use at least 12 characters. Your current session stays signed in after the change.
+          </p>
+          <Button
+            type="button"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || !currentPassword || !matches}
+            className="neon-glow text-white border-0 font-mono text-[11px]"
+            data-testid="button-change-password"
+          >
+            {mutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5 mr-1.5" />}
+            {mutation.isPending ? "UPDATING..." : "CHANGE PASSWORD"}
+          </Button>
+        </div>
+        {confirmPassword && newPassword !== confirmPassword ? (
+          <p className="text-[10px] font-mono text-red-400/70">Passwords do not match.</p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const { data: settings, isLoading, error } = useQuery<AppSettings | null>({ queryKey: ["/api/settings"] });
@@ -739,6 +840,7 @@ export default function Settings() {
         </form>
       </Form>
 
+      <SecurityManager />
       <WorkspaceMemberManager />
       <BrandKitManager />
       <MembershipTierManager />
