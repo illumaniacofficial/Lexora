@@ -138,7 +138,7 @@ function AuthGatedAdmin() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    fetch("/api/auth/me", { credentials: "include" })
+    fetch("/api/auth/me", { credentials: "include", cache: "no-store", headers: { "Cache-Control": "no-cache" } })
       .then(res => {
         setIsAuthenticated(res.ok);
         setAuthChecked(true);
