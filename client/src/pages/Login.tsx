@@ -89,7 +89,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
         </form>
 
         <p className="text-center text-[10px] font-mono text-stone-600 mt-6 tracking-wider">
-          Powered by Lexora AI Publishing Platform
+          Lexora Publishing Platform
         </p>
       </div>
     </div>
