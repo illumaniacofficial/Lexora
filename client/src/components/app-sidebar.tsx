@@ -13,7 +13,7 @@ import { VOICE_OPTIONS } from "@/components/audio-mini-player";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import logoPath from "@assets/image_1772031076380.png";
+const logoPath = "/icons/lexora-mark.svg?v=3";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -129,19 +129,19 @@ export function AppSidebar() {
                       className={cn(
                         "relative transition-all duration-300",
                         isActive
-                          ? "bg-purple-500/10 text-purple-300 font-semibold border border-purple-500/20"
-                          : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border border-transparent hover:border-purple-500/10"
+                          ? "bg-[#8f4a5e]/15 text-[#f1e7dc] font-semibold border border-[#c19d66]/15"
+                          : "text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border border-transparent hover:border-[#c19d66]/10"
                       )}
                     >
                       <Link href={item.url}>
                         {isActive && <span className="nav-active-bar" />}
                         <item.icon className={cn(
                           "h-4 w-4 transition-all duration-300",
-                          isActive ? "text-purple-400 drop-shadow-[0_0_6px_rgba(168,85,247,0.5)]" : ""
+                          isActive ? "text-[#c19d66]" : ""
                         )} />
                         <span className="text-[13px] tracking-tight">{item.title}</span>
                         {isActive && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.8)]" />
+                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#c19d66] shadow-[0_0_8px_rgba(193,157,102,.45)]" />
                         )}
                       </Link>
                     </SidebarMenuButton>
