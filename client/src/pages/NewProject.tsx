@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon, Wand2, Loader2, Star, X } from "lucide-react";
+import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon, Wand2, Loader2, Star } from "lucide-react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
