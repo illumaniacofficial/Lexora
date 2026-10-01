@@ -597,7 +597,7 @@ function dossierProjectHandoff(row: any) {
     ...(Array.isArray(dossier.intelligence?.redactorConcerns) ? dossier.intelligence.redactorConcerns : []),
   ].filter(Boolean);
 
-  return {
+  const derived = {
     dossierId: row.id,
     propertyId: row.propertyId || null,
     status: row.status,
@@ -618,6 +618,33 @@ function dossierProjectHandoff(row: any) {
       oracleSummary: dossier.intelligence?.oracleFindings?.summary || "",
       format: dossier.format || dossier.structure?.intendedFormat || "",
     },
+  };
+
+  const saved = (dossier.projectHandoff || {}) as Record<string, any>;
+  const savedGenres = Array.isArray(saved.genres)
+    ? saved.genres.filter((genre: unknown) => typeof genre === "string" && (VERTICALS as readonly string[]).includes(genre)).slice(0, 6)
+    : [];
+  const mergedGenres = savedGenres.length > 0 ? savedGenres : derived.genres;
+  const savedVertical = typeof saved.vertical === "string" && (VERTICALS as readonly string[]).includes(saved.vertical)
+    ? saved.vertical
+    : null;
+  const vertical = savedVertical && mergedGenres.includes(savedVertical) ? savedVertical : mergedGenres[0];
+
+  return {
+    ...derived,
+    ...(typeof saved.title === "string" ? { title: saved.title } : {}),
+    ...(typeof saved.description === "string" ? { description: saved.description } : {}),
+    ...(typeof saved.targetAudience === "string" ? { targetAudience: saved.targetAudience } : {}),
+    ...(typeof saved.toneStyle === "string" ? { toneStyle: saved.toneStyle } : {}),
+    ...(typeof saved.keyThemes === "string" ? { keyThemes: saved.keyThemes } : {}),
+    ...(typeof saved.comparableTitles === "string" ? { comparableTitles: saved.comparableTitles } : {}),
+    ...(typeof saved.avoid === "string" ? { avoid: saved.avoid } : {}),
+    ...(typeof saved.targetLanguage === "string" && (LANGUAGES as readonly string[]).includes(saved.targetLanguage)
+      ? { targetLanguage: saved.targetLanguage }
+      : {}),
+    genres: mergedGenres,
+    vertical,
+    handoffEditedAt: typeof saved.updatedAt === "string" ? saved.updatedAt : null,
   };
 }
 
@@ -2254,6 +2281,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ dossier, property, handoff: dossierProjectHandoff(dossier) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/concept-lab/dossiers/:id/handoff", requireRole("editor"), async (req, res) => {
+    try {
+      const row = await storage.getConceptDossier(req.params.id);
+      if (!row) return res.status(404).json({ error: "Dossier not found" });
+      if (row.sourceType === "manual-idea") {
+        return res.status(409).json({ error: "Quick-captured ideas need a full Concept Dossier before project handoff." });
+      }
+      if (row.status === "archived") {
+        return res.status(409).json({ error: "Archived ideas cannot be sent to the project creator." });
+      }
+
+      const input = z.object({
+        title: z.string().trim().min(1).max(200),
+        description: z.string().max(4000),
+        targetAudience: z.string().max(1000),
+        toneStyle: z.string().max(1000),
+        keyThemes: z.string().max(1500),
+        comparableTitles: z.string().max(1000),
+        avoid: z.string().max(1500),
+        genres: z.array(z.enum(VERTICALS)).min(1).max(6),
+        vertical: z.enum(VERTICALS),
+        targetLanguage: z.enum(LANGUAGES),
+      }).parse(req.body || {});
+
+      const genres = Array.from(new Set(input.genres));
+      if (!genres.includes(input.vertical)) genres.unshift(input.vertical);
+      const dossier = (row.dossier || {}) as Record<string, any>;
+      const updatedAt = new Date().toISOString();
+
+      const updated = await storage.updateConceptDossier(row.id, {
+        dossier: {
+          ...dossier,
+          projectHandoff: {
+            ...input,
+            genres: genres.slice(0, 6),
+            updatedAt,
+          },
+        },
+      });
+
+      res.json({
+        dossier: updated,
+        handoff: dossierProjectHandoff(updated),
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
   });
 
