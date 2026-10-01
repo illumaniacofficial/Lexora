@@ -164,8 +164,8 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
   return (
     <aside
       className={cn(
-        "absolute inset-y-0 right-0 z-40 w-[min(92vw,390px)] border-l border-border/25 bg-background/95 backdrop-blur-xl shadow-2xl transition-transform duration-200 md:relative md:inset-auto md:z-auto md:w-[390px] md:shrink-0 md:shadow-none",
-        open ? "translate-x-0" : "translate-x-full md:hidden",
+        "absolute inset-y-0 right-0 z-50 w-[min(94vw,390px)] border-l border-border/25 bg-background/95 backdrop-blur-xl shadow-2xl transition-transform duration-200 will-change-transform",
+        open ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none",
       )}
       aria-hidden={!open}
       data-testid="lexora-copilot-panel"
