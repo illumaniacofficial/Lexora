@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { spawn } from "child_process";
 import { openai, FAST_MODEL } from "./openai";
 import type { Project, Chapter, MarketingAsset, StoryEntity } from "@shared/schema";
+import { normalizeNarrationText } from "@shared/narration";
 
 const TTS_DISK_DIR = path.resolve("uploads/audio/tts-cache");
 const MEDIA_DIR = path.resolve("uploads/media");
@@ -95,7 +96,8 @@ export function chunkText(text: string, maxLen: number = 4000): string[] {
 }
 
 function stripForNarration(text: string): string {
-  return text.replace(/[#*_`~>\[\]()]/g, "").replace(/\s+/g, " ").trim();
+  const normalized = normalizeNarrationText(text);
+  return normalizeNarrationText(normalized.replace(/[#*`~>\[\]()]/g, "").replace(/\s+/g, " "));
 }
 
 // Synthesize a single (<=4000 char) segment, reusing/writing the shared disk cache.
