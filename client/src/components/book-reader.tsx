@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, RefreshCw, SkipForward, Columns2, Square, Repeat } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, List, Minus, Plus, Palette, Volume2, Loader2, Play, Pause, RotateCcw, RefreshCw, SkipForward, Columns2, Square, Repeat, Bookmark, BookMarked, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MarkdownRenderer, stripMarkdown } from "@/components/markdown-renderer";
@@ -27,6 +27,24 @@ type PageContent =
   | { type: "chapter-title"; chapterNumber: number; chapterTitle: string }
   | { type: "text"; chapterNumber: number; chapterTitle: string; text: string; pageInChapter: number; totalPagesInChapter: number; chapterId: number }
   | { type: "outro"; title: string; author: string };
+
+interface ReaderBookmark {
+  id: number;
+  kind: "bookmark" | "progress";
+  page_index: number;
+  chapter_number: number | null;
+  chapter_title: string | null;
+  page_in_chapter: number | null;
+  label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ReadingState {
+  projectId: number;
+  progress: ReaderBookmark | null;
+  bookmarks: ReaderBookmark[];
+}
 
 type PageTheme = "parchment" | "cream" | "white" | "sepia" | "dark" | "midnight";
 
@@ -446,6 +464,10 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
   const [isFlipping, setIsFlipping] = useState(false);
   const [flipDirection, setFlipDirection] = useState<"left" | "right">("right");
   const [showToc, setShowToc] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>([]);
+  const [readingStateLoaded, setReadingStateLoaded] = useState(false);
+  const [bookmarkBusy, setBookmarkBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showNarrator, setShowNarrator] = useState(false);
   const [fontSize, setFontSize] = useState<number>(() => {
@@ -503,6 +525,157 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     });
     return result;
   }, [pages]);
+
+  const resolveBookmarkPage = useCallback((saved: ReaderBookmark | null | undefined) => {
+    if (!saved || pages.length === 0) return 0;
+    if (saved.chapter_number != null) {
+      if (saved.page_in_chapter != null) {
+        const exact = pages.findIndex((candidate) =>
+          candidate.type === "text" &&
+          candidate.chapterNumber === saved.chapter_number &&
+          candidate.pageInChapter === saved.page_in_chapter,
+        );
+        if (exact >= 0) return exact;
+      }
+      const chapterStart = pages.findIndex((candidate) =>
+        (candidate.type === "chapter-title" || candidate.type === "text") &&
+        candidate.chapterNumber === saved.chapter_number,
+      );
+      if (chapterStart >= 0) return chapterStart;
+    }
+    return Math.max(0, Math.min(saved.page_index || 0, pages.length - 1));
+  }, [pages]);
+
+  const pageReadingMeta = useCallback((pageIndex: number) => {
+    const current = pages[pageIndex];
+    if (!current) return { chapterNumber: null, chapterTitle: null, pageInChapter: null };
+    if (current.type === "text") {
+      return {
+        chapterNumber: current.chapterNumber,
+        chapterTitle: current.chapterTitle,
+        pageInChapter: current.pageInChapter,
+      };
+    }
+    if (current.type === "chapter-title") {
+      return {
+        chapterNumber: current.chapterNumber,
+        chapterTitle: current.chapterTitle,
+        pageInChapter: 1,
+      };
+    }
+    return { chapterNumber: null, chapterTitle: null, pageInChapter: null };
+  }, [pages]);
+
+  useEffect(() => {
+    if (!projectId || pages.length === 0) {
+      setReadingStateLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    setReadingStateLoaded(false);
+    fetch(`/api/reader/books/${projectId}/reading-state`, {
+      credentials: "include",
+      cache: "no-store",
+      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Reading state unavailable");
+        return res.json() as Promise<ReadingState>;
+      })
+      .then((state) => {
+        if (cancelled) return;
+        setBookmarks(Array.isArray(state.bookmarks) ? state.bookmarks : []);
+        if (state.progress) setCurrentPage(resolveBookmarkPage(state.progress));
+      })
+      .catch(() => {
+        // Reading still works when persistence is unavailable.
+      })
+      .finally(() => {
+        if (!cancelled) setReadingStateLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !readingStateLoaded || pages.length === 0) return;
+    const meta = pageReadingMeta(currentPage);
+    const timer = window.setTimeout(() => {
+      fetch(`/api/reader/books/${projectId}/progress`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          pageIndex: currentPage,
+          chapterNumber: meta.chapterNumber,
+          chapterTitle: meta.chapterTitle,
+          pageInChapter: meta.pageInChapter,
+        }),
+      }).catch(() => {});
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [projectId, currentPage, readingStateLoaded, pageReadingMeta, pages.length]);
+
+  const currentBookmark = useMemo(
+    () => bookmarks.find((saved) => resolveBookmarkPage(saved) === currentPage) || null,
+    [bookmarks, currentPage, resolveBookmarkPage],
+  );
+
+  const toggleCurrentBookmark = useCallback(async () => {
+    if (!projectId || bookmarkBusy) return;
+    setBookmarkBusy(true);
+    try {
+      if (currentBookmark) {
+        const res = await fetch(`/api/reader/books/${projectId}/bookmarks/${currentBookmark.id}`, {
+          method: "DELETE",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!res.ok) throw new Error("Could not remove bookmark");
+        setBookmarks((items) => items.filter((item) => item.id !== currentBookmark.id));
+        toast({ title: "Bookmark removed" });
+      } else {
+        const meta = pageReadingMeta(currentPage);
+        const label = meta.chapterTitle
+          ? `${meta.chapterTitle}${meta.pageInChapter ? ` · page ${meta.pageInChapter}` : ""}`
+          : `Page ${currentPage + 1}`;
+        const res = await fetch(`/api/reader/books/${projectId}/bookmarks`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            pageIndex: currentPage,
+            chapterNumber: meta.chapterNumber,
+            chapterTitle: meta.chapterTitle,
+            pageInChapter: meta.pageInChapter,
+            label,
+          }),
+        });
+        if (!res.ok) throw new Error("Could not save bookmark");
+        const saved = await res.json() as ReaderBookmark;
+        setBookmarks((items) => [saved, ...items.filter((item) => item.id !== saved.id)]);
+        toast({ title: "Page bookmarked", description: label });
+      }
+    } catch (error: any) {
+      toast({ title: "Bookmark failed", description: error.message, variant: "destructive" });
+    } finally {
+      setBookmarkBusy(false);
+    }
+  }, [projectId, bookmarkBusy, currentBookmark, currentPage, pageReadingMeta, toast]);
+
+  const removeBookmark = useCallback(async (bookmark: ReaderBookmark) => {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`/api/reader/books/${projectId}/bookmarks/${bookmark.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) throw new Error("Could not remove bookmark");
+      setBookmarks((items) => items.filter((item) => item.id !== bookmark.id));
+    } catch (error: any) {
+      toast({ title: "Bookmark failed", description: error.message, variant: "destructive" });
+    }
+  }, [projectId, toast]);
 
   useEffect(() => { autoNarRef.current = autoNarrate; }, [autoNarrate]);
 
@@ -953,7 +1126,7 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
     return undefined;
   }, [readerWordIndex, narratedPageIdx, miniNarration, miniPlayerWordIndex, currentPage]);
 
-  const closeAllPanels = () => { setShowToc(false); setShowSettings(false); setShowNarrator(false); };
+  const closeAllPanels = () => { setShowToc(false); setShowBookmarks(false); setShowSettings(false); setShowNarrator(false); };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center select-none" ref={containerRef}
@@ -969,6 +1142,16 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               data-testid="button-reader-toc" aria-label="Table of contents"
             >
               <List className="h-3.5 w-3.5 sm:mr-1" /> <span className="hidden sm:inline">TOC</span>
+            </Button>
+
+            <Button size="sm" variant="ghost"
+              onClick={() => { closeAllPanels(); setShowBookmarks(!showBookmarks); }}
+              className={cn("h-8 text-xs font-mono px-2 sm:px-3", currentBookmark ? "text-amber-300" : isDark ? "text-stone-300 hover:text-white" : "text-stone-400 hover:text-white")}
+              data-testid="button-reader-bookmarks" aria-label="Bookmarks"
+            >
+              <BookMarked className="h-3.5 w-3.5 sm:mr-1" />
+              <span className="hidden sm:inline">Bookmarks</span>
+              {bookmarks.length > 0 && <span className="ml-1 text-[9px] opacity-70">{bookmarks.length}</span>}
             </Button>
 
             <div className={cn("flex items-center gap-0.5 rounded-lg border px-1", isDark ? "border-stone-700 bg-stone-800/50" : "border-stone-600 bg-stone-800/50")}>
@@ -1044,6 +1227,69 @@ export default function BookReader({ title, authorName, chapters, coverImageUrl,
               data-testid="button-reader-close" aria-label="Close reader"><X className="h-4 w-4" /></Button>
           </div>
         </div>
+
+        {showBookmarks && (
+          <div className={cn("absolute left-0 top-11 z-30 w-80 max-w-[92vw] rounded-xl shadow-2xl p-4 max-h-[65vh] overflow-y-auto", "bg-stone-800 border border-stone-700")} data-testid="reader-bookmarks-panel">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-[10px] font-mono text-stone-300 uppercase tracking-wider">Bookmarks</p>
+                <p className="text-[9px] text-stone-500 mt-0.5">Your reading position is saved automatically.</p>
+              </div>
+              <button onClick={() => setShowBookmarks(false)} className="h-6 w-6 flex items-center justify-center rounded text-stone-500 hover:text-white transition-colors" aria-label="Close bookmarks">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className={cn("w-full h-8 text-[10px] font-mono mb-3", currentBookmark ? "border-amber-500/40 text-amber-200" : "border-stone-600 text-stone-300")}
+              onClick={toggleCurrentBookmark}
+              disabled={!projectId || bookmarkBusy}
+              data-testid="button-toggle-reader-bookmark"
+            >
+              {bookmarkBusy ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : currentBookmark ? <BookMarked className="h-3.5 w-3.5 mr-1.5" /> : <Bookmark className="h-3.5 w-3.5 mr-1.5" />}
+              {currentBookmark ? "Remove bookmark from this page" : "Bookmark this page"}
+            </Button>
+
+            {bookmarks.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-stone-700 py-8 text-center">
+                <Bookmark className="h-5 w-5 text-stone-600 mx-auto mb-2" />
+                <p className="text-[10px] text-stone-500">No saved bookmarks yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {bookmarks.map((saved) => {
+                  const target = resolveBookmarkPage(saved);
+                  return (
+                    <div key={saved.id} className={cn("group flex items-center gap-2 rounded-lg border p-2", target === currentPage ? "border-amber-500/35 bg-amber-500/10" : "border-stone-700 bg-stone-900/30")}>
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => { goToImmediate(target); setShowBookmarks(false); }}
+                        data-testid={`button-reader-bookmark-${saved.id}`}
+                      >
+                        <p className="text-[10px] text-stone-200 truncate">{saved.label || saved.chapter_title || `Page ${target + 1}`}</p>
+                        <p className="text-[8px] font-mono text-stone-500 mt-0.5">
+                          {saved.chapter_number != null ? `CH ${saved.chapter_number}${saved.page_in_chapter ? ` · ${saved.page_in_chapter}` : ""}` : `PAGE ${target + 1}`}
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeBookmark(saved)}
+                        className="h-7 w-7 shrink-0 rounded-md flex items-center justify-center text-stone-600 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                        aria-label="Delete bookmark"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {showSettings && (
           <div className={cn("absolute left-0 top-11 z-20 w-64 rounded-xl shadow-2xl p-4", "bg-stone-800 border border-stone-700")}>
