@@ -42,7 +42,7 @@ type FormData = z.infer<typeof schema>;
 
 const aiModelOptions = [
   { value: "fast", label: "Fast (GPT-5 Mini)", desc: "Faster, lower cost" },
-  { value: "high", label: "High Quality (GPT-5.1)", desc: "Best quality, higher cost" },
+  { value: "high", label: "High Quality (GPT-5.6 Sol)", desc: "Best quality, higher cost" },
 ];
 
 const exportFormatOptions = [
@@ -547,7 +547,7 @@ function CustomAiProviderSettings() {
       setName("OpenRouter");
       setBaseUrl("https://openrouter.ai/api/v1");
       setFastModel("openrouter/free");
-      setWritingModel("nvidia/nemotron-3-ultra-550b-a55b:free");
+      setWritingModel("google/gemma-4-26b-a4b-it:free");
     } else if (provider === "gemini") {
       setName("Google Gemini");
       setBaseUrl("https://generativelanguage.googleapis.com/v1beta/openai");
