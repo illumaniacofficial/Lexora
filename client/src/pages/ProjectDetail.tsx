@@ -29,7 +29,7 @@ import BookReader from "@/components/book-reader";
 import CanonWorkspace from "@/components/canon-workspace";
 import { useNarration } from "@/App";
 import { MarkdownRendererDark, stripMarkdown } from "@/components/markdown-renderer";
-import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion, StudioProperty, ContinuitySnapshot } from "@shared/schema";
+import type { Project, Chapter, RunStep, BookDna, MarketingAsset, TrendReport, ChapterAnalysis, Series, StyleFingerprint, StoryEntity, MarketReport, RevenueForecast, AbTest, CoverVariant, BrandKit, ExportJob, MediaAsset, BookEdition, EditionChapter, ChapterComment, ChapterVersion, StudioProperty, ContinuitySnapshot, AutopilotRun } from "@shared/schema";
 
 type WorkspaceRole = "owner" | "editor" | "viewer";
 import { VOICE_OPTIONS, DEFAULT_VOICE_ID } from "@/components/audio-mini-player";
@@ -2460,6 +2460,15 @@ export default function ProjectDetail() {
   });
   const { data: workspaceMe } = useQuery<{ role: WorkspaceRole }>({ queryKey: ["/api/workspace/me"] });
   const role: WorkspaceRole = workspaceMe?.role ?? "viewer";
+  const { data: projectAutopilot } = useQuery<{
+    projectId: number;
+    active: boolean;
+    run: AutopilotRun | null;
+    guardrails: { minQualityScore: number; budgetCapUsd: number; requireOwnerApproval: boolean };
+  }>({
+    queryKey: ["/api/projects", projectId, "autopilot"],
+    refetchInterval: 2500,
+  });
 
   const previousOutlineStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -2491,6 +2500,27 @@ export default function ProjectDetail() {
     queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
     queryClient.invalidateQueries({ queryKey: ["/api/dashboard"] });
   };
+
+  const startProjectAutopilot = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/autopilot/start`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "autopilot"] });
+      invalidate();
+      toast({
+        title: "Project Autopilot started",
+        description: "Lexora will continue this book through its remaining draft-production steps, then stop for your review.",
+      });
+    },
+    onError: (e: any) => toast({ title: "Could not start Project Autopilot", description: e.message, variant: "destructive" }),
+  });
+  const stopProjectAutopilot = useMutation({
+    mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/autopilot/stop`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "autopilot"] });
+      toast({ title: "Autopilot stop requested", description: "Lexora will stop after the current safe step." });
+    },
+    onError: (e: any) => toast({ title: "Could not stop Project Autopilot", description: e.message, variant: "destructive" }),
+  });
 
   const trendMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/projects/${projectId}/trend-analysis`),
@@ -2829,6 +2859,60 @@ export default function ProjectDetail() {
                     <div className="text-[8px] font-mono text-muted-foreground/30 mt-0.5 tracking-widest">{label}</div>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-purple-500/20 bg-gradient-to-r from-purple-500/[0.06] via-card/35 to-cyan-500/[0.04]" data-testid="project-autopilot-control">
+            <CardContent className="py-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-purple-400" />
+                    <span className="text-[11px] font-mono font-bold uppercase tracking-[0.15em] text-purple-200">Project Autopilot</span>
+                    {projectAutopilot?.active && (
+                      <Badge variant="outline" className="text-[8px] font-mono border-emerald-500/25 text-emerald-300">RUNNING</Badge>
+                    )}
+                    {projectAutopilot?.run?.status === "awaiting_approval" && (
+                      <Badge variant="outline" className="text-[8px] font-mono border-amber-500/25 text-amber-300">REVIEW READY</Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/55 mt-1.5 leading-relaxed">
+                    Let Lexora resume this specific book through missing research, outline, chapters, and marketing. It stops in editing for owner review — it does not silently canonize or publish the book.
+                  </p>
+                  {projectAutopilot?.run && (
+                    <p className="text-[9px] font-mono text-muted-foreground/45 mt-2">
+                      {projectAutopilot.run.currentStep || projectAutopilot.run.status}
+                      {projectAutopilot.guardrails ? ` · quality ≥ ${projectAutopilot.guardrails.minQualityScore}/10 · budget cap ${projectAutopilot.guardrails.budgetCapUsd}` : ""}
+                    </p>
+                  )}
+                </div>
+                <div className="shrink-0">
+                  {projectAutopilot?.active ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-9 text-[10px] font-mono border-red-500/30 text-red-300"
+                      onClick={() => stopProjectAutopilot.mutate()}
+                      disabled={stopProjectAutopilot.isPending}
+                      data-testid="button-stop-project-autopilot"
+                    >
+                      {stopProjectAutopilot.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Square className="h-3.5 w-3.5 mr-1.5" />}
+                      Stop Autopilot
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      className="h-9 text-[10px] font-mono neon-glow text-white"
+                      onClick={() => startProjectAutopilot.mutate()}
+                      disabled={startProjectAutopilot.isPending || project.status === "complete" || role === "viewer"}
+                      data-testid="button-start-project-autopilot"
+                    >
+                      {startProjectAutopilot.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
+                      Finish with Autopilot
+                    </Button>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
