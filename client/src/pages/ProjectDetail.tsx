@@ -328,6 +328,7 @@ function CollaborationPanel({ projectId, chapter, role, isProjectComplete, onCha
   role: WorkspaceRole;
   isProjectComplete: boolean;
   onChanged: () => void;
+  forceOutlineOpen?: boolean;
 }) {
   const { toast } = useToast();
   const chapterId = chapter.id;
@@ -505,7 +506,7 @@ function CollaborationPanel({ projectId, chapter, role, isProjectComplete, onCha
   );
 }
 
-function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, role, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi, onChanged }: {
+function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling, projectId, role, isEditingMode, isProjectComplete, onSaveEdit, isSavingEdit, editingChapterId, onStartEdit, onCancelEdit, onGenerateAudio, isGeneratingAudio, mostRecentEditId, onRevise, isRevising, revisingChapterId, onStartRevise, onCancelRevise, analyses, onRunBoard, onRunHumanize, onRunBeta, boardPending, humanizePending, betaPending, onInlineAi, onChanged, forceOutlineOpen }: {
   chapter: Chapter;
   onGenerate: (id: number) => void;
   isGenerating: boolean;
@@ -548,6 +549,10 @@ function ChapterCard({ chapter, onGenerate, isGenerating, onCancel, isCancelling
   const [cowriteInstruction, setCowriteInstruction] = useState("");
   const [cowriteBusy, setCowriteBusy] = useState<"continue" | "rewrite" | null>(null);
   const [suggestion, setSuggestion] = useState<{ text: string; mode: "continue" | "rewrite"; selStart: number; selEnd: number } | null>(null);
+
+  useEffect(() => {
+    if (forceOutlineOpen !== undefined) setExpanded(forceOutlineOpen);
+  }, [forceOutlineOpen]);
 
   const isEditing = editingChapterId === chapter.id;
   const isRevisingThis = revisingChapterId === chapter.id;
@@ -2427,6 +2432,7 @@ export default function ProjectDetail() {
   const [coverText, setCoverText] = useState("");
   const [coverAvoid, setCoverAvoid] = useState("");
   const [showOutlineConfirm, setShowOutlineConfirm] = useState(false);
+  const [outlineExpandAll, setOutlineExpandAll] = useState(false);
   const [priceInput, setPriceInput] = useState<string>("");
   const { startNarration } = useNarration();
 
@@ -2447,6 +2453,7 @@ export default function ProjectDetail() {
 
     if (previous === "outlining" && status && status !== "outlining") {
       if (latestOutlineRun?.status === "complete" && (data?.chapters?.length || 0) > 0) {
+        setOutlineExpandAll(true);
         toast({
           title: "Outline ready",
           description: `${data?.chapters?.length || 0} chapter blueprints are ready to review.`,
@@ -3028,10 +3035,30 @@ export default function ProjectDetail() {
                   </Card>
                 )
               ) : (
-                chapters.map(ch => (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border/20 bg-card/20 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-purple-300/80">Outline Review</p>
+                      <p className="text-[9px] font-mono text-muted-foreground/40 mt-0.5">
+                        {chapters.length} chapter blueprint{chapters.length === 1 ? "" : "s"} · click any chapter or open them all
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 border-purple-500/20 text-[9px] font-mono text-purple-300 hover:bg-purple-500/10"
+                      onClick={() => setOutlineExpandAll((value) => !value)}
+                      data-testid="button-toggle-all-outline-blueprints"
+                    >
+                      {outlineExpandAll ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                      {outlineExpandAll ? "Collapse All" : "Expand All"}
+                    </Button>
+                  </div>
+                  {chapters.map(ch => (
                   <ChapterCard
                     key={ch.id}
                     chapter={ch}
+                    forceOutlineOpen={outlineExpandAll}
                     onGenerate={(cid) => chapterMutation.mutate(cid)}
                     isGenerating={chapterMutation.isPending || outlineIsRunning}
                     onCancel={(cid) => cancelChapterMutation.mutate(cid)}
@@ -3063,7 +3090,8 @@ export default function ProjectDetail() {
                     role={role}
                     onChanged={invalidate}
                   />
-                ))
+                  ))}
+                </div>
               )}
             </TabsContent>
 
