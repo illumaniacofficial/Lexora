@@ -111,6 +111,33 @@ check(
     routes.includes('sourceType: "manual-idea"'),
 );
 
+
+const newProject = read("client/src/pages/NewProject.tsx");
+
+check(
+  "new project creation supports a reviewed multi-genre blend",
+  newProject.includes('name="genres"') &&
+    newProject.includes('data-testid="selected-genre-blend"') &&
+    newProject.includes('button-primary-genre-') &&
+    newProject.includes('Choose up to 6 genres'),
+);
+
+check(
+  "genre detection stays review-first instead of silently changing selections",
+  newProject.includes('data-testid="genre-detection-review"') &&
+    newProject.includes("Suggestions only — review them before adding anything.") &&
+    newProject.includes('button-accept-detected-genres') &&
+    routes.includes('/api/projects/suggest-genres'),
+);
+
+check(
+  "reviewed genre blends persist into Property classification while preserving a primary vertical",
+  routes.includes("requestedGenres") &&
+    routes.includes("primaryGenre:") &&
+    routes.includes("additionalGenres: genres") &&
+    routes.includes("craftProfiles: genres"),
+);
+
 const appShell = read("client/src/App.tsx");
 const copilot = read("client/src/components/lexora-copilot.tsx");
 
