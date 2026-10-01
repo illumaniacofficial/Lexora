@@ -9,6 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "verify:wave03": "tsx scripts/verify-wave03.ts",
+    "verify:wave05": "tsx scripts/verify-wave05.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
