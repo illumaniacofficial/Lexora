@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
 } from "@/components/ui/sidebar";
 import {
-  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Volume2, Settings, MessageSquare,
+  LayoutDashboard, FolderOpen, TrendingUp, Megaphone, Bot, Zap, Hexagon, Library, Share2, Volume2, Settings, MessageSquare,
   Play, Pause, SkipForward, RotateCcw, X, Loader2, Mic, LogOut, BarChart3, Sparkles,
 } from "lucide-react";
 import { useSidebar } from "@/components/ui/sidebar";
