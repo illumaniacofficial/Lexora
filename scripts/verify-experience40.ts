@@ -143,5 +143,13 @@ const pipelineEnd = projectDetail.indexOf("return (", pipelineStart);
 const pipelineSurface = projectDetail.slice(pipelineStart, pipelineEnd);
 check("project production pipeline no longer carries neon style tokens", !pipelineSurface.includes("neon-glow"));
 
+const projectPrimaryStart = projectDetail.indexOf("const pipelineActions");
+const projectPrimaryEnd = projectDetail.indexOf('<Tabs defaultValue="chapters">', projectPrimaryStart);
+const projectPrimarySurface = projectDetail.slice(projectPrimaryStart, projectPrimaryEnd);
+check(
+  "primary project workspace drops legacy purple/cyan/neon identity",
+  !/purple-(?:200|300|400|500)|cyan-(?:300|400|500)|neon-glow/.test(projectPrimarySurface),
+);
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
