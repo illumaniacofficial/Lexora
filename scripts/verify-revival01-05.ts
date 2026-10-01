@@ -103,6 +103,13 @@ check(
 );
 
 check(
+  "Wave 01 architecture documentation remains present",
+  exists("docs/ARCHITECTURE_CURRENT.md") &&
+    exists("docs/ARCHITECTURE_TARGET.md") &&
+    exists("docs/CAPABILITY_REUSE_MAP.md"),
+);
+
+check(
   "revival schema remains additive for Property, Artifact Vault, continuity, and concepts",
   revivalSchema.includes("CREATE TABLE IF NOT EXISTS studio_properties") &&
     revivalSchema.includes("CREATE TABLE IF NOT EXISTS property_projects") &&
@@ -126,10 +133,10 @@ check(
 check(
   "Scribe builds project-aware context from Property, Genome, chapters, series, and continuity",
   scribe.includes("buildScribeContext") &&
-    scribe.includes("Book Genome") &&
+    scribe.includes("BOOK GENOME / LEGACY BOOK DNA") &&
+    scribe.includes("SERIES / IP BIBLE") &&
     scribe.includes("CANONICAL CONTINUITY STATE") &&
-    scribe.includes("accepted") &&
-    scribe.includes("series"),
+    scribe.includes("RECENT ACCEPTED TEXT"),
 );
 
 check(
