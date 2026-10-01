@@ -870,7 +870,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // The admin browser carries a session cookie, so inline <audio>/<video> and the
   // gated /api/media-assets/:id/download route still work for authenticated admins.
   app.get(/^\/uploads\/media\/.*/, (req, res, next) => {
-    if (req.session?.role === "admin" && req.session?.adminId) return next();
+    const isAdmin = req.session?.role === "admin" && !!req.session?.adminId;
+    const isReader = req.session?.role === "reader" && !!req.session?.readerId;
+    const isCover = req.path.startsWith("/uploads/media/covers/");
+    if (isAdmin || (isCover && isReader)) return next();
     return res.status(401).json({ error: "Authentication required" });
   });
 
@@ -5172,6 +5175,24 @@ Return JSON with:
       const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       if (body.length < 256) return res.status(400).json({ error: "Cover image is empty or invalid." });
       if (body.length > 12 * 1024 * 1024) return res.status(413).json({ error: "Cover image must be 12 MB or smaller." });
+
+      const hasPngSignature =
+        mime === "image/png" &&
+        body.length >= 8 &&
+        body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47 &&
+        body[4] === 0x0d && body[5] === 0x0a && body[6] === 0x1a && body[7] === 0x0a;
+      const hasJpegSignature =
+        mime === "image/jpeg" &&
+        body.length >= 3 &&
+        body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff;
+      const hasWebpSignature =
+        mime === "image/webp" &&
+        body.length >= 12 &&
+        body.subarray(0, 4).toString("ascii") === "RIFF" &&
+        body.subarray(8, 12).toString("ascii") === "WEBP";
+      if (!hasPngSignature && !hasJpegSignature && !hasWebpSignature) {
+        return res.status(400).json({ error: "The uploaded file does not match its declared image format." });
+      }
 
       const coversDir = path.resolve("uploads/media/covers", `project-${id}`);
       fs.mkdirSync(coversDir, { recursive: true });
