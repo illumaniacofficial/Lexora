@@ -122,11 +122,11 @@ function AdminLayout() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full overflow-hidden">
+      <div className="flex h-screen w-full overflow-hidden bg-[#0B090C]">
         <AppSidebar />
         <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
-          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-14 border-b border-[#c19d66]/10 bg-[#100d12]/95 backdrop-blur-xl shrink-0 shadow-[0_14px_40px_-34px_rgba(0,0,0,.9)]">
-            <div className="flex items-center gap-3"><SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-[#c19d66] transition-colors" aria-label="Toggle sidebar" /><div className="hidden sm:block"><p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#c19d66]/55">Lexora</p><p className="text-[11px] text-muted-foreground/55">Stories become worlds.</p></div></div>
+          <header className="flex min-w-0 items-center justify-between px-3 sm:px-4 md:px-6 h-14 border-b border-[#C0A06B]/10 bg-[#0D0A0E]/94 backdrop-blur-xl shrink-0">
+            <div className="flex items-center gap-3"><SidebarTrigger data-testid="button-sidebar-toggle" className="text-muted-foreground hover:text-[#C0A06B] transition-colors" aria-label="Toggle sidebar" /><div className="hidden sm:block"><p className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#C0A06B]/55">Lexora</p><p className="text-[11px] text-muted-foreground/55">Stories become worlds.</p></div></div>
             <div className="flex items-center gap-2 sm:gap-3">
               <Button
                 size="sm"
@@ -140,12 +140,12 @@ function AdminLayout() {
                 <span className="hidden sm:inline">Copilot</span>
               </Button>
               <NotificationCenter />
-              <div className="h-px w-10 bg-gradient-to-r from-[#8f4a5e] to-[#c19d66] opacity-70" />
+              <div className="h-px w-10 bg-gradient-to-r from-[#7E3E51] to-[#C0A06B] opacity-70" />
               <span className="text-[10px] font-mono text-muted-foreground/40 tracking-widest">v3.0</span>
             </div>
           </header>
           <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-            <main className="min-w-0 flex-1 overflow-hidden aurora-bg">
+            <main className="min-w-0 flex-1 overflow-hidden bg-[#0B090C]">
               <AdminRouter />
             </main>
             <LexoraCopilot open={copilotOpen} onOpen={() => setCopilotOpen(true)} onClose={() => setCopilotOpen(false)} />
