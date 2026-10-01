@@ -132,7 +132,7 @@ function AdminLayout() {
                 size="sm"
                 variant={copilotOpen ? "secondary" : "ghost"}
                 onClick={() => setCopilotOpen((value) => !value)}
-                className="h-8 gap-1.5 text-[9px] font-mono text-purple-300"
+                className="hidden md:inline-flex h-8 gap-1.5 text-[9px] font-mono text-purple-300"
                 data-testid="button-toggle-copilot"
                 aria-label="Toggle Lexora Copilot"
               >
