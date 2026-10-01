@@ -111,6 +111,39 @@ check(
     routes.includes('sourceType: "manual-idea"'),
 );
 
+const appShell = read("client/src/App.tsx");
+const copilot = read("client/src/components/lexora-copilot.tsx");
+
+check(
+  "global Lexora Copilot is docked into the app shell",
+  appShell.includes("LexoraCopilot") &&
+    appShell.includes('data-testid="button-toggle-copilot"') &&
+    appShell.includes("copilotOpen"),
+);
+
+check(
+  "Copilot automatically links project routes to project-aware chat",
+  copilot.includes("projectIdFromLocation") &&
+    copilot.includes('location.match(/^\\/projects\\/(\\d+)/)') &&
+    copilot.includes("projectId"),
+);
+
+check(
+  "Copilot includes quick prompts for common book brief fields",
+  copilot.includes("500-char Description") &&
+    copilot.includes("Target Audience") &&
+    copilot.includes("Tone & Style") &&
+    copilot.includes("Key Themes") &&
+    copilot.includes("Things to Avoid"),
+);
+
+check(
+  "Copilot persists conversations through existing chat APIs",
+  copilot.includes('/api/chat/conversations') &&
+    copilot.includes('/messages') &&
+    copilot.includes("conversations are saved"),
+);
+
 if (failures > 0) {
   console.error(`\nWave 05 validation failed: ${failures} invariant(s) broken.`);
   process.exit(1);
