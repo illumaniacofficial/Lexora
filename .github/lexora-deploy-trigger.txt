@@ -1,0 +1,1 @@
+Lexora production deployment trigger for LX-3.0 visual system and Settings 4.0.
