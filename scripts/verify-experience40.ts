@@ -55,5 +55,15 @@ check("sidebar retains narration integration", sidebar.includes("narrationState"
 check("app retains Lexora Copilot", app.includes("LexoraCopilot"));
 check("sidebar primary active style avoids purple neon", !sidebar.includes('bg-purple-500/10 text-purple-300'));
 
+const coverCardPath = "client/src/components/experience/project-cover-card.tsx";
+check("ProjectCoverCard exists", exists(coverCardPath));
+if (exists(coverCardPath)) {
+  const coverCard = read(coverCardPath);
+  check("ProjectCoverCard exports component", coverCard.includes("export function ProjectCoverCard"));
+  check("ProjectCoverCard handles missing covers deliberately", coverCard.includes("lexora-cover-placeholder"));
+  check("ProjectCoverCard supports compact mode", coverCard.includes("compact?: boolean"));
+  check("ProjectCoverCard bounds long titles", coverCard.includes("line-clamp-2") || coverCard.includes("truncate"));
+}
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
