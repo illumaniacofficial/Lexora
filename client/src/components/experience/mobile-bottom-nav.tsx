@@ -3,11 +3,11 @@ import { BookOpen, FolderOpen, Home, Plus, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { label: "Home", href: "/", icon: Home },
-  { label: "Library", href: "/library", icon: BookOpen },
+  { label: "Home", href: "/", icon: Home, primary: false },
+  { label: "Library", href: "/library", icon: BookOpen, primary: false },
   { label: "Create", href: "/projects/new", icon: Plus, primary: true },
-  { label: "Projects", href: "/projects", icon: FolderOpen },
-  { label: "More", href: "/settings", icon: MoreHorizontal },
+  { label: "Projects", href: "/projects", icon: FolderOpen, primary: false },
+  { label: "More", href: "/settings", icon: MoreHorizontal, primary: false },
 ] as const;
 
 export function MobileBottomNav() {
