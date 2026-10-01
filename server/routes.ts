@@ -4899,6 +4899,48 @@ Return JSON with:
     }
   });
 
+  app.post("/api/projects/:id/cover-upload", requireRole("editor"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const mime = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+      const extByMime: Record<string, string> = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+      };
+      const ext = extByMime[mime];
+      if (!ext) return res.status(415).json({ error: "Upload a PNG, JPEG, or WebP cover image." });
+
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (body.length < 256) return res.status(400).json({ error: "Cover image is empty or invalid." });
+      if (body.length > 12 * 1024 * 1024) return res.status(413).json({ error: "Cover image must be 12 MB or smaller." });
+
+      const coversDir = path.resolve("uploads/media/covers", `project-${id}`);
+      fs.mkdirSync(coversDir, { recursive: true });
+      const filename = `cover-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+      const absolutePath = path.join(coversDir, filename);
+      fs.writeFileSync(absolutePath, body);
+
+      const coverImageUrl = `/uploads/media/covers/project-${id}/${filename}`;
+      const variant = await storage.createCoverVariant({
+        projectId: id,
+        imageUrl: coverImageUrl,
+        prompt: "Uploaded by owner",
+        isSelected: true,
+      });
+      await storage.selectCoverVariant(id, variant.id);
+      await storage.updateProject(id, { coverImageUrl });
+
+      res.status(201).json({ coverImageUrl, variant });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.post("/api/projects/:id/generate-cover", requireRole("editor"), async (req, res) => {
     let prevStatus = "draft";
     try {
