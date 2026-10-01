@@ -111,5 +111,17 @@ if (exists(workspaceTabsPath)) {
   check("WorkspaceTabs avoids legacy primary neon", !workspaceTabs.includes("purple-500") && !workspaceTabs.includes("cyan-400"));
 }
 
+const projectDetail = read("client/src/pages/ProjectDetail.tsx");
+check("project workspace uses ProjectHero", projectDetail.includes("<ProjectHero"));
+check("project workspace uses WorkspaceTabs", projectDetail.includes("<WorkspaceTabs"));
+check("project workspace identifies itself", projectDetail.includes("Project Workspace"));
+check("project workspace removes old neon hero stripe", !projectDetail.includes('absolute top-0 left-0 right-0 h-[1px] neon-glow opacity-40'));
+for (const tab of ["chapters","canon","dna","marketing","continuity","market","pacing","business","studio","languages","logs"]) {
+  check(`project workspace preserves ${tab} tab`, projectDetail.includes(`value="${tab}"`));
+}
+check("project workspace preserves reader action", projectDetail.includes("button-read-book"));
+check("project workspace preserves export actions", projectDetail.includes("button-export-pdf") && projectDetail.includes("button-export-epub"));
+check("project workspace preserves autopilot controls", projectDetail.includes("button-start-project-autopilot") && projectDetail.includes("button-stop-project-autopilot"));
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
