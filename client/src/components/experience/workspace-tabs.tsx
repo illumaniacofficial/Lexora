@@ -9,7 +9,7 @@ interface WorkspaceTabsProps {
 
 export function WorkspaceTabs({ children, className }: WorkspaceTabsProps) {
   return (
-    <div className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]" data-testid="workspace-tab-scroll">
+    <div className="w-full max-w-full overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]" data-testid="project-workspace-tab-scroll">
       <TabsList
         className={cn(
           "h-11 min-w-max w-max flex-nowrap rounded-xl border border-[#C0A06B]/10 bg-[#131015]/86 p-1",
