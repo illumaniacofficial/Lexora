@@ -517,6 +517,11 @@ function parseId(raw: string | string[] | undefined): number | null {
   return isNaN(id) || id < 1 ? null : id;
 }
 
+function parseStringParam(raw: string | string[] | undefined): string | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 function conceptGenreToVertical(label: unknown): typeof VERTICALS[number] | null {
   if (typeof label !== "string") return null;
   const normalized = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -2363,7 +2368,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/concept-lab/ideas/:id", async (req, res) => {
     try {
       const input = savedIdeaPatchSchema.parse(req.body || {});
-      const row = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const row = await storage.getConceptDossier(dossierId);
       if (!row) return res.status(404).json({ error: "Saved idea not found" });
       if (row.status !== "saved" && row.status !== "archived") {
         return res.status(409).json({ error: "Only saved or archived ideas can be edited in the Idea Library." });
@@ -2456,7 +2463,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/concept-lab/dossiers/:id", async (req, res) => {
     try {
-      const dossier = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const dossier = await storage.getConceptDossier(dossierId);
       if (!dossier) return res.status(404).json({ error: "Dossier not found" });
       const property = dossier.propertyId ? await storage.getStudioProperty(dossier.propertyId) : null;
       res.json({ dossier, property, handoff: dossierProjectHandoff(dossier) });
@@ -2467,7 +2476,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.put("/api/concept-lab/dossiers/:id/handoff", requireRole("editor"), async (req, res) => {
     try {
-      const row = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const row = await storage.getConceptDossier(dossierId);
       if (!row) return res.status(404).json({ error: "Dossier not found" });
       if (row.sourceType === "manual-idea") {
         return res.status(409).json({ error: "Quick-captured ideas need a full Concept Dossier before project handoff." });
@@ -2516,7 +2527,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/concept-lab/dossiers/:id/handoff", async (req, res) => {
     try {
-      const dossier = await storage.getConceptDossier(req.params.id);
+      const dossierId = parseStringParam(req.params.id);
+      if (!dossierId) return res.status(400).json({ error: "Invalid dossier ID" });
+      const dossier = await storage.getConceptDossier(dossierId);
       if (!dossier) return res.status(404).json({ error: "Dossier not found" });
       if (dossier.sourceType === "manual-idea") {
         return res.status(409).json({ error: "Quick-captured ideas need a full Concept Dossier before they can create a project." });
