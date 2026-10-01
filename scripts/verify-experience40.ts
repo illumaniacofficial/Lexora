@@ -92,5 +92,24 @@ if (exists(mobileNavPath)) {
 check("app mounts mobile navigation", app.includes("MobileBottomNav"));
 check("app reserves mobile navigation space", app.includes("pb-[4.5rem]") || app.includes("pb-[72px]"));
 
+const projectHeroPath = "client/src/components/experience/project-hero.tsx";
+check("ProjectHero exists", exists(projectHeroPath));
+if (exists(projectHeroPath)) {
+  const projectHero = read(projectHeroPath);
+  check("ProjectHero exports component", projectHero.includes("export function ProjectHero"));
+  check("ProjectHero handles missing covers", projectHero.includes("lexora-cover-placeholder"));
+  check("ProjectHero bounds long titles", projectHero.includes("line-clamp") || projectHero.includes("break-words"));
+  check("ProjectHero avoids legacy primary neon", !projectHero.includes("purple-500") && !projectHero.includes("cyan-400"));
+}
+
+const workspaceTabsPath = "client/src/components/experience/workspace-tabs.tsx";
+check("WorkspaceTabs exists", exists(workspaceTabsPath));
+if (exists(workspaceTabsPath)) {
+  const workspaceTabs = read(workspaceTabsPath);
+  check("WorkspaceTabs exports component", workspaceTabs.includes("export function WorkspaceTabs"));
+  check("WorkspaceTabs supports horizontal overflow", workspaceTabs.includes("overflow-x-auto"));
+  check("WorkspaceTabs avoids legacy primary neon", !workspaceTabs.includes("purple-500") && !workspaceTabs.includes("cyan-400"));
+}
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
