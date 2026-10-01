@@ -170,6 +170,7 @@ export default function Analytics() {
                         <Line yAxisId="right" type="monotone" dataKey="cost" name="Cost ($)" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
                       </LineChart>
                     </ResponsiveContainer>
+                    </div>
                   </div>
                 )}
               </CardContent>
