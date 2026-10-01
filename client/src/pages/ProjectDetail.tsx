@@ -3072,7 +3072,7 @@ export default function ProjectDetail() {
             <Card className="lexora-editorial-surface rounded-[22px] border-[#C0A06B]/14 bg-[#C0A06B]/[.025]" data-testid="outline-generation-status">
               <CardContent className="py-4 flex items-start gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#C0A06B]/16 bg-[#7E3E51]/10">
-                  <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin text-[#C0A06B]/70" />
                 </div>
                 <div className="min-w-0">
                   <p className="lexora-display text-base font-semibold text-[#EFE5D9]">Building your book architecture</p>
