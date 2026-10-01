@@ -130,5 +130,18 @@ check("manuscript preserves save action", projectDetail.includes("button-save-ed
 check("manuscript preserves inline Continue and Rewrite", projectDetail.includes("button-cowrite-continue-") && projectDetail.includes("button-cowrite-rewrite-"));
 check("manuscript preserves viewer edit guard", projectDetail.includes('const canEdit = role !== "viewer"'));
 
+const chapterCardStart = projectDetail.indexOf("function ChapterCard");
+const chapterCardEnd = projectDetail.indexOf("function ContinuityPanel", chapterCardStart);
+const chapterCardSurface = projectDetail.slice(chapterCardStart, chapterCardEnd);
+check(
+  "primary chapter workspace drops legacy purple/cyan/violet identity",
+  !/purple-(?:300|400|500)|cyan-(?:300|400|500)|violet-(?:300|400|500)/.test(chapterCardSurface),
+);
+
+const pipelineStart = projectDetail.indexOf("const pipelineActions");
+const pipelineEnd = projectDetail.indexOf("return (", pipelineStart);
+const pipelineSurface = projectDetail.slice(pipelineStart, pipelineEnd);
+check("project production pipeline no longer carries neon style tokens", !pipelineSurface.includes("neon-glow"));
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
