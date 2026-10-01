@@ -1029,6 +1029,155 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.status(401).json({ authenticated: false });
   });
 
+  app.get("/api/reader/books/:projectId/reading-state", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to save reading progress." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const result: any = await db.execute(sql`
+        SELECT id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+        FROM reader_bookmarks
+        WHERE project_id = ${projectId}
+          AND owner_type = ${access.owner.ownerType}
+          AND owner_key = ${access.owner.ownerKey}
+        ORDER BY CASE WHEN kind = 'progress' THEN 0 ELSE 1 END, created_at DESC
+      `);
+      const rows = (result?.rows || result || []) as any[];
+      const progress = rows.find((row) => row.kind === "progress") || null;
+      const bookmarks = rows.filter((row) => row.kind === "bookmark");
+      res.json({ projectId, progress, bookmarks });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/reader/books/:projectId/progress", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to save reading progress." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const input = z.object({
+        pageIndex: z.number().int().min(0),
+        chapterNumber: z.number().int().nullable().optional(),
+        chapterTitle: z.string().max(300).nullable().optional(),
+      }).parse(req.body || {});
+
+      const result: any = await db.execute(sql`
+        INSERT INTO reader_bookmarks (
+          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, label, updated_at
+        ) VALUES (
+          ${projectId},
+          ${access.owner.ownerType},
+          ${access.owner.ownerKey},
+          'progress',
+          ${input.pageIndex},
+          ${input.chapterNumber ?? null},
+          ${input.chapterTitle ?? null},
+          'Resume reading',
+          now()
+        )
+        ON CONFLICT (project_id, owner_type, owner_key, kind)
+          WHERE kind = 'progress'
+        DO UPDATE SET
+          page_index = EXCLUDED.page_index,
+          chapter_number = EXCLUDED.chapter_number,
+          chapter_title = EXCLUDED.chapter_title,
+          updated_at = now()
+        RETURNING id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+      `);
+      const row = result?.rows?.[0] || result?.[0] || null;
+      res.json(row);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/reader/books/:projectId/bookmarks", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      if (!projectId) return res.status(400).json({ error: "Invalid project ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to save bookmarks." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const input = z.object({
+        pageIndex: z.number().int().min(0),
+        chapterNumber: z.number().int().nullable().optional(),
+        chapterTitle: z.string().max(300).nullable().optional(),
+        label: z.string().trim().max(300).optional(),
+      }).parse(req.body || {});
+
+      const existing: any = await db.execute(sql`
+        SELECT id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+        FROM reader_bookmarks
+        WHERE project_id = ${projectId}
+          AND owner_type = ${access.owner.ownerType}
+          AND owner_key = ${access.owner.ownerKey}
+          AND kind = 'bookmark'
+          AND page_index = ${input.pageIndex}
+        LIMIT 1
+      `);
+      const existingRow = existing?.rows?.[0] || existing?.[0] || null;
+      if (existingRow) return res.json(existingRow);
+
+      const result: any = await db.execute(sql`
+        INSERT INTO reader_bookmarks (
+          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, label
+        ) VALUES (
+          ${projectId},
+          ${access.owner.ownerType},
+          ${access.owner.ownerKey},
+          'bookmark',
+          ${input.pageIndex},
+          ${input.chapterNumber ?? null},
+          ${input.chapterTitle ?? null},
+          ${input.label || null}
+        )
+        RETURNING id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+      `);
+      const row = result?.rows?.[0] || result?.[0] || null;
+      res.status(201).json(row);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/reader/books/:projectId/bookmarks/:bookmarkId", async (req, res) => {
+    try {
+      const projectId = parseId(req.params.projectId);
+      const bookmarkId = parseId(req.params.bookmarkId);
+      if (!projectId || !bookmarkId) return res.status(400).json({ error: "Invalid ID" });
+      const access = await ensureReadingAccess(req, projectId);
+      if (!access.owner) return res.status(401).json({ error: "Sign in to manage bookmarks." });
+      if (!access.project) return res.status(404).json({ error: "Book not found" });
+      if (!access.allowed) return res.status(403).json({ error: "Book access required" });
+
+      const result: any = await db.execute(sql`
+        DELETE FROM reader_bookmarks
+        WHERE id = ${bookmarkId}
+          AND project_id = ${projectId}
+          AND owner_type = ${access.owner.ownerType}
+          AND owner_key = ${access.owner.ownerKey}
+          AND kind = 'bookmark'
+        RETURNING id
+      `);
+      const deleted = result?.rows?.[0] || result?.[0] || null;
+      if (!deleted) return res.status(404).json({ error: "Bookmark not found" });
+      res.json({ success: true, id: bookmarkId });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   app.use((req: Request, res: Response, next: NextFunction) => {
     const aiPaths = [
       /\/api\/projects\/\d+\/generate-outline/,
