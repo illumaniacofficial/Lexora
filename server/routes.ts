@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL, OPENAI_CONFIGURED } from "./openai";
+import { openai, FAST_MODEL, HIGH_MODEL, IMAGE_MODEL, OPENAI_CONFIGURED, getCustomProviderPublic, saveCustomProvider, testCustomProvider, isCloudTextConfigured } from "./openai";
 import { buildConsistencyContext, type ContinuityExtras } from "./consistency";
 import { runEditorialBoard, humanizeChapter, runBetaReaders } from "./editorial";
 import { deriveStyleProfile, buildStyleContext } from "./style";
@@ -1806,7 +1806,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       runtimeMode: config.studio.runtimeMode,
       privateStudio: config.studio.privateMode,
       commerceEnabled: config.studio.commerceEnabled,
-      cloudConfigured: config.openai.configured,
+      cloudConfigured: await isCloudTextConfigured(),
       local: {
         provider: "ollama",
         model: config.ollama.model,
@@ -3418,7 +3418,7 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       const useLocalDraft =
         (config.studio.runtimeMode === "off-grid" && localAvailable) ||
         (config.studio.runtimeMode === "hybrid" && localAvailable) ||
-        (!config.openai.configured && localAvailable);
+        (!(await isCloudTextConfigured()) && localAvailable);
 
       if (config.studio.runtimeMode === "off-grid" && !localAvailable) {
         throw new Error("Cannot draft chapter in off-grid mode because Ollama is unavailable.");
@@ -5462,6 +5462,38 @@ Return JSON with:
       res.json(settings);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/settings/custom-ai-provider", requireRole("owner"), async (_req, res) => {
+    try {
+      res.json(await getCustomProviderPublic());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/settings/custom-ai-provider", requireRole("owner"), async (req, res) => {
+    try {
+      const input = z.object({
+        enabled: z.boolean(),
+        name: z.string().trim().min(1).max(120),
+        baseUrl: z.string().trim().max(500),
+        apiKey: z.string().max(1000).optional(),
+        fastModel: z.string().trim().max(250),
+        writingModel: z.string().trim().max(250),
+      }).parse(req.body || {});
+      res.json(await saveCustomProvider(input));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/settings/custom-ai-provider/test", requireRole("owner"), async (_req, res) => {
+    try {
+      res.json(await testCustomProvider());
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
   });
 
