@@ -45,5 +45,8 @@ jobs:
       - name: Wave 05 Canon regression gate
         run: npm run verify:wave05
 
+      - name: Waves 01-05 production integrity gate
+        run: npm run verify:revival
+
       - name: Production build
         run: npm run build

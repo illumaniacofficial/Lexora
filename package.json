@@ -10,7 +10,8 @@
     "check": "tsc",
     "verify:wave03": "tsx scripts/verify-wave03.ts",
     "verify:wave05": "tsx scripts/verify-wave05.ts",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "verify:revival": "tsx scripts/verify-revival01-05.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
