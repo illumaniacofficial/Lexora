@@ -81,5 +81,16 @@ check("library keeps search", library.includes("input-library-search"));
 check("library keeps exports", library.includes("ExportMenu"));
 check("library avoids fixed-height clipping", !library.includes("h-screen overflow-hidden"));
 
+const mobileNavPath = "client/src/components/experience/mobile-bottom-nav.tsx";
+check("mobile bottom nav exists", exists(mobileNavPath));
+if (exists(mobileNavPath)) {
+  const mobileNav = read(mobileNavPath);
+  check("mobile nav includes Home and Library", mobileNav.includes("Home") && mobileNav.includes("Library"));
+  check("mobile nav avoids unimplemented routes", !mobileNav.includes('"/worlds"') && !mobileNav.includes('"/characters"') && !mobileNav.includes('"/cinema"') && !mobileNav.includes('"/research"'));
+  check("mobile nav respects safe area", mobileNav.includes("safe-area-inset-bottom"));
+}
+check("app mounts mobile navigation", app.includes("MobileBottomNav"));
+check("app reserves mobile navigation space", app.includes("pb-[4.5rem]") || app.includes("pb-[72px]"));
+
 console.log(`\n${failures === 0 ? "ALL EXPERIENCE 4.0 CHECKS PASSED" : `${failures} EXPERIENCE 4.0 CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);
