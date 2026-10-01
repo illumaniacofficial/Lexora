@@ -6,6 +6,7 @@ on:
       - revival/wave-01-foundation
       - revival/wave-04-emergent-runtime
       - "codex/**"
+      - "lx-4.0/**"
   pull_request:
     branches:
       - main
@@ -38,6 +39,9 @@ jobs:
 
       - name: TypeScript check
         run: npm run check
+
+      - name: Lexora Experience 4.0 visual contract
+        run: npm run verify:experience40
 
       - name: Wave 03 regression gate
         run: npm run verify:wave03
