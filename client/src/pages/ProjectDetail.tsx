@@ -2730,7 +2730,7 @@ export default function ProjectDetail() {
   ];
 
   return (
-    <div className="p-8 space-y-6 overflow-y-auto h-full">
+    <div className="h-full min-w-0 overflow-x-hidden overflow-y-auto p-4 sm:p-5 md:p-6 xl:p-8 space-y-5 md:space-y-6">
       <Helmet>
         <title>{project.title} — Lexora</title>
         <meta name="description" content={`${project.title} by ${project.authorName || "Unknown Author"} — ${statusLabel(project.status)} in ${VERTICAL_LABELS[project.vertical] || project.vertical}.`} />
