@@ -1039,7 +1039,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!access.allowed) return res.status(403).json({ error: "Book access required" });
 
       const result: any = await db.execute(sql`
-        SELECT id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+        SELECT id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
         FROM reader_bookmarks
         WHERE project_id = ${projectId}
           AND owner_type = ${access.owner.ownerType}
@@ -1068,11 +1068,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         pageIndex: z.number().int().min(0),
         chapterNumber: z.number().int().nullable().optional(),
         chapterTitle: z.string().max(300).nullable().optional(),
+        pageInChapter: z.number().int().min(1).nullable().optional(),
       }).parse(req.body || {});
 
       const result: any = await db.execute(sql`
         INSERT INTO reader_bookmarks (
-          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, label, updated_at
+          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, updated_at
         ) VALUES (
           ${projectId},
           ${access.owner.ownerType},
@@ -1081,6 +1082,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ${input.pageIndex},
           ${input.chapterNumber ?? null},
           ${input.chapterTitle ?? null},
+          ${input.pageInChapter ?? null},
           'Resume reading',
           now()
         )
@@ -1090,8 +1092,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           page_index = EXCLUDED.page_index,
           chapter_number = EXCLUDED.chapter_number,
           chapter_title = EXCLUDED.chapter_title,
+          page_in_chapter = EXCLUDED.page_in_chapter,
           updated_at = now()
-        RETURNING id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+        RETURNING id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
       `);
       const row = result?.rows?.[0] || result?.[0] || null;
       res.json(row);
@@ -1113,11 +1116,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         pageIndex: z.number().int().min(0),
         chapterNumber: z.number().int().nullable().optional(),
         chapterTitle: z.string().max(300).nullable().optional(),
+        pageInChapter: z.number().int().min(1).nullable().optional(),
         label: z.string().trim().max(300).optional(),
       }).parse(req.body || {});
 
       const existing: any = await db.execute(sql`
-        SELECT id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
+        SELECT id, kind, page_index, chapter_number, chapter_title, page_in_chapter, label, created_at, updated_at
         FROM reader_bookmarks
         WHERE project_id = ${projectId}
           AND owner_type = ${access.owner.ownerType}
@@ -1131,7 +1135,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const result: any = await db.execute(sql`
         INSERT INTO reader_bookmarks (
-          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, label
+          project_id, owner_type, owner_key, kind, page_index, chapter_number, chapter_title, page_in_chapter, label
         ) VALUES (
           ${projectId},
           ${access.owner.ownerType},
@@ -1140,6 +1144,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ${input.pageIndex},
           ${input.chapterNumber ?? null},
           ${input.chapterTitle ?? null},
+          ${input.pageInChapter ?? null},
           ${input.label || null}
         )
         RETURNING id, kind, page_index, chapter_number, chapter_title, label, created_at, updated_at
