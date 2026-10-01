@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon, Wand2, Loader2 } from "lucide-react";
+import { ArrowLeft, Sparkles, BookOpen, Check, Hexagon, Wand2, Loader2, Star } from "lucide-react";
 import { Link } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { VERTICALS, LANGUAGES } from "@shared/schema";
@@ -29,6 +29,7 @@ const schema = z.object({
   avoid: z.string().max(500).optional(),
   lengthDepth: z.enum(["auto", "concise", "standard", "comprehensive"]).optional(),
   vertical: z.enum(VERTICALS),
+  genres: z.array(z.enum(VERTICALS)).min(1, "Select at least one genre").max(6, "Choose up to 6 genres"),
   targetLanguage: z.enum(LANGUAGES),
   seriesId: z.string().optional(),
   styleFingerprintId: z.string().optional(),
@@ -57,6 +58,7 @@ function composeGuidance(data: FormData): string | undefined {
   if (data.keyThemes?.trim()) sections.push(`KEY THEMES / TOPICS TO COVER:\n${data.keyThemes.trim()}`);
   if (data.comparableTitles?.trim()) sections.push(`COMPARABLE / COMPETITOR TITLES:\n${data.comparableTitles.trim()}`);
   if (data.avoid?.trim()) sections.push(`THINGS TO AVOID:\n${data.avoid.trim()}`);
+  if (data.genres?.length) sections.push(`GENRE BLEND:\n${data.genres.map((genre) => VERTICAL_LABELS[genre] || genre).join(", ")}`);
   if (data.lengthDepth && data.lengthDepth !== "auto" && LENGTH_GUIDANCE[data.lengthDepth]) {
     sections.push(`DESIRED LENGTH / DEPTH:\n${LENGTH_GUIDANCE[data.lengthDepth]}`);
   }
@@ -110,16 +112,25 @@ export default function NewProject() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [genreSuggestions, setGenreSuggestions] = useState<Array<{ genre: FormData["vertical"]; confidence: number; reason: string }>>([]);
+  const [genreSuggestionsLoading, setGenreSuggestionsLoading] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", targetAudience: "", toneStyle: "", keyThemes: "", comparableTitles: "", avoid: "", lengthDepth: "auto", vertical: "money", targetLanguage: "english", seriesId: "none", styleFingerprintId: "none" },
+    defaultValues: { title: "", authorName: "Sergio A. Delgado", description: "", targetAudience: "", toneStyle: "", keyThemes: "", comparableTitles: "", avoid: "", lengthDepth: "auto", vertical: "money", genres: ["money"], targetLanguage: "english", seriesId: "none", styleFingerprintId: "none" },
   });
 
   const { data: seriesList = [] } = useQuery<{ id: number; title: string; bookCount: number }[]>({ queryKey: ["/api/series"] });
   const { data: styleList = [] } = useQuery<{ id: number; name: string }[]>({ queryKey: ["/api/style-fingerprints"] });
 
   const currentTitle = form.watch("title");
+  const currentDescription = form.watch("description");
+  const currentAudience = form.watch("targetAudience");
+  const currentTone = form.watch("toneStyle");
+  const currentThemes = form.watch("keyThemes");
+  const currentComparables = form.watch("comparableTitles");
+  const selectedGenres = form.watch("genres");
+  const selectedGenreKey = (selectedGenres || []).join("|");
 
   useEffect(() => {
     if (currentTitle.length < 5) {
@@ -153,11 +164,59 @@ export default function NewProject() {
     return () => clearTimeout(timer);
   }, [currentTitle]);
 
+  useEffect(() => {
+    const context = [
+      currentTitle,
+      currentDescription,
+      currentAudience,
+      currentTone,
+      currentThemes,
+      currentComparables,
+    ].filter(Boolean).join("\n").trim();
+
+    if (context.length < 24) {
+      setGenreSuggestions([]);
+      return;
+    }
+
+    const detectGenres = async () => {
+      setGenreSuggestionsLoading(true);
+      try {
+        const res = await fetch("/api/projects/suggest-genres", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            title: currentTitle,
+            description: currentDescription,
+            targetAudience: currentAudience,
+            toneStyle: currentTone,
+            keyThemes: currentThemes,
+            comparableTitles: currentComparables,
+            selectedGenres,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setGenreSuggestions(Array.isArray(data.suggestions) ? data.suggestions : []);
+        }
+      } catch (err) {
+        console.error("Failed to detect genres:", err);
+      } finally {
+        setGenreSuggestionsLoading(false);
+      }
+    };
+
+    const timer = window.setTimeout(detectGenres, 900);
+    return () => window.clearTimeout(timer);
+  }, [currentTitle, currentDescription, currentAudience, currentTone, currentThemes, currentComparables, selectedGenreKey]);
+
   const mutation = useMutation({
     mutationFn: (data: FormData) => apiRequest("POST", "/api/projects", {
       title: data.title,
       authorName: data.authorName,
       vertical: data.vertical,
+      genres: data.genres,
       targetLanguage: data.targetLanguage,
       description: composeGuidance(data),
       status: "draft",
@@ -178,7 +237,7 @@ export default function NewProject() {
     <div className="p-4 md:p-8 max-w-3xl mx-auto overflow-y-auto h-full">
       <Helmet>
         <title>New Manuscript — Lexora</title>
-        <meta name="description" content="Initialize a new book manuscript — set your title, author, vertical, and language to start the AI publishing pipeline." />
+        <meta name="description" content="Initialize a new book manuscript — set your title, author, genres, and language to start the Lexora publishing workflow." />
       </Helmet>
       <div className="flex items-center gap-3 mb-5 md:mb-8">
         <Link href="/projects">
@@ -194,7 +253,7 @@ export default function NewProject() {
           <span className="text-[9px] font-mono font-bold text-purple-400/60 tracking-[0.2em] uppercase">INITIALIZE</span>
         </div>
         <h1 className="text-2xl md:text-3xl font-bold tracking-tighter">New <span className="shimmer-text">Manuscript</span></h1>
-        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Configure your book and let AI generate the rest</p>
+        <p className="text-muted-foreground/50 text-[11px] font-mono mt-1">Configure your book and let Lexora build from your creative direction</p>
       </div>
 
       <div className="line-glow mb-5 md:mb-8" />
@@ -217,6 +276,7 @@ export default function NewProject() {
                     onClick={() => {
                       form.setValue("title", tpl.title, { shouldValidate: true });
                       form.setValue("vertical", tpl.vertical, { shouldValidate: true });
+                      form.setValue("genres", [tpl.vertical], { shouldValidate: true });
                       form.setValue("description", tpl.description, { shouldValidate: true });
                       toast({ title: "Template applied", description: tpl.label });
                     }}
@@ -397,11 +457,73 @@ export default function NewProject() {
 
           <Card className="border-border/30 bg-card/40">
             <CardHeader className="pb-4">
-              <CardTitle className="text-sm font-bold tracking-tight">Genre / Vertical</CardTitle>
-              <CardDescription className="text-[11px] font-mono text-muted-foreground/40">Select the genre for AI tone, structure, and targeting</CardDescription>
+              <CardTitle className="text-sm font-bold tracking-tight">Genres</CardTitle>
+              <CardDescription className="text-[11px] font-mono text-muted-foreground/40">
+                Blend multiple genres. Lexora keeps one Primary Genre for legacy workflows and stores the complete blend in Canon.
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <FormField control={form.control} name="vertical" render={({ field }) => (
+            <CardContent className="space-y-5">
+              {(genreSuggestionsLoading || genreSuggestions.length > 0) && (
+                <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-3" data-testid="genre-detection-review">
+                  <div className="flex items-center justify-between gap-3 mb-2.5">
+                    <div>
+                      <div className="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-purple-300/80">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Lexora detected
+                      </div>
+                      <p className="text-[9px] font-mono text-muted-foreground/40 mt-1">Suggestions only — review them before adding anything.</p>
+                    </div>
+                    {genreSuggestionsLoading ? <Loader2 className="h-4 w-4 animate-spin text-purple-400/60" /> : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-[8px] font-mono border-purple-500/25"
+                        onClick={() => {
+                          const current = form.getValues("genres");
+                          const additions = genreSuggestions.map((item) => item.genre).filter((genre) => !current.includes(genre));
+                          const next = [...current, ...additions].slice(0, 6);
+                          form.setValue("genres", next, { shouldValidate: true, shouldDirty: true });
+                        }}
+                        disabled={genreSuggestions.every((item) => selectedGenres.includes(item.genre)) || selectedGenres.length >= 6}
+                        data-testid="button-accept-detected-genres"
+                      >
+                        <Check className="h-3 w-3 mr-1" /> ADD DETECTED
+                      </Button>
+                    )}
+                  </div>
+                  {!genreSuggestionsLoading && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {genreSuggestions.map((item) => {
+                        const alreadySelected = selectedGenres.includes(item.genre);
+                        return (
+                          <button
+                            key={item.genre}
+                            type="button"
+                            onClick={() => {
+                              if (alreadySelected || selectedGenres.length >= 6) return;
+                              form.setValue("genres", [...selectedGenres, item.genre], { shouldValidate: true, shouldDirty: true });
+                            }}
+                            className={`text-left rounded-lg border p-2.5 transition-all ${alreadySelected
+                              ? "border-emerald-500/20 bg-emerald-500/[0.05]"
+                              : "border-border/20 bg-card/30 hover:border-purple-500/30 hover:bg-purple-500/[0.05]"}`}
+                            data-testid={`detected-genre-${item.genre}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-bold">{VERTICAL_ICONS[item.genre] || "📖"} {VERTICAL_LABELS[item.genre] || item.genre}</span>
+                              <span className="text-[8px] font-mono text-muted-foreground/40">{Math.round(item.confidence * 100)}%</span>
+                            </div>
+                            <p className="text-[9px] leading-snug text-muted-foreground/45 mt-1">{item.reason}</p>
+                            <p className="text-[8px] font-mono mt-1.5 text-purple-300/60">{alreadySelected ? "SELECTED" : "TAP TO ADD"}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <FormField control={form.control} name="genres" render={({ field }) => (
                 <FormItem>
                   <FormControl>
                     <div className="space-y-6">
@@ -410,10 +532,33 @@ export default function NewProject() {
                           <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-muted-foreground/40 mb-2.5 px-1">{group.label}</div>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                             {group.genres.map((v) => {
-                              const isSelected = field.value === v;
+                              const isSelected = field.value.includes(v);
+                              const isPrimary = form.watch("vertical") === v;
                               return (
                                 <button
-                                  key={v} type="button" onClick={() => field.onChange(v)} data-testid={`vertical-${v}`}
+                                  key={v}
+                                  type="button"
+                                  onClick={() => {
+                                    const current = field.value;
+                                    if (isSelected) {
+                                      if (current.length === 1) {
+                                        toast({ title: "Keep at least one genre", description: "Every project needs a primary genre." });
+                                        return;
+                                      }
+                                      const next = current.filter((genre) => genre !== v);
+                                      field.onChange(next);
+                                      if (form.getValues("vertical") === v) {
+                                        form.setValue("vertical", next[0], { shouldValidate: true, shouldDirty: true });
+                                      }
+                                      return;
+                                    }
+                                    if (current.length >= 6) {
+                                      toast({ title: "Genre blend is full", description: "Choose up to 6 genres for one project." });
+                                      return;
+                                    }
+                                    field.onChange([...current, v]);
+                                  }}
+                                  data-testid={`genre-${v}`}
                                   className={`relative flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-300 ${isSelected
                                     ? "border-purple-500/40 bg-purple-500/10 glow-border"
                                     : "border-border/20 bg-card/20 hover:border-border/40 hover:bg-white/[0.02]"}`}
@@ -423,10 +568,11 @@ export default function NewProject() {
                                       <Check className="h-2.5 w-2.5 text-white" />
                                     </div>
                                   )}
-                                  <span className="text-lg">{VERTICAL_ICONS[v] || "\u{1F4D6}"}</span>
-                                  <span className={`text-[11px] font-bold tracking-tight ${isSelected ? "text-purple-300" : "text-muted-foreground/70"}`}>
+                                  <span className="text-lg">{VERTICAL_ICONS[v] || "📖"}</span>
+                                  <span className={`pr-4 text-[11px] font-bold tracking-tight ${isSelected ? "text-purple-300" : "text-muted-foreground/70"}`}>
                                     {VERTICAL_LABELS[v] || v}
                                   </span>
+                                  {isPrimary && <span className="absolute bottom-1.5 right-2 text-[7px] font-mono text-amber-300/70">PRIMARY</span>}
                                 </button>
                               );
                             })}
@@ -435,8 +581,33 @@ export default function NewProject() {
                       ))}
                     </div>
                   </FormControl>
+                  <FormMessage />
                 </FormItem>
               )} />
+
+              <div className="rounded-xl border border-border/20 bg-card/20 p-3" data-testid="selected-genre-blend">
+                <p className="text-[9px] font-mono uppercase tracking-[0.18em] text-muted-foreground/40 mb-2">Selected genre blend · choose the primary</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedGenres.map((genre) => {
+                    const primary = form.watch("vertical") === genre;
+                    return (
+                      <button
+                        key={genre}
+                        type="button"
+                        onClick={() => form.setValue("vertical", genre, { shouldValidate: true, shouldDirty: true })}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[9px] font-mono transition-all ${primary
+                          ? "border-amber-400/35 bg-amber-400/10 text-amber-200"
+                          : "border-border/25 bg-card/30 text-muted-foreground/60 hover:border-purple-500/30 hover:text-purple-200"}`}
+                        data-testid={`button-primary-genre-${genre}`}
+                      >
+                        {primary ? <Star className="h-3 w-3 fill-current" /> : null}
+                        {VERTICAL_LABELS[genre] || genre}
+                        {primary ? " · PRIMARY" : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
