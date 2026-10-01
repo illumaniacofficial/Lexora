@@ -23,6 +23,8 @@ import { executeAutopilotRun, isAutopilotRunning, requestAutopilotStop, parseStr
 import { notify } from "./notify";
 import { saveDbSeed } from "./seed";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
+import { db } from "./db";
 import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
@@ -935,6 +937,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true });
     });
   });
+
+  function readingOwner(req: Request): { ownerType: "admin" | "reader"; ownerKey: string } | null {
+    if (req.session?.role === "admin" && req.session.adminId) {
+      return { ownerType: "admin", ownerKey: String(req.session.adminId) };
+    }
+    if (req.session?.role === "reader" && req.session.readerId) {
+      return { ownerType: "reader", ownerKey: String(req.session.readerId) };
+    }
+    return null;
+  }
+
+  async function ensureReadingAccess(req: Request, projectId: number) {
+    const owner = readingOwner(req);
+    if (!owner) return { owner: null, project: null, allowed: false };
+
+    const project = await storage.getProject(projectId);
+    if (!project) return { owner, project: null, allowed: false };
+    if (owner.ownerType === "admin") return { owner, project, allowed: true };
+
+    const allowed = await readerHasBookAccess(Number(owner.ownerKey), project);
+    return { owner, project, allowed };
+  }
 
   app.get("/api/auth/me", (req, res) => {
     if (req.session?.role === "admin" && req.session?.adminId) {
