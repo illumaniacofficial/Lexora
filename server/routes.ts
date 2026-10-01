@@ -2833,20 +2833,15 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       }));
 
       // Keep the old outline intact until every part of the new result has
-      // validated. Only then perform the durable replacement.
-      await storage.upsertBookDna({
+      // validated, then atomically commit DNA + chapters + project state.
+      await storage.commitOutline(projectId, {
         projectId,
         corePromise: result.corePromise,
         readerAvatar: result.readerAvatar,
         toneRules: result.toneRules,
         transformationArc: result.transformationArc,
         frameworkSummary: result.frameworkSummary,
-      });
-      await storage.replaceOutlineChapters(projectId, newChapters);
-      await storage.updateProject(projectId, {
-        chapterCount: newChapters.length,
-        status: "writing",
-      });
+      }, newChapters);
       await storage.createNotification({
         kind: "pipeline",
         title: `Outline ready: ${project.title}`,
@@ -2887,11 +2882,18 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
         return res.status(202).json({ projectId: id, status: "outlining", alreadyRunning: true });
       }
 
+      const currentChapters = await storage.getChapters(id);
+      if (currentChapters.some((chapter) => chapter.status === "generating")) {
+        return res.status(409).json({
+          error: "A chapter is currently writing. Finish or cancel chapter generation before replacing the outline.",
+        });
+      }
+
       const job: OutlineGenerationJob = {
         cancelled: false,
         startedAt: Date.now(),
         previousStatus: project.status === "outlining"
-          ? ((await storage.getChapters(id)).length > 0 ? "writing" : "draft")
+          ? (currentChapters.length > 0 ? "writing" : "draft")
           : project.status,
       };
       outlineGenerationJobs.set(id, job);
@@ -3021,6 +3023,9 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
       const project = await storage.getProject(projectId);
       const chapter = await storage.getChapter(chapterId);
       if (!project || !chapter || chapter.projectId !== projectId) return res.status(404).json({ error: "Not found" });
+      if (project.status === "outlining" || outlineGenerationJobs.has(projectId)) {
+        return res.status(409).json({ error: "The outline is being rebuilt. Wait for it to finish before writing chapters." });
+      }
 
       const existing = chapterGenerationJobs.get(chapterId);
       if (existing && !existing.cancelled) {
