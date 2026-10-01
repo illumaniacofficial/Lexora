@@ -381,20 +381,16 @@ export default function Library() {
             <div className="grid gap-4 lg:grid-cols-2">
               {filtered.map(book => (
                 <div key={book.id} className="lexora-editorial-surface rounded-[22px] p-4">
-                  <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-4">
-                    <ProjectCoverCard
-                      id={book.id}
-                      title={book.title}
-                      href={`/projects/${book.id}`}
-                      coverUrl={book.hasCover ? `/api/projects/${book.id}/cover-image` : null}
-                      compact
-                    />
-                    <div className="min-w-0">
-                      <p className="lexora-kicker">{VERTICAL_LABELS[book.vertical] || book.vertical}</p>
-                      <Link href={`/projects/${book.id}`}><h3 className="lexora-display mt-1 line-clamp-2 text-xl font-semibold text-[#EFE5D9]">{book.title}</h3></Link>
-                      <p className="mt-1 text-[11px] text-[#BCAF9F]/45">{book.authorName || "Unknown author"} · #{book.rank}</p>
-                    </div>
-                  </div>
+                  <ProjectCoverCard
+                    id={book.id}
+                    title={book.title}
+                    href={`/projects/${book.id}`}
+                    coverUrl={book.hasCover ? `/api/projects/${book.id}/cover-image` : null}
+                    status={`#${book.rank}`}
+                    genre={VERTICAL_LABELS[book.vertical] || book.vertical}
+                    meta={book.authorName || "Unknown author"}
+                    compact
+                  />
                   {book.shortBlurb ? <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#BCAF9F]/55">{book.shortBlurb}</p> : null}
                   <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[#C0A06B]/10 pt-3 font-mono text-[9px] text-[#BCAF9F]/35">
                     <span>{book.wordCount.toLocaleString()} words</span>
