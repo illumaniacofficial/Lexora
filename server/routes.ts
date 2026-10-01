@@ -471,6 +471,21 @@ const patchProjectSchema = z.object({
   priceUsd: z.number().min(0).max(9999).optional(),
 }).strict();
 
+const outlineChapterSchema = z.object({
+  chapterNumber: z.coerce.number().int().positive(),
+  title: z.string().trim().min(1).max(300),
+  blueprint: z.string().trim().min(20).max(6000),
+});
+
+const outlineResultSchema = z.object({
+  corePromise: z.string().trim().min(1),
+  readerAvatar: z.string().trim().min(1),
+  toneRules: z.string().trim().min(1),
+  transformationArc: z.string().trim().min(1),
+  frameworkSummary: z.string().trim().min(1),
+  chapters: z.array(outlineChapterSchema).min(1).max(30),
+});
+
 function parseId(raw: string | string[] | undefined): number | null {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (typeof value !== "string") return null;
@@ -604,11 +619,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const config = getConfig();
   await ensureAdminUser();
 
+  // API payloads are live application state. Do not let browser/proxy ETags
+  // turn polling into body-less 304 responses that can strand the UI on stale data.
+  app.use("/api", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    next();
+  });
+
   // Long-running chapter writes are detached from the browser request.
   // The token is also a generation epoch: an old/cancelled job may finish at
   // the provider, but it is never allowed to overwrite newer manuscript state.
   type ChapterGenerationJob = { cancelled: boolean; startedAt: number };
+  type OutlineGenerationJob = { cancelled: boolean; startedAt: number; previousStatus: string };
   const chapterGenerationJobs = new Map<number, ChapterGenerationJob>();
+  const outlineGenerationJobs = new Map<number, OutlineGenerationJob>();
 
   // In-memory work cannot survive a process restart. Recover only the transient
   // "generating" marker; never touch completed manuscript content.
@@ -2736,21 +2762,17 @@ Return JSON exactly:
     }
   });
 
-  app.post("/api/projects/:id/generate-outline", requireRole("editor"), async (req, res) => {
-    let prevStatus = "draft";
+  async function runOutlineGenerationJob(projectId: number, job: OutlineGenerationJob): Promise<void> {
+    const isCurrent = () => !job.cancelled && outlineGenerationJobs.get(projectId) === job;
     try {
-      const id = parseId(req.params.id);
-      if (!id) return res.status(400).json({ error: "Invalid project ID" });
-      const project = await storage.getProject(id);
-      if (!project) return res.status(404).json({ error: "Not found" });
-      prevStatus = project.status;
+      const project = await storage.getProject(projectId);
+      if (!project) throw new Error("Project not found");
+      if (!isCurrent()) return;
 
-      await storage.updateProject(id, { status: "outlining" });
-
-      const result = await runStep(id, "Book Outline + DNA", HIGH_MODEL, async () => {
+      const result = await runStep(projectId, "Book Outline + DNA", HIGH_MODEL, async () => {
         const completion = await openai.chat.completions.create({
           model: HIGH_MODEL,
-    reasoning_effort: "high",
+          reasoning_effort: "high",
           messages: [{
             role: "system",
             content: `You are a professional book architect specializing in the ${project.vertical} ${isFiction(project.vertical) ? "genre" : "niche"}. Respond ONLY with valid JSON.`,
@@ -2783,38 +2805,77 @@ Generate 8-12 chapters. Each chapter should have a clear purpose in the transfor
           max_completion_tokens: 8192,
           response_format: { type: "json_object" },
         });
-        const content = completion.choices[0].message.content || "{}";
-        const parsed = JSON.parse(content);
+        const raw = completion.choices[0].message.content || "{}";
+        const parsed = outlineResultSchema.parse(JSON.parse(raw));
         const tokens = completion.usage?.total_tokens || 2000;
         return { result: parsed, tokens };
       });
 
+      if (!isCurrent()) return;
+
+      // Normalize numbering so malformed/duplicate model numbering can never
+      // produce a broken chapter sequence in the workspace.
+      const newChapters = result.chapters.map((ch, index) => ({
+        projectId,
+        chapterNumber: index + 1,
+        title: ch.title,
+        blueprint: ch.blueprint,
+        status: "pending" as const,
+      }));
+
+      // Keep the old outline intact until every part of the new result has
+      // validated. Only then perform the durable replacement.
       await storage.upsertBookDna({
-        projectId: id,
+        projectId,
         corePromise: result.corePromise,
         readerAvatar: result.readerAvatar,
         toneRules: result.toneRules,
         transformationArc: result.transformationArc,
         frameworkSummary: result.frameworkSummary,
       });
-
-      const newChapters = (result.chapters || []).map((ch: any) => ({
-        projectId: id,
-        chapterNumber: ch.chapterNumber,
-        title: ch.title,
-        blueprint: ch.blueprint,
-        status: "pending" as const,
-      }));
-      await storage.replaceOutlineChapters(id, newChapters);
-
-      await storage.updateProject(id, {
-        chapterCount: result.chapters?.length || 0,
+      await storage.replaceOutlineChapters(projectId, newChapters);
+      await storage.updateProject(projectId, {
+        chapterCount: newChapters.length,
         status: "writing",
       });
-
-      res.json({ dna: result, chapters: result.chapters });
+      saveDbSeed().catch(() => {});
     } catch (err: any) {
-      await storage.updateProject(parseId(req.params.id)!, { status: prevStatus }).catch(() => {});
+      console.error(`Outline generation failed for project ${projectId}:`, err?.message || err);
+      if (isCurrent()) {
+        await storage.updateProject(projectId, { status: job.previousStatus }).catch(() => {});
+      }
+    } finally {
+      if (outlineGenerationJobs.get(projectId) === job) outlineGenerationJobs.delete(projectId);
+    }
+  }
+
+  app.post("/api/projects/:id/generate-outline", requireRole("editor"), async (req, res) => {
+    try {
+      const id = parseId(req.params.id);
+      if (!id) return res.status(400).json({ error: "Invalid project ID" });
+      const project = await storage.getProject(id);
+      if (!project) return res.status(404).json({ error: "Not found" });
+
+      const existing = outlineGenerationJobs.get(id);
+      if (existing && !existing.cancelled) {
+        return res.status(202).json({ projectId: id, status: "outlining", alreadyRunning: true });
+      }
+
+      const job: OutlineGenerationJob = {
+        cancelled: false,
+        startedAt: Date.now(),
+        previousStatus: project.status === "outlining"
+          ? ((await storage.getChapters(id)).length > 0 ? "writing" : "draft")
+          : project.status,
+      };
+      outlineGenerationJobs.set(id, job);
+      await storage.updateProject(id, { status: "outlining" });
+
+      // Return immediately. The durable project status + normal project polling
+      // make this workflow survive navigation and prevent a long browser request.
+      res.status(202).json({ projectId: id, status: "outlining", started: true });
+      void runOutlineGenerationJob(id, job);
+    } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
