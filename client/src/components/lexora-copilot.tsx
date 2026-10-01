@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ChatConversation, ChatMessage, Project } from "@shared/schema";
-import { Bot, BookOpen, FileText, Loader2, MessageSquare, Plus, Send, Sparkles, Target, X } from "lucide-react";
+import { Bot, BookOpen, Check, Copy, FileText, Loader2, MessageSquare, Plus, Send, Sparkles, Target, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -61,6 +61,7 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
   const projectId = projectIdFromLocation(location);
   const [input, setInput] = useState("");
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [] } = useQuery<ChatConversation[]>({
@@ -233,7 +234,7 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
               {messages.map((message) => (
                 <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
                   <div className={cn(
-                    "max-w-[92%] rounded-xl px-3 py-2.5",
+                    "group relative max-w-[92%] rounded-xl px-3 py-2.5",
                     message.role === "user"
                       ? "bg-purple-500/15 border border-purple-500/20"
                       : "bg-card/45 border border-border/20",
@@ -241,6 +242,22 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
                     {message.role === "assistant"
                       ? <MarkdownRendererDark content={message.content} />
                       : <p className="text-[11px] whitespace-pre-wrap leading-relaxed">{message.content}</p>}
+                    {message.role === "assistant" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="mt-2 h-6 px-2 text-[8px] font-mono text-muted-foreground/45 hover:text-purple-200"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(message.content);
+                          setCopiedMessageId(message.id);
+                          window.setTimeout(() => setCopiedMessageId((current) => current === message.id ? null : current), 1600);
+                        }}
+                        data-testid={`button-copy-copilot-message-${message.id}`}
+                      >
+                        {copiedMessageId === message.id ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                        {copiedMessageId === message.id ? "Copied" : "Copy"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
