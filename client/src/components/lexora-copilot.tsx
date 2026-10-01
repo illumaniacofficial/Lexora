@@ -162,14 +162,33 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
   };
 
   return (
-    <aside
-      className={cn(
-        "absolute inset-y-0 right-0 z-50 w-[min(94vw,390px)] border-l border-border/25 bg-background/95 backdrop-blur-xl shadow-2xl transition-transform duration-200 will-change-transform",
-        open ? "translate-x-0 pointer-events-auto" : "translate-x-full pointer-events-none",
+    <>
+      {!open && (
+        <Button
+          type="button"
+          size="icon"
+          onClick={() => {
+            const toggle = document.querySelector<HTMLButtonElement>('[data-testid="button-toggle-copilot"]');
+            if (toggle) toggle.click();
+          }}
+          className="md:hidden fixed bottom-5 right-5 z-50 h-14 w-14 rounded-full shadow-2xl border border-purple-400/25 bg-purple-600 hover:bg-purple-500 text-white neon-glow"
+          aria-label="Open Lexora Copilot"
+          data-testid="button-open-copilot-bubble"
+        >
+          <Bot className="h-5 w-5" />
+        </Button>
       )}
-      aria-hidden={!open}
-      data-testid="lexora-copilot-panel"
-    >
+      <aside
+        className={cn(
+          "absolute z-50 border border-border/25 bg-background/95 backdrop-blur-xl shadow-2xl transition-all duration-200 will-change-transform",
+          "left-3 right-3 bottom-3 h-[min(78dvh,640px)] rounded-2xl md:left-auto md:top-0 md:bottom-0 md:right-0 md:h-auto md:w-[390px] md:rounded-none md:border-y-0 md:border-r-0",
+          open
+            ? "translate-y-0 opacity-100 pointer-events-auto md:translate-x-0"
+            : "translate-y-[120%] opacity-0 pointer-events-none md:translate-y-0 md:translate-x-full",
+        )}
+        aria-hidden={!open}
+        data-testid="lexora-copilot-panel"
+      >
       <div className="h-full min-w-0 flex flex-col">
         <div className="shrink-0 border-b border-border/20 px-3 py-3 bg-black/20">
           <div className="flex items-start gap-2">
@@ -305,6 +324,7 @@ export default function LexoraCopilot({ open, onClose }: LexoraCopilotProps) {
           </p>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
